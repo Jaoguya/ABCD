@@ -1,0 +1,52 @@
+================================================================================
+NOTE: NO TEXT COULD BE EXTRACTED FROM Ref[36].pdf -- THE PDF FILE IS DAMAGED
+================================================================================
+
+The source file References/Ref[36].pdf is corrupted. Its compressed (FlateDecode)
+data streams -- which hold all of the page text -- were destroyed by a bad
+character-encoding conversion at some point: 526,308 byte sequences in the file
+have been replaced with the UTF-8 replacement character (EF BF BD = U+FFFD),
+i.e. roughly 17% of the file's bytes are gone and cannot be reconstructed.
+
+Evidence:
+  - Object 496 declares /Length 974, but 1744 bytes now sit before "endstream".
+  - Every page content stream fails to inflate (0 of 14 pages yielded text).
+  - The other three PDFs (Ref[35], Ref[41], Ref[52]) contain zero U+FFFD
+    sequences and extracted cleanly, so the problem is specific to this file.
+
+Only the plain-ASCII portions of the file survived (the document dictionary and
+the XMP metadata packet). Everything recoverable from them is reproduced below.
+
+TO FIX: re-download Ref[36].pdf from IEEE Xplore (DOI below) and re-run the
+conversion; the text will then extract normally.
+
+================================================================================
+RECOVERED METADATA
+================================================================================
+
+Title:      XB-Muse: Practical Multiuser Dynamic Searchable Symmetric Encryption
+            for Adaptive Revocation
+
+Authors:    Qin Jiang; Xu Yang; Sifan Chen; Saiyu Qi; Fuyuan Song; Zhangjie Fu
+
+Publisher:  IEEE
+Journal:    IEEE Internet of Things Journal
+Volume:     12
+Issue:      14
+Pages:      26486 - 26499
+Cover date: 15 July 2025
+Year:       2025
+DOI:        10.1109/JIOT.2025.3561287
+Version:    VoR (Version of Record)
+PDF built:  2025-06-23 16:22:40 +05'30'
+
+Keywords:   Adaptive revocation; blockchain; dynamic multiuser searchable
+            symmetric encryption; forward and backward privacy
+
+Page count: 14 pages (page tree intact; page bodies unreadable)
+
+================================================================================
+PAGE TEXT
+================================================================================
+
+[Pages 1-14: unrecoverable -- all content streams destroyed, see note above.]
