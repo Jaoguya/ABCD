@@ -31,6 +31,49 @@ Each FSN runs as an independent process (or instance) holding its own searchable
 
 > **Environment parity is part of the result.** Every scheme — ours and all four baselines — must run on the *same* instance type, the same Python build, and the same dataset. Do not benchmark one scheme on a laptop and another on EC2.
 
+### 1.1 System Requirements
+
+| Requirement | Minimum | Notes |
+|-------------|---------|-------|
+| **Python** | 3.11+ | Both Linux and Windows supported |
+| **OS** | Ubuntu 22.04 LTS / Windows 10+ | Cross-platform experiment execution |
+| **pip** | 23.0+ | For installing dependencies |
+| **Docker** | 24.0+ | Required for Hyperledger Fabric (proposed scheme only) |
+| **IPFS** | 0.20+ | Required for content-addressed storage (proposed scheme only) |
+| **Git** | 2.30+ | For provenance tracking in `run_meta.json` |
+
+#### Python Libraries
+
+All dependencies are declared in [`requirements.txt`](requirements.txt). Key libraries:
+
+| Library | Version | Purpose | Platform |
+|---------|---------|---------|----------|
+| `cryptography` | ≥43.0.0 | ML-KEM-768 (FIPS 203), AES-256-GCM | Linux + Windows |
+| `pycryptodome` | ≥3.20.0 | Symmetric crypto utilities | Linux + Windows |
+| `charm-crypto` | ≥0.50 | Type-III bilinear groups (MA-CP-ABE) | **Linux only** |
+| `petrelic` | ≥0.1.5 | Cross-platform pairing alternative | Linux + Windows |
+| `numpy` | ≥1.26.0 | Array operations | Linux + Windows |
+| `scipy` | ≥1.12.0 | Confidence interval computation | Linux + Windows |
+| `pandas` | ≥2.2.0 | CSV handling and aggregation | Linux + Windows |
+| `matplotlib` | ≥3.8.0 | Figure generation (vector PDF) | Linux + Windows |
+| `mmh3` | ≥4.0.0 | MurmurHash3 for Bloom filters | Linux + Windows |
+| `pyyaml` | ≥6.0.0 | YAML config file parsing | Linux + Windows |
+| `psutil` | ≥5.9.0 | FSN utilization sampling | Linux + Windows |
+
+Install all dependencies:
+
+```bash
+# Linux
+python3.11 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+
+# Windows (PowerShell)
+python -m venv .venv; .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+> **Windows note:** `charm-crypto` does not natively support Windows. On Windows, the experiment harness uses `petrelic` as the pairing backend, or you can run under WSL2.
+
 ---
 
 ## 2. Protocol Phases Under Evaluation
@@ -56,13 +99,15 @@ The three mechanisms that carry the paper's novelty claims — **PDSI** (Phase I
 
 Four baselines are implemented, chosen to cover the four research directions the paper positions itself against.
 
-| Folder | Ref | Paper | Direction Represented |
-|--------|-----|-------|----------------------|
-| `ma_lb_pq_vdse/` | [ours] | This work | Proposed framework |
-| `guo_vdsse/` | Ref[35] | Guo *et al.*, IEEE TDSC 2024 — *Forward Private Verifiable DSSE with Efficient Conjunctive Query* | Verifiable dynamic SSE |
-| `xb_muse/` | Ref[36] | Jiang *et al.*, IEEE IoT-J 2025 — *XB-Muse: Practical Multiuser DSSE for Adaptive Revocation* | State-of-the-art dynamic SSE |
-| `thingom_pq_abse/` | Ref[41] | Thingom *et al.*, IEEE TCE 2026 — *Post-Quantum Attribute-Based Searchable Encryption for Edge-Driven Transportation* | Multi-authority ABSE |
-| `zhuang_lattice_mabse/` | Ref[52] | Zhuang *et al.*, IEEE DSC — *MA Attribute-Based Multi-Keyword SE with Dynamic Membership from Lattices* | Lattice-based post-quantum SE |
+| Folder | Ref | Paper | Direction Represented | Experiment Guide |
+|--------|-----|-------|----------------------|------------------|
+| `ma_lb_pq_vdse/` | [ours] | This work | Proposed framework | [SCHEME.md](Schemes/ma_lb_pq_vdse/SCHEME.md) |
+| `guo_vdsse/` | Ref[35] | Guo *et al.*, IEEE TDSC 2024 — *Forward Private Verifiable DSSE with Efficient Conjunctive Query* | Verifiable dynamic SSE | [SCHEME.md](Schemes/guo_vdsse/SCHEME.md) |
+| `xb_muse/` | Ref[36] | Jiang *et al.*, IEEE IoT-J 2025 — *XB-Muse: Practical Multiuser DSSE for Adaptive Revocation* | State-of-the-art dynamic SSE | [SCHEME.md](Schemes/xb_muse/SCHEME.md) |
+| `thingom_pq_abse/` | Ref[41] | Thingom *et al.*, IEEE TCE 2026 — *Post-Quantum Attribute-Based Searchable Encryption for Edge-Driven Transportation* | Multi-authority ABSE | [SCHEME.md](Schemes/thingom_pq_abse/SCHEME.md) |
+| `zhuang_lattice_mabse/` | Ref[52] | Zhuang *et al.*, IEEE DSC — *MA Attribute-Based Multi-Keyword SE with Dynamic Membership from Lattices* | Lattice-based post-quantum SE | [SCHEME.md](Schemes/zhuang_lattice_mabse/SCHEME.md) |
+
+Each scheme's `SCHEME.md` contains experiment-specific measurement rules, run commands (Linux + Windows), folder structure, and output details. The baseline paper references and direction summaries are maintained here in this README only.
 
 Reference PDFs and extracted text live in [References/](References/).
 
@@ -177,9 +222,11 @@ A figure whose underlying runs cannot be traced to a commit and a dataset hash c
 
 ```
 PQ-AVDSE/
-├── README.md
+├── README.md                             # This file — source of truth (DO NOT let AI agents edit)
+├── AGENT_RULES.md                        # AI agent goal, constraints, and debug workflow
+├── debug_history.md                      # Append-only debugging log
+├── requirements.txt                      # Python dependencies (cross-platform)
 ├── run_benchmark.sh                      # Automated: build → run all schemes → plot
-├── requirements.txt
 ├── Dataset/
 │   ├── prepare_dataset.py                # MIMIC-IV → derived searchable corpus
 │   ├── synthetic_generator.py            # Credential-free development corpus
@@ -192,7 +239,8 @@ PQ-AVDSE/
 │   ├── crypto.yaml                       # ML-KEM, AES, pairing-curve selection
 │   └── workload/                         # Recorded arrival traces for Exp. 7–8
 ├── Schemes/
-│   ├── ma_lb_pq_vdse/                    # [ours]
+│   ├── ma_lb_pq_vdse/                    # [ours] → see SCHEME.md
+│   │   ├── SCHEME.md                     # Experiment guide for this scheme
 │   │   ├── src/                          # Phases I–VIII
 │   │   │   ├── authority/                # Phase I–II: AA setup, commitments
 │   │   │   ├── user/                     # Phase III: VAP, ML-KEM key delivery
@@ -211,25 +259,29 @@ PQ-AVDSE/
 │   │   ├── exp6_authorization_sync/
 │   │   ├── exp7_search_throughput/
 │   │   └── exp8_load_balance/
-│   ├── guo_vdsse/                        # Ref[35]
+│   ├── guo_vdsse/                        # Ref[35] → see SCHEME.md
+│   │   ├── SCHEME.md
 │   │   ├── src/
 │   │   ├── exp1_trapdoor_generation/
 │   │   ├── exp2_search_latency/
 │   │   ├── exp3_crossdomain_scalability/
 │   │   ├── exp4_verification_overhead/
 │   │   └── exp5_keyword_update/
-│   ├── xb_muse/                          # Ref[36]
+│   ├── xb_muse/                          # Ref[36] → see SCHEME.md
+│   │   ├── SCHEME.md
 │   │   ├── src/
 │   │   ├── exp1_trapdoor_generation/
 │   │   ├── exp2_search_latency/
 │   │   ├── exp3_crossdomain_scalability/
 │   │   └── exp5_keyword_update/
-│   ├── thingom_pq_abse/                  # Ref[41]
+│   ├── thingom_pq_abse/                  # Ref[41] → see SCHEME.md
+│   │   ├── SCHEME.md
 │   │   ├── src/
 │   │   ├── exp1_trapdoor_generation/
 │   │   ├── exp2_search_latency/
 │   │   └── exp3_crossdomain_scalability/
-│   └── zhuang_lattice_mabse/             # Ref[52]
+│   └── zhuang_lattice_mabse/             # Ref[52] → see SCHEME.md
+│       ├── SCHEME.md
 │       ├── src/
 │       ├── exp1_trapdoor_generation/
 │       ├── exp2_search_latency/
@@ -246,6 +298,18 @@ PQ-AVDSE/
 ```
 
 The four empty placeholder files currently in `Schemes/` (`1`, `2`, `3`, `4`) should be replaced by the five named scheme directories above.
+
+### Scheme Experiment Guides
+
+Per-scheme experiment details, measurement rules, and run commands (Linux + Windows) are in each scheme's `SCHEME.md`:
+
+| Scheme | Guide | Experiments |
+|--------|-------|-------------|
+| MA-LB-PQ-VDSE (ours) | [SCHEME.md](Schemes/ma_lb_pq_vdse/SCHEME.md) | 1, 2, 3, 4, 5, 6, 7, 8 |
+| Guo VDSSE (Ref[35]) | [SCHEME.md](Schemes/guo_vdsse/SCHEME.md) | 1, 2, 3, 4, 5 |
+| XB-Muse (Ref[36]) | [SCHEME.md](Schemes/xb_muse/SCHEME.md) | 1, 2, 3, 5 |
+| Thingom PQ-ABSE (Ref[41]) | [SCHEME.md](Schemes/thingom_pq_abse/SCHEME.md) | 1, 2, 3 |
+| Zhuang Lattice MA-BSE (Ref[52]) | [SCHEME.md](Schemes/zhuang_lattice_mabse/SCHEME.md) | 1, 2, 3, 5, 6 |
 
 ---
 
@@ -302,7 +366,7 @@ Figure conventions: **vector PDF** (never PNG for plots), single-column width, 8
 
 ## 11. Running the Benchmark
 
-### Automated
+### Automated (Linux only)
 
 ```bash
 chmod +x run_benchmark.sh
@@ -310,7 +374,7 @@ chmod +x run_benchmark.sh
 ./run_benchmark.sh --scheme ma_lb_pq_vdse --experiment 2
 ```
 
-### Manual
+### Manual — Linux
 
 ```bash
 # 1. Environment
@@ -318,19 +382,49 @@ python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
 # 2. Dataset (requires credentialed MIMIC-IV access)
-python Dataset/prepare_dataset.py --input /path/to/mimic-iv-3.1 --output Dataset/derived
+python3 Dataset/prepare_dataset.py --input /path/to/mimic-iv-3.1 --output Dataset/derived
 #    development only, no credentials needed:
-python Dataset/synthetic_generator.py --records 100000 --domains 4 --output Dataset/derived
+python3 Dataset/synthetic_generator.py --records 100000 --domains 4 --output Dataset/derived
 
 # 3. Infrastructure (proposed scheme only)
 docker compose -f infra/fabric/docker-compose.yaml up -d     # Hyperledger Fabric v2.5
 ipfs daemon &
 
 # 4. Run one scheme
-python -m Schemes.ma_lb_pq_vdse.src.main \
+python3 -m Schemes.ma_lb_pq_vdse.src.main \
     --experiment all \
     --config "Experiment Configuration/global.yaml" \
     --dataset Dataset/derived \
+    --runs 30
+
+# 5. Baselines (same dataset, same config)
+python3 -m Schemes.guo_vdsse.src.main --experiment 1,2,3,4,5 --dataset Dataset/derived --runs 30
+
+# 6. Figures
+python3 Plots/generate_plots.py --input Schemes --output Plots/output
+```
+
+### Manual — Windows (PowerShell)
+
+```powershell
+# 1. Environment
+python -m venv .venv; .venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+
+# 2. Dataset (requires credentialed MIMIC-IV access)
+python Dataset/prepare_dataset.py --input C:\path\to\mimic-iv-3.1 --output Dataset/derived
+#    development only, no credentials needed:
+python Dataset/synthetic_generator.py --records 100000 --domains 4 --output Dataset/derived
+
+# 3. Infrastructure (proposed scheme only)
+docker compose -f infra/fabric/docker-compose.yaml up -d
+# IPFS: run 'ipfs daemon' in a separate terminal
+
+# 4. Run one scheme
+python -m Schemes.ma_lb_pq_vdse.src.main `
+    --experiment all `
+    --config "Experiment Configuration/global.yaml" `
+    --dataset Dataset/derived `
     --runs 30
 
 # 5. Baselines (same dataset, same config)
@@ -340,6 +434,8 @@ python -m Schemes.guo_vdsse.src.main --experiment 1,2,3,4,5 --dataset Dataset/de
 python Plots/generate_plots.py --input Schemes --output Plots/output
 ```
 
+See each scheme's `SCHEME.md` for scheme-specific run commands and notes.
+
 `generate_plots.py` walks `Schemes/*/exp<N>_*/results.csv`, overlays every scheme present for that experiment, and skips schemes with no `results.csv` — so partial runs still plot.
 
 ---
@@ -348,12 +444,104 @@ python Plots/generate_plots.py --input Schemes --output Plots/output
 
 This repository is built for parallel work. Each collaborator owns one or more scheme folders.
 
-1. Work only inside your assigned `Schemes/<your_scheme>/` folder.
-2. Implement the scheme in `src/`, faithfully to its published construction.
-3. Run each relevant experiment; emit `raw_runs.csv`, `results.csv`, and `run_meta.json` into the matching `exp<N>_*/` folder.
-4. Do **not** modify `Dataset/`, `Plots/`, `Experiment Configuration/`, or another member's scheme folder.
-5. When all schemes have produced results, run the plotting script once to generate the final figure set.
-6. **Update this README** to reflect whatever you changed (see §13), in the same commit.
+> **Always `git fetch` / `git pull` before starting any work.** This ensures you are working against the latest code, configs, and documentation. Stale local state is a source of merge conflicts and wasted runs.
+
+1. **Fetch first.** `git fetch origin && git pull` every time before you begin work — no exceptions.
+2. Work only inside your assigned `Schemes/<your_scheme>/` folder.
+3. Implement the scheme in `src/`, faithfully to its published construction.
+4. Run each relevant experiment; emit `raw_runs.csv`, `results.csv`, and `run_meta.json` into the matching `exp<N>_*/` folder.
+5. Do **not** modify `Dataset/`, `Plots/`, `Experiment Configuration/`, or another member's scheme folder.
+6. When all schemes have produced results, run the plotting script once to generate the final figure set.
+7. **Update this README** to reflect whatever you changed (see §13), in the same commit.
+
+### Commit Message Guide
+
+Every commit must have a clear, traceable message. Use this format:
+
+```
+<type>(<scope>): <short summary>
+
+<optional body — what and why, not how>
+
+<optional footer — results-affecting flag, references>
+```
+
+#### Types
+
+| Type | When to use |
+|------|-------------|
+| `feat` | New functionality (scheme implementation, experiment code, plotting feature) |
+| `fix` | Bug fix in existing code |
+| `data` | Dataset preparation, synthetic generator, or derived corpus changes |
+| `exp` | Experiment execution — running benchmarks, producing results |
+| `config` | Changes to `Experiment Configuration/` files (λ weights, index params, crypto params) |
+| `docs` | Documentation only (README, SCHEME.md, AGENT_RULES.md) |
+| `refactor` | Code restructuring with no behavior change |
+| `plot` | Plotting script or figure output changes |
+| `chore` | Dependency updates, CI, tooling, cleanup |
+
+#### Scope
+
+The scope identifies **what** was changed:
+
+| Scope | Meaning |
+|-------|---------|
+| `ma_lb_pq_vdse` | Proposed scheme |
+| `guo_vdsse` | Ref[35] baseline |
+| `xb_muse` | Ref[36] baseline |
+| `thingom_pq_abse` | Ref[41] baseline |
+| `zhuang_lattice_mabse` | Ref[52] baseline |
+| `dataset` | Dataset preparation or synthetic generator |
+| `config` | Experiment configuration files |
+| `plots` | Plotting script or output |
+| `infra` | Infrastructure (Fabric, IPFS, Docker) |
+| `readme` | This README |
+| `all` | Cross-cutting change affecting multiple schemes |
+
+#### Rules
+
+1. **First line ≤ 72 characters.**
+2. **One logical change per commit.** Do not mix a scheme implementation with an unrelated config change.
+3. **Mark results-affecting commits** in the footer with `Results-Affecting: yes` — this flags that results generated before this commit are not comparable to results generated after it.
+4. **Reference the experiment** when committing results: `Experiment: exp2` or `Experiment: exp7,exp8`.
+5. **Never commit results and code changes in the same commit** — separate them so provenance is unambiguous.
+
+#### Examples
+
+```
+feat(ma_lb_pq_vdse): implement Phase IV PDSI index construction
+
+Bitmap-based searchable index with Merkle commitments.
+Supports incremental updates per Phase VII contract.
+```
+
+```
+exp(guo_vdsse): run exp1 trapdoor generation (n=30, MIMIC-IV)
+
+Experiment: exp1
+Dataset: mimic (SHA-256: a3f8...)
+```
+
+```
+config(config): fix λ weights for AASS scheduler
+
+λ₁=0.25, λ₂=0.20, λ₃=0.20, λ₄=0.15, λ₅=0.20
+Determined by one-time sweep on held-out workload (see sweep_log.csv).
+
+Results-Affecting: yes
+```
+
+```
+fix(xb_muse): correct trapdoor size calculation in exp1
+
+Was double-counting the nonce; trapdoor size was inflated by 32 bytes.
+
+Results-Affecting: yes
+```
+
+```
+docs(readme): add commit message guide to §12
+```
 
 ---
 
@@ -361,7 +549,9 @@ This repository is built for parallel work. Each collaborator owns one or more s
 
 This README is the single source of truth for how the benchmark is defined, configured, and run — it is what the team, and the paper's Evaluation section, are written against. It is a **living document**.
 
-> **Standing rule: every time you complete work in this repository, update this README in the same commit as the change it describes.** This applies to every contributor, including AI coding agents. A change that alters how the benchmark behaves but leaves the README describing the old behavior is an incomplete change.
+> **Standing rule: every time you complete work in this repository, update this README in the same commit as the change it describes.** This applies to every **human** contributor. A change that alters how the benchmark behaves but leaves the README describing the old behavior is an incomplete change.
+
+> **AI Agent exception:** AI agents must **NOT** edit this `README.md` file. This file is the source of truth — if an AI agent could edit it, the specification would lose consistency. If an AI agent identifies that `README.md` needs an update, it must ask the user to make the change. AI agents may update scheme-specific `SCHEME.md` files. See [`AGENT_RULES.md`](AGENT_RULES.md) for the full AI agent behavioral specification.
 
 ### Update triggers
 
@@ -422,6 +612,13 @@ If a change turns out to need no README edit, that is a valid outcome — but it
 - **Do NOT ship a change without updating this README** (§13). An undocumented parameter change, renamed metric, or altered timer boundary silently invalidates every earlier result it touches, and no one downstream can tell which numbers are still comparable.
 - **Do NOT describe intended behavior as implemented behavior.** If a section documents something not yet built, mark it explicitly.
 
+### AI Agent Constraints
+- **AI agents must `git fetch` / `git pull` before starting any work** — every time, no exceptions. This prevents working against stale code or configs.
+- **AI agents must NOT edit this `README.md`** — it is the source of truth for the benchmark specification. If it needs updating, ask the user.
+- **AI agents must follow [`AGENT_RULES.md`](AGENT_RULES.md)** — this includes the goal definition, execution loop, reviewer-level validation checks, ask-user-when-unsure policy, and debug logging requirements.
+- **AI agents must append to [`debug_history.md`](debug_history.md)** every time they debug an issue — entries are never deleted or overwritten.
+- **AI agents must ask the user** if they are unsure about any scheme's construction, a parameter value, or any decision that affects reported numbers. Do not guess.
+
 ---
 
 ## 15. Pre-Submission Checklist
@@ -446,3 +643,4 @@ Newest last. One line per change, dated `YYYY-MM-DD`. Mark entries that invalida
 | Date | Change | Sections updated |
 |------|--------|-----------------|
 | 2026-08-02 | Initial benchmark specification: environment, protocol-phase coverage, 4 baselines, 8 experiments, defaults, measurement methodology, repository structure, output format, figure mapping. No code implemented yet. | all |
+| 2026-08-03 | Restructured: split per-scheme details into `SCHEME.md` files (one per scheme folder). Added `AGENT_RULES.md` (AI agent goal, reviewer-level validation, constraints, debug workflow), `debug_history.md` (append-only debug log), `requirements.txt` (cross-platform Python dependencies). Added §1.1 system requirements, cross-platform (Linux + Windows) run instructions in §11, scheme guide links in §3 and §8, AI agent constraints in §14. | §1, §3, §8, §11, §13, §14, §16 |

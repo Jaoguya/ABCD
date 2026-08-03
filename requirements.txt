@@ -1,0 +1,68 @@
+# =============================================================================
+# MA-LB-PQ-VDSE Benchmark — Python Dependencies
+# =============================================================================
+# Platform: Linux (Ubuntu 22.04) and Windows 10/11
+# Python:   3.11+
+# Install:  pip install -r requirements.txt
+# =============================================================================
+
+# ===========================================================================
+#  GLOBAL DEPENDENCIES — Required by ALL schemes (ours + all 4 baselines)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Core Cryptography (Global)
+# ---------------------------------------------------------------------------
+cryptography>=43.0.0            # ML-KEM-768 (FIPS 203), AES-256-GCM, SHA-256
+pycryptodome>=3.20.0            # Symmetric crypto utilities
+
+# ---------------------------------------------------------------------------
+# Data Processing & Statistics (Global)
+# ---------------------------------------------------------------------------
+numpy>=1.26.0                   # Array operations
+scipy>=1.12.0                   # Confidence intervals (scipy.stats.t)
+pandas>=2.2.0                   # CSV reading/writing, data aggregation
+
+# ---------------------------------------------------------------------------
+# Plotting (Global)
+# ---------------------------------------------------------------------------
+matplotlib>=3.8.0               # Figure generation (vector PDF output)
+
+# ---------------------------------------------------------------------------
+# Hashing & Indexing (Global)
+# ---------------------------------------------------------------------------
+mmh3>=4.0.0                     # MurmurHash3 for Bloom filters
+bitarray>=2.9.0                 # Bitmap / bit-array operations
+
+# ---------------------------------------------------------------------------
+# Configuration (Global)
+# ---------------------------------------------------------------------------
+pyyaml>=6.0.0                   # YAML config file parsing
+
+# ---------------------------------------------------------------------------
+# Utilities (Global)
+# ---------------------------------------------------------------------------
+tqdm>=4.66.0                    # Progress bars for long-running experiments
+psutil>=5.9.0                   # System/process monitoring (FSN utilization sampling)
+
+
+# ===========================================================================
+#  LOCAL DEPENDENCIES — Required only by the PROPOSED scheme (ma_lb_pq_vdse)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Pairing-Based Cryptography (Local — MA-CP-ABE, proposed scheme only)
+# ---------------------------------------------------------------------------
+# charm-crypto>=0.50            # Type-III bilinear groups — LINUX ONLY
+#                               # On Windows: use petrelic or WSL2
+#                               # Install separately: pip install charm-crypto
+petrelic>=0.1.5                 # Cross-platform alternative pairing library
+
+# ---------------------------------------------------------------------------
+# Blockchain & Storage (Local — proposed scheme only, install separately)
+# ---------------------------------------------------------------------------
+# These require external infrastructure (Docker, IPFS daemon).
+# Uncomment and install when infrastructure is ready.
+#
+# hfc>=1.0.0                    # Hyperledger Fabric Python SDK
+# ipfshttpclient>=0.8.0a2       # IPFS HTTP client
