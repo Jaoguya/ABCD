@@ -625,6 +625,7 @@ If a change turns out to need no README edit, that is a valid outcome — but it
 
 ### AI Agent Constraints
 - **AI agents must `git fetch` / `git pull` before starting any work** — every time, no exceptions. This prevents working against stale code or configs.
+- **AI agents must read the supporting markdown files** — the `README.md` is the source of truth, but agents must also read `AGENT_RULES.md`, `debug_history.md`, and the relevant `SCHEME.md` before taking action.
 - **AI agents must NOT edit this `README.md`** — it is the source of truth for the benchmark specification. If it needs updating, ask the user.
 - **AI agents must follow [`AGENT_RULES.md`](AGENT_RULES.md)** — this includes the goal definition, execution loop, reviewer-level validation checks, ask-user-when-unsure policy, and debug logging requirements.
 - **AI agents must append to [`debug_history.md`](debug_history.md)** every time they debug an issue — entries are never deleted or overwritten.
