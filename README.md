@@ -299,6 +299,17 @@ PQ-AVDSE/
 
 The four empty placeholder files currently in `Schemes/` (`1`, `2`, `3`, `4`) should be replaced by the five named scheme directories above.
 
+### Supporting Documents
+
+This README is the source of truth, but several supporting documents contain details that would overload this file. **Read them when needed.**
+
+| File | Purpose | When to read |
+|------|---------|--------------|
+| [`AGENT_RULES.md`](AGENT_RULES.md) | AI agent goal definition, execution loop, reviewer-level validation checklist, constraints, and debug workflow | Before any AI agent begins work on this repository |
+| [`debug_history.md`](debug_history.md) | Append-only chronological log of all debugging activity (date, cause, fix, status) | When debugging — append every fix here; review before re-running failed experiments |
+| [`requirements.txt`](requirements.txt) | Python dependencies split into global (all schemes) and local (proposed scheme only) | When setting up the environment or adding a dependency |
+| `Schemes/*/SCHEME.md` | Per-scheme experiment guide: which experiments, measurement rules, run commands (Linux + Windows), folder structure | Before implementing or running a specific scheme's experiments |
+
 ### Scheme Experiment Guides
 
 Per-scheme experiment details, measurement rules, and run commands (Linux + Windows) are in each scheme's `SCHEME.md`:

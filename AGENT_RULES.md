@@ -20,14 +20,20 @@ LOOP:
      b. Execute each applicable experiment
      c. Validate outputs (see Output Validation below)
      d. Perform reviewer-level integrity checks (see Reviewer Checks below)
-  2. If ALL schemes pass ALL checks → run plotting script → DONE
+  2. If ALL schemes pass ALL checks:
+     a. If this is the FIRST pass → run plotting script
+     b. GOTO step 0 for a CONFIRMATION pass (re-fetch, re-run all validations)
+     c. If this is the CONFIRMATION pass and ALL checks still pass → DONE
+     d. If the confirmation pass finds failures → treat as step 3 (fix and restart)
   3. If any check fails:
      a. Log the failure in debug_history.md (see Debug Rules below)
      b. Attempt to fix the issue
      c. Re-run the affected experiment
-     d. GOTO step 0 (fetch again, then recheck everything)
+     d. GOTO step 0 (fetch again, then recheck everything — resets confirmation)
   4. If unable to fix, or unsure about anything → ASK THE USER
 ```
+
+> **Why two passes?** A single pass can miss regressions introduced by late fixes. The confirmation pass ensures the final state is self-consistent: all outputs valid, all checks green, nothing broken by a last-minute patch.
 
 ### Output Validation
 
