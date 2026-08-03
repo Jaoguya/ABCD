@@ -227,7 +227,22 @@ PQ-AVDSE/
 ├── debug_history.md                      # Append-only debugging log
 ├── requirements.txt                      # Python dependencies (cross-platform)
 ├── run_benchmark.sh                      # Automated: build → run all schemes → plot
+├── Common/                               # Shared PRIMITIVES — never constructions
+│   └── crypto/
+│       ├── config.py                     # Loads Experiment Configuration/*.yaml
+│       ├── hashes.py                     # SHA-256 (+truncation), BLAKE2b, HMAC, HKDF
+│       ├── rng.py                        # Secure RNG + seeded reproducible RNG
+│       ├── symmetric.py                  # AES-256-GCM
+│       ├── prf.py                        # PRF and t-puncturable PRF (Ref[35])
+│       ├── merkle.py                     # Merkle tree, proofs, incremental update
+│       ├── bloom.py                      # Bloom filter BF(l,k) (Ref[52])
+│       ├── lattice.py                    # Z_q, discrete Gaussian, TrapGen/SamplePre
+│       ├── pairing.py                    # Type-I (Ref[41]) / Type-III backends
+│       ├── kem.py                        # ML-KEM-768 (proposed scheme only)
+│       └── tests/
+│           └── test_primitives.py        # Property tests for every primitive
 ├── Dataset/
+│   ├── corpus.py                         # Shared corpus schema, manifest, statistics
 │   ├── prepare_dataset.py                # MIMIC-IV → derived searchable corpus
 │   ├── synthetic_generator.py            # Credential-free development corpus
 │   ├── dataset_manifest.json             # Counts, keyword universe, SHA-256
@@ -237,6 +252,7 @@ PQ-AVDSE/
 │   ├── scheduler.yaml                    # λ₁…λ₅ and AASS cost-estimator params
 │   ├── index.yaml                        # Bitmap/Bloom, shard, Merkle parameters
 │   ├── crypto.yaml                       # ML-KEM, AES, pairing-curve selection
+│   ├── dataset.yaml                      # Corpus shape, MIMIC extraction, synthetic
 │   └── workload/                         # Recorded arrival traces for Exp. 7–8
 ├── Schemes/
 │   ├── ma_lb_pq_vdse/                    # [ours] → see SCHEME.md
@@ -298,6 +314,17 @@ PQ-AVDSE/
 ```
 
 The four empty placeholder files currently in `Schemes/` (`1`, `2`, `3`, `4`) should be replaced by the five named scheme directories above.
+
+### `Common/` — scope rule
+
+`Common/` exists so that every scheme measures the *same* primitive cost, making a latency difference between two schemes attributable to their constructions rather than to two different AES wrappers (§1, environment parity). It is the sanctioned exception to §14's "do not copy implementation logic between scheme folders" — sharing one primitive is the opposite of copying five.
+
+The boundary is strict:
+
+- **Belongs in `Common/`** — anything a paper *cites*: SHA-256, HMAC, AES-GCM, Merkle trees, Bloom filters, discrete Gaussian sampling, bilinear pairings, ML-KEM.
+- **Never belongs in `Common/`** — anything a paper *contributes*: Guo's forward index, Zhuang's attribute key derivation, Thingom's LSSS policy encoding, our PDSI/AASS/IAS. Those live in `Schemes/<name>/src/` and stay independent.
+
+If two schemes would need the same *construction*, that is a sign one of them is being implemented unfaithfully — not a reason to share code.
 
 ### Supporting Documents
 
@@ -656,3 +683,6 @@ Newest last. One line per change, dated `YYYY-MM-DD`. Mark entries that invalida
 |------|--------|-----------------|
 | 2026-08-02 | Initial benchmark specification: environment, protocol-phase coverage, 4 baselines, 8 experiments, defaults, measurement methodology, repository structure, output format, figure mapping. No code implemented yet. | all |
 | 2026-08-03 | Restructured: split per-scheme details into `SCHEME.md` files (one per scheme folder). Added `AGENT_RULES.md` (AI agent goal, reviewer-level validation, constraints, debug workflow), `debug_history.md` (append-only debug log), `requirements.txt` (cross-platform Python dependencies). Added §1.1 system requirements, cross-platform (Linux + Windows) run instructions in §11, scheme guide links in §3 and §8, AI agent constraints in §14. | §1, §3, §8, §11, §13, §14, §16 |
+| 2026-08-03 | Added shared primitive layer `Common/crypto/` (hashes, RNG, AES-256-GCM, PRF + t-puncturable PRF, Merkle, Bloom, lattice trapdoor toolkit, pairing backends, ML-KEM-768) with the `Common/` scope rule in §8; added `Experiment Configuration/crypto.yaml` and `dataset.yaml` fixing every cryptographic and corpus parameter with published-vs-benchmark provenance per value; implemented `Dataset/corpus.py`, `prepare_dataset.py` (MIMIC-IV v3.1, record unit `admission` or `icu_stay`), and `synthetic_generator.py`. No experiment code and no results yet. | §8, §16 |
+| 2026-08-03 | Corrected `requirements.txt`: pairing libraries were listed as proposed-scheme-only, but Ref[41] is itself pairing-based (Type-I, DBDH — `References/Ref[41].txt:510-513`), so a pairing library is required to run a **baseline**. Reportable Ref[41] runs need `charm-crypto` (symmetric SS512, Linux-only); `petrelic` is Type-III and development-only. Also flagged that the `cryptography>=43.0.0` ML-KEM-768 attribution is unverified. | `requirements.txt` |
+| 2026-08-03 | Added `Common/crypto/tests/test_primitives.py` — property tests for every primitive (framing injectivity, GCM tamper detection, t-Pun-PRF correctness off/on the punctured set, Merkle incremental-update equivalence and odd-leaf promotion, Bloom no-false-negatives, gadget exactness, TrapGen/SamplePre/SampleLeft defining equations, pairing bilinearity, ML-KEM round trip). Runs standalone or under pytest; optional backends skip rather than fail. Added `.gitignore` covering `Dataset/derived/` so credentialed-derived data cannot be committed (§14). | §8, §16 |

@@ -1,0 +1,79 @@
+# =============================================================================
+# .gitignore — MA-LB-PQ-VDSE benchmark
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CREDENTIALED DATA — never commit, in any form
+# -----------------------------------------------------------------------------
+# MIMIC-IV is credentialed-access data under a signed DUA. README §14:
+# "Do NOT commit MIMIC-IV data, in any form, raw or lightly derived."
+# The derived corpus is keyword sets extracted from it and is covered by that
+# rule. Its SHA-256 lives in Dataset/dataset_manifest.json, which IS committed
+# and is what makes a run traceable without shipping the data.
+Dataset/derived/
+*.csv.gz
+mimic-iv*/
+
+# -----------------------------------------------------------------------------
+# SECRETS — never commit
+# -----------------------------------------------------------------------------
+# This repo has a public GitHub remote. A committed EC2 private key is a
+# compromised key, immediately and permanently — rotating it means replacing
+# the key pair on every instance. Keep keys in ~/.ssh/, not here; these
+# patterns are a backstop, not a licence to store them in the workspace.
+*.pem
+*.ppk
+*.key
+id_rsa*
+id_ed25519*
+.env
+*credentials*
+aws_config
+
+# -----------------------------------------------------------------------------
+# BEFORE MAKING THIS REPO PUBLIC
+# -----------------------------------------------------------------------------
+# The repo is private, so these stay tracked. If it is ever flipped public
+# (e.g. an artifact link in the camera-ready), purge them from history FIRST:
+#   References/  IEEE-copyrighted PDFs under an institutional licence
+#                ("Restrictions apply" watermark); the .txt files are
+#                full-text derivatives and are covered too.
+#   Overleaf/    Manuscript source.
+# .gitignore alone will not do it — they are already in every commit.
+
+# -----------------------------------------------------------------------------
+# Infrastructure identity material
+# -----------------------------------------------------------------------------
+infra/fabric/crypto-config/
+infra/fabric/channel-artifacts/
+**/msp/keystore/
+*.block
+.ipfs/
+
+# -----------------------------------------------------------------------------
+# Python
+# -----------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# -----------------------------------------------------------------------------
+# OS / editor
+# -----------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# -----------------------------------------------------------------------------
+# NOT ignored, deliberately
+# -----------------------------------------------------------------------------
+# Schemes/*/exp*/raw_runs.csv, results.csv, run_meta.json  -> committed results
+# Dataset/dataset_manifest.json                            -> committed provenance
+# Plots/output/*.pdf                                       -> committed figures

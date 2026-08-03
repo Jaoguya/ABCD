@@ -1,0 +1,117 @@
+# =============================================================================
+# dataset.yaml — Corpus construction parameters
+# =============================================================================
+# Read by Dataset/prepare_dataset.py and Dataset/synthetic_generator.py.
+# Keeping these here (rather than as CLI defaults) means switching from the
+# synthetic corpus to MIMIC-IV requires no code change.
+#
+# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING once results generation has
+# begun — README §14 forbids modifying the derived dataset after that point.
+# =============================================================================
+
+meta:
+  version: 1
+
+# -----------------------------------------------------------------------------
+# Corpus shape — README §4 and §6
+# -----------------------------------------------------------------------------
+corpus:
+  # Sweep range for Exp. 2 (searchable index size N).
+  min_records: 10000                  # 10^4   — README §4
+  max_records: 1000000                # 10^6   — README §4
+  default_records: 100000             # 10^5   — README §6 (benchmark choice)
+  domains: 4                          # README §6, Paper §V
+  domain_split: uniform               # README §4 "Uniform across 4 domains"
+
+  # Domain assignment is a deterministic function of the patient identifier,
+  # not a per-record coin flip. This keeps every record of one patient inside
+  # a single administrative domain, which is what "administrative healthcare
+  # domain" means, and makes the split reproducible across runs.
+  domain_assignment: hash_of_patient_id
+
+# -----------------------------------------------------------------------------
+# MIMIC-IV v3.1 extraction — Dataset/prepare_dataset.py
+# -----------------------------------------------------------------------------
+# NOTE ON SOURCE TABLES: MIMIC-IV v3.1 (hosp/ + icu/) contains no free-text
+# clinical notes — those live in the separate MIMIC-IV-Note module. Keywords
+# are therefore drawn from the STRUCTURED tables, which is both faithful to
+# what v3.1 actually is and avoids requiring a second credentialed download.
+mimic:
+  version: "3.1"
+  # One derived record == one hospital admission (hadm_id).
+  record_unit: admission
+
+  # Relative paths inside the MIMIC-IV root passed via --input.
+  tables:
+    admissions: hosp/admissions.csv.gz
+    patients: hosp/patients.csv.gz
+    diagnoses_icd: hosp/diagnoses_icd.csv.gz
+    procedures_icd: hosp/procedures_icd.csv.gz
+    prescriptions: hosp/prescriptions.csv.gz
+
+  # Which structured fields become searchable keywords, and the namespace
+  # prefix each is given so that an ICD code and a drug name can never collide
+  # in the keyword universe.
+  keyword_sources:
+    - table: diagnoses_icd
+      field: icd_code
+      prefix: "dx:"
+      enabled: true
+    - table: procedures_icd
+      field: icd_code
+      prefix: "px:"
+      enabled: true
+    - table: prescriptions
+      field: drug
+      prefix: "rx:"
+      enabled: true
+
+  # Keyword filtering. Rare keywords bloat the universe without affecting
+  # search behaviour; ubiquitous ones carry no selectivity.
+  keyword_filter:
+    min_document_frequency: 5         # benchmark: drop keywords in <5 records
+    max_document_frequency_ratio: 0.5 # benchmark: drop keywords in >50% records
+    max_keywords_per_record: 32       # benchmark: cap W_i, keeps index bounded
+    normalize: lowercase_strip        # drug names are free-text-ish
+
+  # Timestamp field used for TS_i.
+  timestamp_field: admittime
+
+# -----------------------------------------------------------------------------
+# Synthetic corpus — Dataset/synthetic_generator.py
+# -----------------------------------------------------------------------------
+# DEVELOPMENT ONLY. README §4: results from the synthetic corpus MUST NOT be
+# reported in the paper. Every corpus records its type, and run_meta.json
+# carries corpus_type so a synthetic run can never be mistaken for a real one.
+synthetic:
+  # Keyword frequency in clinical corpora is heavy-tailed. A Zipf law is the
+  # standard model and is what the SSE literature uses for synthetic indexes.
+  #
+  # These values are placeholders until MIMIC-IV is available. Once
+  # prepare_dataset.py has run once, it writes the OBSERVED distribution into
+  # dataset_manifest.json, and synthetic_generator.py --match-profile <manifest>
+  # will reproduce it instead of using the values below.
+  distribution: zipf
+  zipf_exponent: 1.2                  # benchmark: placeholder, see above
+  keyword_universe_size: 20000        # benchmark: placeholder, see above
+  keywords_per_record:
+    distribution: lognormal
+    mean: 12.0                        # benchmark: ~typical ICD codes/admission
+    sigma: 0.5
+    min: 1
+    max: 32                           # matches mimic.keyword_filter cap
+
+  # Fixed seed so the development corpus is byte-reproducible across machines.
+  # This seeds corpus CONTENT only — never cryptographic key material.
+  seed: 20260803
+
+# -----------------------------------------------------------------------------
+# Output
+# -----------------------------------------------------------------------------
+output:
+  # Written to the --output directory (default Dataset/derived, git-ignored).
+  corpus_filename: corpus.jsonl
+  manifest_filename: dataset_manifest.json
+  # SHA-256 of corpus_filename is recorded in the manifest and in every
+  # run_meta.json (README §7).
+  hash_algorithm: sha256

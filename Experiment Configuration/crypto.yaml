@@ -1,0 +1,134 @@
+# =============================================================================
+# crypto.yaml — Cryptographic parameters for ALL schemes
+# =============================================================================
+# Single source of truth for every cryptographic parameter in the benchmark.
+# Read by Common/crypto/*; never hardcode these values in scheme source.
+#
+# Provenance key for every entry below:
+#   published  — the value is stated in the scheme's own paper (cite line)
+#   fips       — fixed by a standard (FIPS 203, FIPS 197, FIPS 180-4)
+#   benchmark  — a benchmark choice; NOT specified in any paper (README §6)
+#
+# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING. Per README §14, do not edit
+# without team consensus, and record the change in the README Change Log.
+# =============================================================================
+
+meta:
+  version: 1
+  # Hash of this file is recorded in every run_meta.json (README §7).
+
+# -----------------------------------------------------------------------------
+# Global primitives — identical for every scheme, so that cross-scheme latency
+# differences come from the constructions and not from the primitive layer.
+# README §1: "Environment parity is part of the result."
+# -----------------------------------------------------------------------------
+global:
+  hash:
+    algorithm: sha256                 # fips: FIPS 180-4
+    digest_bits: 256
+  aead:
+    algorithm: aes-256-gcm            # fips: FIPS 197 + SP 800-38D
+    key_bits: 256
+    nonce_bits: 96                    # SP 800-38D recommended nonce size
+    tag_bits: 128
+  prf:
+    algorithm: hmac-sha256            # fips: FIPS 198-1
+    key_bits: 256
+  kdf:
+    algorithm: hkdf-sha256
+    info_prefix: "MA-LB-PQ-VDSE/v1"
+
+# -----------------------------------------------------------------------------
+# ML-KEM-768 — proposed scheme only (README §1).
+# Exp. 1 EXCLUDES encapsulation from the trapdoor curve; it is a one-time
+# session-establishment cost reported separately (README §5, Exp. 1 rule).
+# -----------------------------------------------------------------------------
+kem:
+  algorithm: ml-kem-768               # fips: FIPS 203
+  # Informational only — fixed by FIPS 203, not tunable.
+  encapsulation_key_bytes: 1184
+  decapsulation_key_bytes: 2400
+  ciphertext_bytes: 1088
+  shared_secret_bytes: 32
+
+# -----------------------------------------------------------------------------
+# Ref[35] — Guo et al., IEEE TDSC 2024
+# Source: References/Ref[35].txt:1756-1766
+#   "we implemented the hash functions and PRFs with SHA256 and HMAC based on
+#    SHA256 ... the t-Pun-PRF was constructed by two HMACs based on SHA256 and
+#    Blake2b ... security parameter lambda is configured with 128; the output
+#    of the hash function is 192 bits"
+#
+# NOTE: the VBTree height L=32 mentioned on Ref[35].txt:1764 belongs to the
+# COMPARED scheme of Wu et al. [15] (see Ref[35].txt:1807), NOT to Guo's own
+# construction. It is deliberately absent here.
+# -----------------------------------------------------------------------------
+guo_vdsse:
+  security_parameter_lambda: 128      # published: Ref[35].txt:1763
+  hash_output_bits: 192               # published: Ref[35].txt:1763-1764
+  prf: hmac-sha256                    # published: Ref[35].txt:1756
+  puncturable_prf:
+    # published: Ref[35].txt:1758 — "constructed by two HMACs based on
+    # SHA256 and Blake2b". The two HMACs instantiate the two child-derivation
+    # functions of the GGM tree (left=SHA256, right=Blake2b).
+    left_hmac: hmac-sha256
+    right_hmac: hmac-blake2b
+    domain_bits: 128                  # benchmark: GGM tree depth = |X| in bits
+    output_bits: 192                  # published: matches hash_output_bits
+  symmetric_encryption: aes-256-gcm   # benchmark: paper says "SE", unspecified
+
+# -----------------------------------------------------------------------------
+# Ref[41] — Thingom et al., IEEE TCE 2026
+# Source: References/Ref[41].txt:510-513
+#   "two multiplicative cyclic groups I1 and I2 of prime order w, with i and h
+#    as generators of I1. A bilinear map is defined as e : I1 x I1 -> I2"
+#
+# This is a TYPE-I (symmetric) pairing. Security rests on DBDH
+# (Ref[41].txt:280-300). Implemented AS PUBLISHED per README §14 — do not
+# "upgrade" it to a post-quantum or Type-III setting.
+# -----------------------------------------------------------------------------
+thingom_pq_abse:
+  pairing:
+    type: type-1                      # published: e : I1 x I1 -> I2
+    backend: charm_ss512              # benchmark: symmetric curve, Linux only
+    curve: SS512
+    # Dev-only fallback for machines without charm-crypto. NOT reportable:
+    # it is a Type-III curve and changes group-element sizes and pairing cost.
+    dev_fallback_backend: petrelic_bn254
+    allow_dev_fallback_in_reportable_runs: false
+  hash_output_bits: 256               # benchmark: paper requires equal-length
+                                      # hash outputs, exact length unspecified
+
+# -----------------------------------------------------------------------------
+# Ref[52] — Zhuang et al., IEEE DSC
+# Source: References/Ref[52].txt:722-735 (TABLE III: Comparison Parameters)
+# -----------------------------------------------------------------------------
+zhuang_lattice_mabse:
+  lattice:
+    n: 284                            # published: security parameter
+    m: 13812                          # published: basis dimension
+    log_q: 24                         # published: q = 2^24
+    # Consistency note: with k = log_q = 24, the gadget block is n*k = 6816 and
+    # the random block is m - n*k = 6996 >= n*log(q), which is exactly the
+    # Micciancio-Peikert (MP12) gadget-trapdoor decomposition. The published
+    # m therefore matches an MP12 instantiation of TrapGen. See
+    # Common/crypto/lattice.py for the full argument.
+    gaussian_sigma: 4.0               # benchmark: sigma stated only as
+                                      # "sigma > 0" in Ref[52].txt:106
+  attributes:
+    l: 10                             # published: size of attribute set U_C
+    l_prime: 10                       # published: SPE subset bits
+  users_total: 50                     # published: u
+  keywords_per_ciphertext: 5          # published: w
+  bloom_filter:
+    array_bits: 32                    # published: "Length of bloom filter array 32"
+    num_hashes: 3                     # published: "Total number of hash functions 3"
+
+# -----------------------------------------------------------------------------
+# Ref[36] — XB-Muse. BLOCKED.
+# References/Ref[36].pdf is corrupted; its construction cannot be recovered
+# (README §3, Schemes/xb_muse/SCHEME.md). Parameters intentionally absent —
+# do NOT populate this section from the abstract or the comparison table.
+# -----------------------------------------------------------------------------
+xb_muse:
+  status: blocked_corrupted_reference
