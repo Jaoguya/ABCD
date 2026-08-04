@@ -1,4 +1,4 @@
-\documentclass{ieeetj}
+6622770764\documentclass{ieeetj}
 
 % ---------------------------------------------------------
 % Packages
@@ -253,7 +253,7 @@ across distributed fog-cloud infrastructures.
 The overall architecture of the proposed MA-LB-PQ-VDSE framework is illustrated in Fig.~\ref{fig:system}. The framework supports secure, scalable, and verifiable IoMT data sharing across multiple healthcare organizations by integrating multi-authority authorization, dynamic searchable encryption, adaptive load balancing, and blockchain-assisted auditing. The system consists of the following entities.
 \begin{figure*}[!t]
     \centering
-    \includegraphics[width=\textwidth]{SystemModel.png}
+    \includegraphics[width=\textwidth]{MA-LB-PQ-VDSE System Model.png}
     \caption{Overall system architecture of the proposed MA-LB-PQ-VDSE framework.}
     \label{fig:system}
 \end{figure*}
@@ -366,7 +366,6 @@ The system initialization phase establishes the global cryptographic parameters 
 \paragraph*{Step 1: Global Cryptographic Initialization}
 
 The trusted initializer selects bilinear groups $G_1$, $G_2$, and $G_T$ of prime order $p$ with bilinear map
-
 \begin{equation}
 e:G_1\times G_2\rightarrow G_T
 \end{equation}
@@ -402,7 +401,8 @@ e(g_1,g_2)^{\alpha_i},
 g_1^{\beta_i}
 \right)
 \end{equation}
-with $\alpha_i,\beta_i\overset{\$}{\leftarrow}\mathbb{Z}_p$. Since each Attribute Authority independently manages a disjoint attribute universe, no trusted central authority is required after system initialization.
+with $\alpha_i,\beta_i\overset{\$}{\leftarrow}\mathbb{Z}_p$. 
+Since each Attribute Authority independently manages a disjoint attribute universe, no trusted central authority is required after system initialization.
 
 \paragraph*{Step 3: Public Parameter Publication}
 
@@ -1266,11 +1266,7 @@ This section analyzes the security of the proposed
 MA-LB-PQ-VDSE framework under the threat model described in
 Section~\ref{sec:threat}. We consider probabilistic
 polynomial-time (PPT) adversaries, including quantum
-polynomial-time (QPT) adversaries, capable of observing,
-modifying, and replaying network messages while interacting
-with the cloud--fog infrastructure. The analysis focuses on
-the confidentiality of outsourced IoMT data, privacy of
-search tokens, correctness of authorization-aware encrypted
+polynomial-time (QPT) adversaries, capable of observing, modifying, and replaying network messages while interacting with the cloud--fog infrastructure. The analysis focuses on the confidentiality of outsourced IoMT data, privacy of search tokens, correctness of authorization-aware encrypted
 search, integrity of dynamic updates, verifiable retrieval,
 and post-quantum security.
 
@@ -1279,18 +1275,11 @@ and post-quantum security.
 
 Let $\lambda$ denote the security parameter.
 The proposed framework consists of multiple Attribute
-Authorities (AAs), Data Owners (DOs), Data Users (DUs),
-Fog Search Nodes (FSNs), the Authorization Index Manager
-(AIM), IPFS, and a consortium blockchain.
+Authorities (AAs), Data Owners (DOs), Data Users (DUs), Fog Search Nodes (FSNs), the Authorization Index Manager (AIM), IPFS, and a consortium blockchain.
 
 The Attribute Authorities, Data Owners, and legitimate
 Data Users are assumed to follow the protocol honestly.
-The cloud infrastructure, including the Fog Search Nodes,
-Authorization Index Manager, and IPFS storage, is assumed
-to be \emph{honest-but-curious}; these entities faithfully
-execute the protocol but may attempt to infer sensitive
-information from encrypted data, searchable indexes, search
-tokens, authorization metadata, or dynamic update messages.
+The cloud infrastructure, including the Fog Search Nodes, Authorization Index Manager, and IPFS storage, is assumed to be \emph{honest-but-curious}; these entities faithfully execute the protocol but may attempt to infer sensitive information from encrypted data, searchable indexes, search tokens, authorization metadata, or dynamic update messages.
 The consortium blockchain is assumed to provide immutable
 storage and authenticated consensus.
 
@@ -1909,9 +1898,9 @@ In contrast, the proposed framework generates a single authorization-bound trapd
 The proposed framework was implemented in Python~3.11 and evaluated on Amazon AWS EC2 c6i.xlarge instances, each equipped with 4 vCPUs and 8~GB RAM. Four Fog Search Nodes and one cloud server were deployed within an AWS Virtual Private Cloud (VPC) to emulate a distributed cross-domain IoMT healthcare environment. Each FSN independently maintains authorization-aware searchable indexes and performs encrypted search, while the cloud server stores encrypted EHRs and blockchain metadata.
 
 The framework employs ML-KEM-768 for post-quantum secure key establishment, AES-256-GCM for symmetric encryption, SHA-256 for hashing and Merkle-tree construction, and Hyperledger Fabric~v2.5 for maintaining authorization commitments and audit records. Search indexes are implemented using bitmap-based authorization-aware filtering combined with authenticated Merkle trees to support efficient encrypted retrieval and verification.
-
-Experiments were conducted using the MIMIC-IV clinical dataset ~\cite{ref55}, from which encrypted searchable indexes containing $10^4$--$10^6$ electronic health records were generated and uniformly distributed across four administrative healthcare domains. Unless otherwise specified, each query contains five keywords, and every experiment reports the average of 30 independent runs with 95\% confidence intervals.
-
+\textcolor{red}{
+Experiments were conducted using the MIMIC-IV dataset ~\cite{ref55}, from which encrypted searchable indexes containing $10^4$--$10^6$ electronic health records were generated and uniformly distributed across four administrative healthcare domains. Unless otherwise specified, each query contains five keywords, and every experiment reports the average of 30 independent runs with 95\% confidence intervals.
+}
 The proposed framework was compared with four representative searchable encryption schemes: Guo \textit{et al}.~\cite{ref35} (verifiable dynamic searchable encryption), XB-Muse~\cite{ref36} (dynamic searchable encryption), Thingom \textit{et al}.~\cite{ref41} (multi-authority searchable encryption), and Zhuang \textit{et al}.~\cite{ref52} (lattice-based post-quantum searchable encryption). The evaluation focuses on trapdoor generation, encrypted search efficiency, cross-domain search scalability, keyword update performance, retrieval verification, authorization synchronization, and authorization-aware load balancing under increasing workloads.
 
 

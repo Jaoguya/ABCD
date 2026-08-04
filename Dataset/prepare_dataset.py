@@ -65,7 +65,9 @@ from Common.crypto.config import DATASET_CONFIG_PATH, config_hashes, load  # noq
 from Dataset.corpus import (  # noqa: E402
     Record,
     assign_domain,
+    balance_domains,
     pseudonymize,
+    sha256_file,
     write_corpus,
     write_manifest,
 )
@@ -117,6 +119,10 @@ def collect_keywords(root: Path, cfg: Dict[str, Any]) -> Dict[str, Set[str]]:
     vocabulary a real searchable index would be built over, and using them
     avoids a keyword universe inflated by wording variants of the same
     concept.
+
+    A source may declare ``value_binning``, which appends a quantile band to
+    the code (``obs:8867-4:b3``). Without it a numeric observation would give
+    every record a unique keyword and exercise no index at all.
     """
     tables = cfg["tables"]
     join_key = cfg["join_key"]
@@ -126,20 +132,102 @@ def collect_keywords(root: Path, cfg: Dict[str, Any]) -> Dict[str, Set[str]]:
     for source in cfg["keyword_sources"]:
         if not source.get("enabled", True):
             continue
-        path = _resolve(root, tables[source["table"]])
-        field, prefix = source["field"], source["prefix"]
-        print(f"  reading {path.name} ({field} -> {prefix}*)", file=sys.stderr)
 
-        reader = pd.read_csv(
-            path, usecols=[join_key, field], chunksize=CHUNK_ROWS, low_memory=False
-        )
+        table = source["table"]
+        if table not in tables:
+            print(f"  skipping {table}: not declared in tables", file=sys.stderr)
+            continue
+        try:
+            path = _resolve(root, tables[table])
+        except SyntheaNotFoundError:
+            # Synthea omits a table entirely when a run produced no rows for
+            # it (small populations often have no imaging studies). Skipping
+            # is correct; failing would make the corpus depend on population
+            # size in a way that has nothing to do with the benchmark.
+            print(f"  skipping {table}: not present in this export", file=sys.stderr)
+            continue
+
+        field, prefix = source["field"], source["prefix"]
+        binning = source.get("value_binning") or {}
+        use_bins = bool(binning.get("enabled"))
+        columns = [join_key, field]
+        if use_bins:
+            columns.append(binning["value_field"])
+
+        label = f"{prefix}*" + (" (value-binned)" if use_bins else "")
+        print(f"  reading {path.name} ({field} -> {label})", file=sys.stderr)
+
+        try:
+            reader = pd.read_csv(
+                path, usecols=columns, chunksize=CHUNK_ROWS, low_memory=False
+            )
+        except ValueError as exc:
+            print(f"  skipping {table}: {exc}", file=sys.stderr)
+            continue
+
         for chunk in reader:
             chunk = chunk.dropna(subset=[join_key, field])
-            for key, value in zip(chunk[join_key], chunk[field]):
-                token = _normalize(value, normalize)
-                if token:
-                    per_record[_key(key)].add(prefix + token)
+            if use_bins:
+                _add_binned(chunk, per_record, join_key, field, prefix,
+                            binning, normalize)
+            else:
+                for key, value in zip(chunk[join_key], chunk[field]):
+                    token = _normalize(value, normalize)
+                    if token:
+                        per_record[_key(key)].add(prefix + token)
     return per_record
+
+
+def _add_binned(
+    chunk: "pd.DataFrame",
+    per_record: Dict[str, Set[str]],
+    join_key: str,
+    field: str,
+    prefix: str,
+    binning: Dict[str, Any],
+    normalize: str,
+) -> None:
+    """Append a quantile band to each code: ``obs:8867-4:b3``.
+
+    Bands are computed as a percentile rank WITHIN each code, per chunk.
+    Chunk-local rather than global: a global pass would mean holding every
+    observation value in memory, and at 10^6 encounters that is tens of
+    millions of rows. The approximation is recorded in the manifest.
+
+    Rows whose value is non-numeric (Synthea survey responses, categorical
+    results) keep the bare code with no band — binning a category would be
+    meaningless, and dropping the row would silently lose vocabulary.
+    """
+    bins = int(binning.get("bins", 5))
+    value_field = binning["value_field"]
+
+    numeric = pd.to_numeric(chunk[value_field], errors="coerce")
+    has_value = numeric.notna()
+
+    # Non-numeric rows: bare code.
+    for key, code in zip(chunk[join_key][~has_value], chunk[field][~has_value]):
+        token = _normalize(code, normalize)
+        if token:
+            per_record[_key(key)].add(prefix + token)
+
+    if not has_value.any():
+        return
+
+    numeric_rows = chunk[has_value].assign(_value=numeric[has_value])
+    # rank(pct=True) is in (0, 1]; scaling by `bins` and clipping keeps the
+    # top rank inside the last band instead of creating a bins+1'th band.
+    bands = (
+        numeric_rows.groupby(field)["_value"]
+        .rank(pct=True, method="average")
+        .mul(bins)
+        .apply(lambda x: min(int(x), bins - 1) if pd.notna(x) else 0)
+    )
+    for key, code, band in zip(
+        numeric_rows[join_key], numeric_rows[field], bands
+    ):
+        token = _normalize(code, normalize)
+        if token:
+            per_record[_key(key)].add(f"{prefix}{token}:b{int(band)}")
 
 
 # ---------------------------------------------------------------------------
@@ -159,6 +247,7 @@ def filter_keywords(
     min_df = int(rules["min_document_frequency"])
     max_ratio = float(rules["max_document_frequency_ratio"])
     cap = int(rules["max_keywords_per_record"])
+    floor = int(rules.get("min_keywords_per_record", 1))
 
     document_frequency: Counter[str] = Counter()
     for keywords in per_record.values():
@@ -173,6 +262,7 @@ def filter_keywords(
 
     filtered: Dict[str, List[str]] = {}
     truncated = 0
+    below_floor = 0
     for key, keywords in per_record.items():
         surviving = sorted(keywords & keep)
         if len(surviving) > cap:
@@ -180,6 +270,15 @@ def filter_keywords(
             # keeping the most common instead would flatten n_eff.
             surviving = sorted(surviving, key=lambda k: document_frequency[k])[:cap]
             truncated += 1
+        if len(surviving) < floor:
+            # A record with fewer keywords than the query size can never match
+            # a conjunctive q-keyword query, so it contributes index weight
+            # without ever appearing in a result. The manuscript fixes q=5
+            # (§V, "each query contains five keywords"), and the unfiltered
+            # corpus had a median |W_i| of 4 — over half the records were
+            # structurally unmatchable at the default query size.
+            below_floor += 1
+            continue
         if surviving:
             filtered[key] = sorted(surviving)
 
@@ -191,7 +290,9 @@ def filter_keywords(
             "dropped_rare": dropped_rare,
             "dropped_common": dropped_common,
             "records_truncated_at_cap": truncated,
-            "records_with_no_keywords": len(per_record) - len(filtered),
+            "min_keywords_per_record": floor,
+            "records_below_keyword_floor": below_floor,
+            "records_with_no_keywords": len(per_record) - len(filtered) - below_floor,
         },
     }
 
@@ -207,7 +308,14 @@ def build_records(
     domains: int,
     limit: Optional[int],
 ) -> Iterator[Record]:
-    """Join keywords to their patient, organisation, and timestamp."""
+    """Join keywords to their patient, organisation, and timestamp.
+
+    Domains are assigned by balancing whole organizations across buckets
+    rather than hashing each one independently — see
+    ``corpus.balance_domains``. The balance is computed over the encounters
+    that actually survive keyword filtering, not over all encounters, so the
+    emitted corpus is what ends up even.
+    """
     path = _resolve(root, cfg["tables"]["encounters"])
     time_column = cfg["timestamp_field"]
     columns = ["Id", "PATIENT", "ORGANIZATION", time_column]
@@ -216,6 +324,14 @@ def build_records(
     frame = frame.dropna(subset=["Id", "PATIENT"])
     frame = frame.sort_values("Id")
 
+    # Pass 1: how many surviving records does each organization contribute?
+    org_counts: Counter[str] = Counter()
+    for enc_id, org in zip(frame["Id"], frame["ORGANIZATION"]):
+        if keywords.get(_key(enc_id)):
+            org_counts[str(org)] += 1
+    org_domain = balance_domains(dict(org_counts), domains)
+
+    # Pass 2: emit.
     emitted = 0
     for row in frame.itertuples(index=False):
         values = dict(zip(frame.columns, row))
@@ -224,11 +340,14 @@ def build_records(
             continue
         if limit is not None and emitted >= limit:
             break
+        org = str(values["ORGANIZATION"])
         yield Record(
             rid=emitted,
             pid=pseudonymize(values["PATIENT"]),
+            # Fall back to hashing only if an organization somehow never
+            # appeared in pass 1, which should be impossible.
+            dom=org_domain.get(org, assign_domain(org, domains)),
             vid=1,
-            dom=assign_domain(str(values["ORGANIZATION"]), domains),
             ts=str(values[time_column]),
             kw=record_keywords,
         )
@@ -252,6 +371,13 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument("--domains", type=int, default=None, help="default: dataset.yaml")
     parser.add_argument("--limit", type=int, default=None,
                         help="cap the number of records emitted")
+    parser.add_argument("--synthea-version", default=None,
+                        help="Synthea release used (e.g. 3.3.0). Recorded in the "
+                             "manifest; without it the corpus is not reproducible")
+    parser.add_argument("--force", action="store_true",
+                        help="overwrite an existing corpus. The corpus is meant to "
+                             "be built ONCE and reused; regenerating it mid-campaign "
+                             "makes earlier results incomparable (README §14)")
     args = parser.parse_args(argv)
 
     config = load(DATASET_CONFIG_PATH)
@@ -263,6 +389,30 @@ def main(argv: List[str] | None = None) -> int:
     if not root.is_dir():
         raise SyntheaNotFoundError(f"--input is not a directory: {root}")
 
+    # Build once, reuse everywhere. Re-running this by accident must not
+    # silently replace the corpus every scheme has already measured against.
+    corpus_path = Path(args.output) / output_cfg["corpus_filename"]
+    if corpus_path.is_file() and not args.force:
+        existing = sha256_file(corpus_path)
+        raise SystemExit(
+            f"corpus already exists: {corpus_path}\n"
+            f"  sha256: {existing}\n\n"
+            f"The corpus is built ONCE and reused by every scheme on every\n"
+            f"instance. Regenerating it now would make any results already\n"
+            f"produced incomparable (README §14).\n\n"
+            f"If you genuinely want to rebuild, pass --force — and then re-run\n"
+            f"EVERY scheme, and clear freeze.expected_corpus_sha256 in\n"
+            f"Experiment Configuration/dataset.yaml."
+        )
+
+    if not args.synthea_version:
+        print(
+            "  WARNING: --synthea-version not given. Synthea output changes\n"
+            "  between releases, so without it this corpus cannot be\n"
+            "  reproduced from the manifest alone.",
+            file=sys.stderr,
+        )
+
     print(f"Reading Synthea CSV export from {root}", file=sys.stderr)
     per_record = collect_keywords(root, cfg)
     if not per_record:
@@ -272,7 +422,6 @@ def main(argv: List[str] | None = None) -> int:
     filtered = filter_keywords(per_record, cfg)
     per_record.clear()  # free before assembling records
 
-    corpus_path = Path(args.output) / output_cfg["corpus_filename"]
     stats = write_corpus(
         corpus_path,
         build_records(
@@ -287,12 +436,24 @@ def main(argv: List[str] | None = None) -> int:
         stats=stats,
         params={
             "source": "synthea",
+            # Synthea output changes between releases; without this the corpus
+            # is not reproducible from the manifest alone.
+            "synthea_version": args.synthea_version or "unspecified",
             "export_format": cfg["export_format"],
             "record_unit": cfg["record_unit"],
             "domain_assignment": cfg["domain_assignment"],
             "domains": domains,
             "limit": args.limit,
             "keyword_filter": cfg["keyword_filter"],
+            # The full vocabulary configuration is recorded, not just the
+            # filter: the keyword universe drives n_eff, which is what Exp. 2
+            # claims latency tracks. A reviewer must be able to see exactly
+            # which sources and which binning produced it.
+            "keyword_sources": cfg["keyword_sources"],
+            "value_binning_note": (
+                "Observation value bands are percentile ranks computed within "
+                "each code, per 1M-row chunk, not globally."
+            ),
             "extraction_stats": filtered["stats"],
             "generator": "prepare_dataset.py",
         },
@@ -312,13 +473,29 @@ def main(argv: List[str] | None = None) -> int:
         file=sys.stderr,
     )
 
+    print(
+        f"\n  TO FREEZE: copy this into Experiment Configuration/dataset.yaml\n"
+        f"    freeze:\n"
+        f"      expected_corpus_sha256: {manifest['corpus_sha256']}\n"
+        f"      frozen_on: {manifest['generated_utc'][:10]}\n"
+        f"  Every scheme then verifies the corpus at startup and refuses to\n"
+        f"  run on a different one.",
+        file=sys.stderr,
+    )
+
     ceiling = manifest["records"]
     if ceiling < 1_000_000:
+        # Scale from what THIS run actually produced rather than from a fixed
+        # encounters-per-patient ratio. The keyword floor drops a large and
+        # filter-dependent share of encounters (55% at min_keywords=5), so a
+        # ratio derived from raw encounter counts overstates the yield badly.
+        factor = 1_000_000 / ceiling
+        floor = cfg["keyword_filter"].get("min_keywords_per_record", 1)
         print(
             f"\n  NOTE: {ceiling:,} records, below the 10^6 top of README §4's\n"
-            f"  range. Not a hard ceiling — regenerate with more patients:\n"
-            f"    ./run_synthea -p 400000\n"
-            f"  (~2-3 encounters per patient, so ~400k patients clears 10^6).",
+            f"  range. Not a hard ceiling — scale the patient count by\n"
+            f"  ~{factor:.2f}x and regenerate (this run's yield already\n"
+            f"  accounts for min_keywords_per_record={floor}).",
             file=sys.stderr,
         )
     return 0

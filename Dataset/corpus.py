@@ -70,6 +70,39 @@ def assign_domain(patient_id: str, domains: int) -> int:
     return int.from_bytes(digest[:8], "big") % domains
 
 
+def balance_domains(unit_counts: Dict[str, int], domains: int) -> Dict[str, int]:
+    """Assign organizations to domains so the domains come out near-equal.
+
+    Hashing an organization to a domain keeps its records together but gives
+    badly uneven domains, because organization sizes are heavy-tailed: 1,153
+    Synthea organizations hashed into 4 buckets produced a 34/21/23/22 split.
+    The manuscript states records are "uniformly distributed across four
+    administrative healthcare domains" (§V), and Exp. 8 measures the standard
+    deviation of FSN utilization — so a lopsided corpus is both inaccurate and
+    a confound for the headline load-balancing result.
+
+    Greedy largest-first assignment (the classic LPT bin-packing heuristic):
+    sort organizations by size descending, and repeatedly place the next one
+    in whichever domain currently holds the fewest records. Whole
+    organizations stay intact, so a domain is still a real institutional
+    boundary rather than an arbitrary slice.
+
+    Returns a mapping from organization id to domain index.
+    """
+    if domains <= 0:
+        raise ValueError(f"domains must be positive, got {domains}")
+
+    loads = [0] * domains
+    assignment: Dict[str, int] = {}
+    # Tie-break on the id so the result is deterministic regardless of the
+    # dict ordering the caller happened to build.
+    for unit, count in sorted(unit_counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        target = min(range(domains), key=lambda d: (loads[d], d))
+        assignment[unit] = target
+        loads[target] += count
+    return assignment
+
+
 def pseudonymize(raw_id: str, *, salt: bytes = b"MA-LB-PQ-VDSE/pid") -> str:
     """Hash a source identifier into a stable pseudonym.
 
@@ -288,3 +321,123 @@ def write_manifest(
 
 def load_manifest(path: Path) -> Dict[str, Any]:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+# ---------------------------------------------------------------------------
+# Freeze verification
+# ---------------------------------------------------------------------------
+class CorpusMismatchError(RuntimeError):
+    """Raised when the corpus on disk is not the one results were built on."""
+
+
+def verify_corpus(
+    corpus_path: Path,
+    manifest_path: Path,
+    *,
+    require_reportable: bool = True,
+) -> Dict[str, Any]:
+    """Check the corpus against its manifest before a scheme runs.
+
+    README §14 says the derived dataset must not change once results
+    generation has begun, but nothing enforced it — a scheme would happily
+    read whatever ``corpus.jsonl`` it found. Regenerating mid-campaign would
+    then produce two incomparable result sets that only surface when a
+    reviewer asks why two ``run_meta.json`` files disagree.
+
+    Every scheme should call this at startup. It fails loudly rather than
+    letting a silent mismatch through.
+
+    Returns the manifest so the caller can copy provenance into
+    ``run_meta.json`` without re-reading it.
+    """
+    corpus_path, manifest_path = Path(corpus_path), Path(manifest_path)
+    if not corpus_path.is_file():
+        raise CorpusMismatchError(
+            f"corpus not found: {corpus_path}\n"
+            f"Generate it first: python3 Dataset/prepare_dataset.py --input <synthea-csv>"
+        )
+    if not manifest_path.is_file():
+        raise CorpusMismatchError(f"manifest not found: {manifest_path}")
+
+    manifest = load_manifest(manifest_path)
+    actual = sha256_file(corpus_path)
+    expected = manifest.get("corpus_sha256")
+
+    if actual != expected:
+        raise CorpusMismatchError(
+            f"corpus does not match its manifest.\n"
+            f"  corpus   : {corpus_path}\n"
+            f"  expected : {expected}\n"
+            f"  actual   : {actual}\n"
+            f"The corpus was regenerated or edited after the manifest was "
+            f"written. Results produced now are NOT comparable to earlier "
+            f"ones (README §14). Either restore the original corpus or "
+            f"regenerate the manifest and re-run every scheme."
+        )
+
+    if require_reportable and not manifest.get("reportable", False):
+        raise CorpusMismatchError(
+            f"corpus_type={manifest.get('corpus_type')!r} is not reportable "
+            f"(README §4). Pass require_reportable=False for a development run."
+        )
+    return manifest
+
+
+def load_verified_corpus(
+    *,
+    corpus_dir: Optional[Path] = None,
+    manifest_path: Optional[Path] = None,
+    require_reportable: Optional[bool] = None,
+) -> tuple[List[Record], Dict[str, Any]]:
+    """The entry point every scheme should use to read the corpus.
+
+    Resolves paths from ``dataset.yaml``, verifies the corpus against its
+    manifest AND against the frozen pin, then loads it. Returns
+    ``(records, manifest)`` so the caller can copy provenance straight into
+    ``run_meta.json``.
+
+    Schemes should not call ``read_corpus`` directly — it skips verification,
+    which is the whole point of this function.
+    """
+    from Common.crypto.config import REPO_ROOT, load_dataset_config
+
+    config = load_dataset_config()
+    output_cfg = config["output"]
+    freeze_cfg = config.get("freeze") or {}
+
+    corpus_dir = Path(corpus_dir) if corpus_dir else REPO_ROOT / "Dataset" / "derived"
+    corpus_path = corpus_dir / output_cfg["corpus_filename"]
+    manifest_path = (
+        Path(manifest_path)
+        if manifest_path
+        else REPO_ROOT / "Dataset" / output_cfg["manifest_filename"]
+    )
+    if require_reportable is None:
+        require_reportable = bool(freeze_cfg.get("require_reportable_corpus", True))
+
+    manifest = verify_corpus(
+        corpus_path, manifest_path, require_reportable=require_reportable
+    )
+    verify_against_pin(manifest, freeze_cfg.get("expected_corpus_sha256"))
+    return list(read_corpus(corpus_path)), manifest
+
+
+def verify_against_pin(manifest: Dict[str, Any], pinned_sha256: Optional[str]) -> None:
+    """Check the manifest against the SHA-256 pinned in ``dataset.yaml``.
+
+    ``verify_corpus`` proves the corpus matches its own manifest. This proves
+    the manifest is the one the team froze — otherwise regenerating BOTH
+    corpus and manifest together would pass the first check while silently
+    changing the data every scheme runs on.
+    """
+    if not pinned_sha256:
+        return  # not yet frozen
+    actual = manifest.get("corpus_sha256")
+    if actual != pinned_sha256:
+        raise CorpusMismatchError(
+            f"corpus does not match the frozen pin in dataset.yaml.\n"
+            f"  pinned : {pinned_sha256}\n"
+            f"  actual : {actual}\n"
+            f"The campaign was frozen on a different corpus. Restore it, or "
+            f"clear freeze.expected_corpus_sha256 and re-run EVERY scheme."
+        )

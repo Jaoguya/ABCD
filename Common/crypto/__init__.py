@@ -78,10 +78,25 @@ def environment_report() -> dict:
         except Exception:
             return "not installed"
 
+    import os
+
+    # numpy's BLAS grabs every available core by default, so Ref[52]'s lattice
+    # latency would silently depend on the machine's core count and could not
+    # be reproduced even on identical hardware. Pin these before importing
+    # numpy (see infra/provision.sh) and record what was actually in force.
+    thread_vars = (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    )
+
     return {
         "python_version": sys.version.split()[0],
         "python_implementation": platform.python_implementation(),
         "platform": platform.platform(),
+        "cpu_count": os.cpu_count(),
+        "blas_thread_env": {v: os.environ.get(v, "UNSET") for v in thread_vars},
         "libraries": {
             name: _version(name)
             for name in ("cryptography", "numpy", "scipy", "mmh3", "yaml")

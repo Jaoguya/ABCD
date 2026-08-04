@@ -1,0 +1,326 @@
+{
+  "corpus_version": 1,
+  "corpus_type": "synthea",
+  "corpus_filename": "corpus.jsonl",
+  "corpus_sha256": "d991c695fe9a9feaeb9cfd31044322aee5a560d32ff9ed0647d695da29a91909",
+  "records": 1206159,
+  "domains": 4,
+  "per_domain_counts": {
+    "0": 248091,
+    "1": 411768,
+    "2": 275180,
+    "3": 271120
+  },
+  "keyword_universe_size": 2102,
+  "keyword_document_pairs": 18785334,
+  "keywords_per_record": {
+    "mean": 15.57450883341251,
+    "min": 1,
+    "max": 64,
+    "p50": 4,
+    "p95": 64
+  },
+  "frequency_profile": {
+    "distribution": "zipf",
+    "fitted_exponent": 2.387,
+    "distinct_keywords": 2102,
+    "max_frequency": 203190,
+    "min_frequency": 5,
+    "top_keywords": [
+      {
+        "keyword": "proc:265764009",
+        "count": 203190
+      },
+      {
+        "keyword": "obs:72166-2",
+        "count": 190045
+      },
+      {
+        "keyword": "obs:32624-9",
+        "count": 188006
+      },
+      {
+        "keyword": "obs:54899-0",
+        "count": 183746
+      },
+      {
+        "keyword": "obs:56051-6",
+        "count": 179206
+      },
+      {
+        "keyword": "obs:56799-0",
+        "count": 174477
+      },
+      {
+        "keyword": "proc:171207006",
+        "count": 169825
+      },
+      {
+        "keyword": "obs:67875-5",
+        "count": 169723
+      },
+      {
+        "keyword": "med:205923",
+        "count": 167464
+      },
+      {
+        "keyword": "obs:76437-3",
+        "count": 165163
+      },
+      {
+        "keyword": "imm:140",
+        "count": 163753
+      },
+      {
+        "keyword": "obs:76501-6",
+        "count": 160536
+      },
+      {
+        "keyword": "obs:82589-3",
+        "count": 156425
+      },
+      {
+        "keyword": "obs:93026-3",
+        "count": 152786
+      },
+      {
+        "keyword": "obs:93027-1",
+        "count": 149699
+      },
+      {
+        "keyword": "obs:93028-9",
+        "count": 147137
+      },
+      {
+        "keyword": "obs:93029-7",
+        "count": 144881
+      },
+      {
+        "keyword": "cond:314529007",
+        "count": 143513
+      },
+      {
+        "keyword": "obs:93030-5",
+        "count": 142845
+      },
+      {
+        "keyword": "obs:93031-3",
+        "count": 140923
+      },
+      {
+        "keyword": "obs:93033-9",
+        "count": 138966
+      },
+      {
+        "keyword": "proc:430193006",
+        "count": 137474
+      },
+      {
+        "keyword": "obs:93034-7",
+        "count": 136873
+      },
+      {
+        "keyword": "obs:2514-8",
+        "count": 134631
+      },
+      {
+        "keyword": "obs:93035-4",
+        "count": 134560
+      },
+      {
+        "keyword": "obs:5794-3",
+        "count": 134022
+      },
+      {
+        "keyword": "obs:20454-5",
+        "count": 133410
+      },
+      {
+        "keyword": "obs:25428-4",
+        "count": 133305
+      },
+      {
+        "keyword": "obs:32167-9",
+        "count": 133171
+      },
+      {
+        "keyword": "obs:5799-2",
+        "count": 133117
+      },
+      {
+        "keyword": "obs:5767-9",
+        "count": 132985
+      },
+      {
+        "keyword": "obs:5770-3",
+        "count": 132766
+      },
+      {
+        "keyword": "obs:34533-0",
+        "count": 132621
+      },
+      {
+        "keyword": "proc:428211000124100",
+        "count": 132433
+      },
+      {
+        "keyword": "obs:5778-6",
+        "count": 132428
+      },
+      {
+        "keyword": "obs:93038-8",
+        "count": 132166
+      },
+      {
+        "keyword": "obs:5802-4",
+        "count": 131802
+      },
+      {
+        "keyword": "obs:5811-5:b2",
+        "count": 130834
+      },
+      {
+        "keyword": "proc:710824005",
+        "count": 130160
+      },
+      {
+        "keyword": "obs:71802-3",
+        "count": 128154
+      },
+      {
+        "keyword": "proc:103697008",
+        "count": 121071
+      },
+      {
+        "keyword": "obs:72514-3:b2",
+        "count": 119648
+      },
+      {
+        "keyword": "proc:34043003",
+        "count": 117517
+      },
+      {
+        "keyword": "proc:243085009",
+        "count": 114027
+      },
+      {
+        "keyword": "proc:1260009003",
+        "count": 113329
+      },
+      {
+        "keyword": "proc:1260010008",
+        "count": 113329
+      },
+      {
+        "keyword": "proc:225362009",
+        "count": 113329
+      },
+      {
+        "keyword": "proc:274788003",
+        "count": 113329
+      },
+      {
+        "keyword": "proc:710841007",
+        "count": 109788
+      },
+      {
+        "keyword": "obs:72514-3:b0",
+        "count": 101281
+      }
+    ]
+  },
+  "generated_utc": "2026-08-04T15:03:40+00:00",
+  "git_commit": "unknown",
+  "params": {
+    "source": "synthea",
+    "synthea_version": "7e08387",
+    "export_format": "csv",
+    "record_unit": "encounter",
+    "domain_assignment": "hash_of_organization",
+    "domains": 4,
+    "limit": null,
+    "keyword_filter": {
+      "min_document_frequency": 5,
+      "max_document_frequency_ratio": 0.5,
+      "max_keywords_per_record": 64,
+      "normalize": "lowercase_strip"
+    },
+    "keyword_sources": [
+      {
+        "table": "conditions",
+        "field": "CODE",
+        "prefix": "cond:",
+        "enabled": true
+      },
+      {
+        "table": "medications",
+        "field": "CODE",
+        "prefix": "med:",
+        "enabled": true
+      },
+      {
+        "table": "procedures",
+        "field": "CODE",
+        "prefix": "proc:",
+        "enabled": true
+      },
+      {
+        "table": "observations",
+        "field": "CODE",
+        "prefix": "obs:",
+        "enabled": true,
+        "value_binning": {
+          "enabled": true,
+          "value_field": "VALUE",
+          "bins": 5
+        }
+      },
+      {
+        "table": "immunizations",
+        "field": "CODE",
+        "prefix": "imm:",
+        "enabled": true
+      },
+      {
+        "table": "allergies",
+        "field": "CODE",
+        "prefix": "alg:",
+        "enabled": true
+      },
+      {
+        "table": "devices",
+        "field": "CODE",
+        "prefix": "dev:",
+        "enabled": true
+      },
+      {
+        "table": "careplans",
+        "field": "CODE",
+        "prefix": "plan:",
+        "enabled": true
+      },
+      {
+        "table": "imaging_studies",
+        "field": "BODYSITE_CODE",
+        "prefix": "img:",
+        "enabled": true
+      }
+    ],
+    "value_binning_note": "Observation value bands are percentile ranks computed within each code, per 1M-row chunk, not globally.",
+    "extraction_stats": {
+      "keywords_before_filter": 2276,
+      "keywords_after_filter": 2102,
+      "dropped_rare": 174,
+      "dropped_common": 0,
+      "records_truncated_at_cap": 83127,
+      "records_with_no_keywords": 38
+    },
+    "generator": "prepare_dataset.py"
+  },
+  "config_hashes": {
+    "crypto.yaml": "23b8dbc6ea3b18581141809fcad9b42802b7aead4646480f8757362a602be89f",
+    "dataset.yaml": "206a9dc3c1fe916a2c5fed72a545c38882ef7b4d351e20882329e0a575d34eef"
+  },
+  "reportable": true,
+  "citation": "Walonoski et al., Synthea: An approach, method, and software mechanism for generating synthetic patients and the synthetic electronic health care record, JAMIA 25(3), 2018. doi:10.1093/jamia/ocx079"
+}

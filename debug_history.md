@@ -8,6 +8,31 @@ Each entry is marked *not fixed* until resolved, then updated to *fixed*.
 
 <!-- Append new entries below this line. Do not modify entries above. -->
 
+### Ref[36] recovered — and requires Intel SGX
+- **Date:** 2026-08-05
+- **Status:** *fixed* (corruption) / *not fixed* (SGX requirement — needs a decision)
+- **Why it changed:** The original `References/Ref[36].pdf` had destroyed flate streams; two independent toolchains (the original extraction and poppler) recovered 0 bytes. A clean copy was obtained from IEEE Xplore. `pdftotext -layout` extracted 108,474 bytes across 1,030 lines, same DOI 10.1109/JIOT.2025.3561287. Corrupted originals archived under `References/corrupted_archive/`.
+- **How it will improve:** The construction is now readable, which unblocks `xb_muse/`. XB-Muse builds on **SRE (Symmetric Revocable Encryption)**: a multi-puncturable PRF plus a Bloom filter holding revoked tags, with keyed PRFs `F`/`G` for address derivation and on-chain revocation status. `Common/crypto/prf.py` already provides a puncturable PRF that punctures at a *set* of points, and `bloom.py` provides BF(l,k) — so the shared primitive layer covers the SRE building blocks without new code.
+- **What changed:** Reading the recovered text surfaced a hardware requirement that was invisible while the PDF was corrupted: **the scheme runs part of its algorithm inside an Intel SGX enclave** (`Ref[36].txt:341` — "the pseudo-codes in blue are run in the enclave created by intel SGX"; `:359` — the data owner uses SGX attestation to establish a secure channel and provision `sk` into the enclave). `m6i.xlarge` does not expose SGX; AWS offers Nitro Enclaves, which has a different trust and attestation model. Three options are recorded in README §14. Worth noting for whichever is chosen: a simulated enclave omits SGX's enclave-transition and EPC-paging overhead, so it would make Ref[36] appear *faster* than a real deployment — the direction that does not flatter the proposed scheme.
+
+### Environment complete — all primitives verified on the experiment host
+- **Date:** 2026-08-04
+- **Status:** *fixed*
+- **Why it changed:** Nothing in `Common/crypto/` had ever executed. Three dependencies were unresolved: the ML-KEM backend (requirements.txt wrongly attributed it to `cryptography>=43`), `charm-crypto` (needed for Ref[41]'s Type-I pairing), and the primitive test suite itself.
+- **How it will improve:** The crypto layer is now verified before any scheme is built on it. **65 tests: 64 passed, 1 skipped, 0 failed.**
+- **What changed:**
+  - **ML-KEM** — `cryptography` 50.0.0 does *not* expose ML-KEM; the multi-backend probe in `kem.py` selected **liboqs 0.16.0**, which reports `ML-KEM-768 available: True`. FIPS 203 sizes and round-trip verified.
+  - **charm-crypto** — failed with "requires the python development environment". Root cause: `configure.sh:526` runs `which python3-config`, and only `python3.11-config` exists on Ubuntu 22.04 with deadsnakes. Fixed by symlinking `/usr/local/bin/python3-config -> /usr/bin/python3.11-config` and passing `--python=$VENV/bin/python3`. PBC 0.5.14 built from source first as a prerequisite. SS512 verified: bilinearity holds, G1 element = 90 bytes.
+  - **Note on SS512** — charm emits a DeprecationWarning that SS512 provides only ~80-bit security, below NIST's 128-bit recommendation. Ref[41] specifies a Type-I pairing but not a curve; SS512 is the standard symmetric choice. Charm's only stronger symmetric option is SS1024 (~112-bit). Switching would change measured pairing cost, so it is a decision to make once, before reportable runs, not a default to drift into.
+  - `petrelic` still fails to build; it is the Type-III development fallback only and is not needed for reportable Ref[41] runs.
+
+### Corpus v1 superseded — median |W_i| below the query size
+- **Date:** 2026-08-04
+- **Status:** *fixed*
+- **Why it changed:** The first frozen corpus (SHA-256 `d991c695...`, 1,206,159 records) had a median `|W_i|` of 4 while the manuscript fixes `q=5` (§V, "each query contains five keywords"). A conjunctive q-keyword query only matches records with `|W_i| >= q`, so **55% of the corpus was structurally unmatchable** and contributed index weight that could never be returned — `n_eff` would have been produced by a minority of records. Its domains were also uneven (34/21/23/22) against §V's "uniformly distributed", which would have confounded Exp. 8's utilization-spread metric.
+- **How it will improve:** Two changes, both grounded in the paper rather than chosen to flatter a result. `min_keywords_per_record: 5` is an inclusion criterion taken directly from the published `q`. `balance_domains()` packs whole organizations into domains largest-first, so domains stay real institutional boundaries while coming out equal.
+- **What changed:** Regenerated at 38,000 patients (2,557,154 encounters, 48m40s). New corpus: **1,141,072 records**, min `|W_i|` = 5, median 29, mean 31.70, domains **285,268 x 4 exactly**, 36,172,487 pairs, 2,006 keywords, SHA-256 `fd4b7654e4c20186163f0b8c390c2c50b4bc4f908bdfbca585779b8d0792dc47`, pinned in `dataset.yaml`. v1 archived at `~/corpus_v1_archive/`; it never produced results.
+
 ### Ref[52] SamplePre perturbation mode is an approximation
 - **Date:** 2026-08-03
 - **Status:** *not fixed* — needs user sign-off before any reportable Ref[52] run

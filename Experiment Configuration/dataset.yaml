@@ -57,10 +57,25 @@ synthea:
     conditions: conditions.csv
     medications: medications.csv
     procedures: procedures.csv
+    observations: observations.csv
+    immunizations: immunizations.csv
+    allergies: allergies.csv
+    devices: devices.csv
+    careplans: careplans.csv
+    imaging_studies: imaging_studies.csv
 
-  # Codes rather than free-text DESCRIPTION: codes are the controlled
-  # vocabulary a real searchable index would be built over, and they avoid a
-  # keyword universe inflated by description wording variants.
+  # WHAT IS AND IS NOT A LEGITIMATE KEYWORD SOURCE
+  # ----------------------------------------------
+  # Every source below is a DISTINCT clinical concept that a real encrypted
+  # EHR index would contain. Two things are deliberately excluded because
+  # they would inflate the keyword universe without adding real distinctions,
+  # which would pump n_eff and flatter Exp. 2 (README §14):
+  #
+  #   * free-text DESCRIPTION alongside CODE — the same concept, aliased
+  #   * value binning finer than the bins below — granularity for its own sake
+  #
+  # The vocabulary must be FIXED ONCE, before any reportable run, and applied
+  # identically to all five schemes. Treat it like the lambda weights.
   keyword_sources:
     - table: conditions
       field: CODE
@@ -75,24 +90,78 @@ synthea:
       prefix: "proc:"        # SNOMED CT
       enabled: true
 
+    # Observations are the largest vocabulary contributor. A raw numeric value
+    # would give every record a unique keyword and exercise no index at all,
+    # so values are quantile-binned per code: obs:8867-4:b3 is "heart rate,
+    # third quintile". This is how a searchable index makes a continuous
+    # measurement queryable, not a trick to widen the universe.
+    - table: observations
+      field: CODE
+      prefix: "obs:"         # LOINC
+      enabled: true
+      value_binning:
+        enabled: true
+        value_field: VALUE
+        bins: 5              # benchmark: quintiles. Fixed once, see above.
+
+    - table: immunizations
+      field: CODE
+      prefix: "imm:"         # CVX
+      enabled: true
+    - table: allergies
+      field: CODE
+      prefix: "alg:"         # SNOMED CT / RxNorm
+      enabled: true
+    # Device codes are genuinely device-originated data, which is the closest
+    # Synthea comes to IoMT telemetry.
+    - table: devices
+      field: CODE
+      prefix: "dev:"         # SNOMED CT
+      enabled: true
+    - table: careplans
+      field: CODE
+      prefix: "plan:"        # SNOMED CT
+      enabled: true
+    - table: imaging_studies
+      field: BODYSITE_CODE
+      prefix: "img:"         # SNOMED CT body site
+      enabled: true
+
   keyword_filter:
     min_document_frequency: 5
     max_document_frequency_ratio: 0.5
-    max_keywords_per_record: 32
+    # A record with fewer keywords than the query size can never match a
+    # conjunctive q-keyword query. The manuscript fixes q=5 (§V, "each query
+    # contains five keywords"), and the first corpus build had a median
+    # |W_i| of 4 — 55% of records were structurally unmatchable at the
+    # default query size, padding the index with entries that could never be
+    # returned. Must stay >= the largest q used in a search experiment.
+    min_keywords_per_record: 5
+    # Raised from 32 when observations were added: with nine sources a single
+    # encounter routinely exceeds 32 keywords, and a cap that binds on most
+    # records would flatten the |W_i| distribution and with it the spread in
+    # n_eff that Exp. 2 measures. RESULTS-AFFECTING — do not retune per run.
+    max_keywords_per_record: 64
     normalize: lowercase_strip
 
   timestamp_field: START
   join_key: ENCOUNTER
 
   # Domains come from the ORGANIZATION that created the encounter — a real
-  # institutional boundary, not a hash of the patient. This makes cross-domain
-  # search (Exp. 3) reflect genuine multi-institution structure: one patient
-  # seen at two organisations really does have records in two domains, which
-  # is what "administrative healthcare domain" is supposed to mean.
+  # institutional boundary, not a hash of the patient. Whole organizations are
+  # then packed into domains largest-first so the domains come out near-equal.
   #
-  # Overrides corpus.domain_assignment above, which is the fallback for
-  # sources with no institutional field.
-  domain_assignment: hash_of_organization
+  # Hashing each organization independently was tried first and gave a
+  # 34/21/23/22 split, because organization sizes are heavy-tailed. That
+  # contradicts §V ("uniformly distributed across four administrative
+  # healthcare domains") and would confound Exp. 8, which reports the standard
+  # deviation of FSN utilization — corpus imbalance would read as scheduler
+  # imbalance.
+  #
+  # Organizations stay intact, so a domain remains a real institutional
+  # boundary and one patient seen at two organizations genuinely spans two
+  # domains, which is what Exp. 3 exercises.
+  domain_assignment: balanced_organizations
 
 # -----------------------------------------------------------------------------
 # Synthetic corpus — Dataset/synthetic_generator.py
@@ -132,3 +201,42 @@ output:
   # SHA-256 of corpus_filename is recorded in the manifest and in every
   # run_meta.json (README §7).
   hash_algorithm: sha256
+
+# -----------------------------------------------------------------------------
+# FREEZE — generate the corpus ONCE, then pin it
+# -----------------------------------------------------------------------------
+# The corpus is built once and reused by every scheme on every instance.
+# Regenerating it mid-campaign produces two incomparable result sets that
+# surface only when a reviewer asks why two run_meta.json files disagree
+# (README §14: do not modify the derived dataset once results generation has
+# begun).
+#
+# Three things enforce this rather than relying on discipline:
+#   1. prepare_dataset.py REFUSES to overwrite an existing corpus without
+#      --force, so re-running it by accident is a no-op.
+#   2. Every scheme calls Dataset.corpus.verify_corpus() at startup, which
+#      fails if the corpus does not match its manifest.
+#   3. The pin below, once set, fails if the manifest itself was replaced.
+#
+# HOW TO FREEZE: run prepare_dataset.py once, then copy the corpus_sha256
+# from Dataset/dataset_manifest.json into the field below and commit it.
+# Leave it null until then — verification is skipped while unset.
+freeze:
+  # Frozen 2026-08-04. Synthea 7e08387, 38,000 patients, seed 20260804,
+  # clinician seed 20260804, min_keywords_per_record=5, balanced domains.
+  #   records                1,141,072
+  #   keyword universe       2,006 distinct
+  #   keyword/document pairs 36,172,487
+  #   |W_i| min/median/mean  5 / 29 / 31.70
+  #   per-domain split       285,268 x 4 (exact)
+  #   fitted Zipf exponent   2.7078
+  #
+  # Supersedes SHA-256 d991c695... (1,206,159 records), which had a median
+  # |W_i| of 4 against q=5 — 55% of its records could never match a default
+  # conjunctive query — and uneven domains (34/21/23/22) contradicting §V's
+  # "uniformly distributed". Archived at ~/corpus_v1_archive/ on the
+  # experiment host; never used for results.
+  expected_corpus_sha256: fd4b7654e4c20186163f0b8c390c2c50b4bc4f908bdfbca585779b8d0792dc47
+  frozen_on: 2026-08-04
+  # Set false only for local development runs against the synthetic corpus.
+  require_reportable_corpus: true
