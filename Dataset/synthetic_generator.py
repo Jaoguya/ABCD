@@ -6,21 +6,21 @@ for development only and must not be reported in the paper." Every corpus
 this script writes is stamped ``corpus_type: synthetic`` and
 ``reportable: false`` in its manifest.
 
-The corpus exists so that collaborators without MIMIC-IV credentials — and
-CI — can exercise the full pipeline against a corpus with the right SHAPE:
+The corpus exists so that the pipeline — and CI — can be exercised without
+generating a Synthea export first, against a corpus with the right SHAPE:
 the same heavy-tailed keyword-frequency law, the same records-per-domain
 split, the same keyword-set sizes.
 
-Matching a real corpus
-----------------------
-Until MIMIC-IV has been processed once, the shape comes from the placeholder
-values in ``Experiment Configuration/dataset.yaml``. After
-``prepare_dataset.py`` has run, point this script at the manifest it wrote::
+Matching the Synthea corpus
+---------------------------
+Before a Synthea corpus exists, the shape comes from the placeholder values
+in ``Experiment Configuration/dataset.yaml``. After ``prepare_dataset.py``
+has run, point this script at the manifest it wrote::
 
-    python3 Dataset/synthetic_generator.py --match-profile Dataset/derived/dataset_manifest.json
+    python3 Dataset/synthetic_generator.py --match-profile Dataset/dataset_manifest.json
 
 and the fitted Zipf exponent, keyword-universe size, and keyword-set length
-distribution are taken from the REAL corpus instead of the placeholders.
+distribution are taken from the Synthea corpus instead of the placeholders.
 
 Usage
 -----
@@ -58,12 +58,12 @@ from Dataset.corpus import (  # noqa: E402
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Namespace split for the synthetic keyword universe, mirroring the three
-# MIMIC-IV keyword sources in dataset.yaml so that the synthetic corpus has
-# the same structural shape as the real one.
+# Synthea keyword sources in dataset.yaml so that the synthetic corpus has the
+# same structural shape as the reportable one.
 _NAMESPACES: Tuple[Tuple[str, float], ...] = (
-    ("dx:", 0.45),  # diagnoses
-    ("px:", 0.15),  # procedures
-    ("rx:", 0.40),  # prescriptions
+    ("cond:", 0.45),  # SNOMED CT conditions
+    ("proc:", 0.15),  # SNOMED CT procedures
+    ("med:", 0.40),   # RxNorm medications
 )
 
 
@@ -172,11 +172,11 @@ def resolve_profile(args: argparse.Namespace, config: Dict[str, Any]) -> Dict[st
 
     if args.match_profile:
         manifest = load_manifest(Path(args.match_profile))
-        if manifest.get("corpus_type") != "mimic":
+        if manifest.get("corpus_type") != "synthea":
             raise SystemExit(
-                f"--match-profile expects a manifest from a MIMIC corpus, got "
-                f"corpus_type={manifest.get('corpus_type')!r}. Matching a "
-                f"synthetic manifest would just copy the placeholders."
+                f"--match-profile expects a manifest from a Synthea corpus, "
+                f"got corpus_type={manifest.get('corpus_type')!r}. Matching a "
+                f"synthetic manifest would just copy the placeholders back."
             )
         freq = manifest.get("frequency_profile", {})
         lengths = manifest.get("keywords_per_record", {})
@@ -217,7 +217,7 @@ def main(argv: List[str] | None = None) -> int:
                              "(committed provenance) while the corpus itself "
                              "stays git-ignored under derived/")
     parser.add_argument("--match-profile", type=Path, default=None,
-                        help="a MIMIC dataset_manifest.json whose distribution to match")
+                        help="a Synthea dataset_manifest.json whose distribution to match")
     parser.add_argument("--records-per-patient", type=float, default=2.5,
                         help="mean records per patient, controls the patient pool")
     args = parser.parse_args(argv)

@@ -2,8 +2,8 @@
 # dataset.yaml — Corpus construction parameters
 # =============================================================================
 # Read by Dataset/prepare_dataset.py and Dataset/synthetic_generator.py.
-# Keeping these here (rather than as CLI defaults) means switching from the
-# synthetic corpus to MIMIC-IV requires no code change.
+# Keeping these here (rather than as CLI defaults) means changing the corpus
+# shape requires no code change.
 #
 # CHANGING ANY VALUE HERE IS RESULTS-AFFECTING once results generation has
 # begun — README §14 forbids modifying the derived dataset after that point.
@@ -30,52 +30,69 @@ corpus:
   domain_assignment: hash_of_patient_id
 
 # -----------------------------------------------------------------------------
-# MIMIC-IV v3.1 extraction — Dataset/prepare_dataset.py
+# Synthea extraction — Dataset/prepare_dataset.py
 # -----------------------------------------------------------------------------
-# NOTE ON SOURCE TABLES: MIMIC-IV v3.1 (hosp/ + icu/) contains no free-text
-# clinical notes — those live in the separate MIMIC-IV-Note module. Keywords
-# are therefore drawn from the STRUCTURED tables, which is both faithful to
-# what v3.1 actually is and avoids requiring a second credentialed download.
-mimic:
-  version: "3.1"
-  # One derived record == one hospital admission (hadm_id).
-  record_unit: admission
+# Synthea (MITRE) generates synthetic patient records from epidemiologically
+# grounded disease modules. Apache 2.0, no credentialing, and the generator
+# is peer-reviewed and citable:
+#
+#   Walonoski et al., "Synthea: An approach, method, and software mechanism
+#   for generating synthetic patients and the synthetic electronic health
+#   care record", JAMIA 25(3), 2018. doi:10.1093/jamia/ocx079
+#
+# THIS IS NOT THE SAME AS Dataset/synthetic_generator.py. That script draws
+# keywords from a fitted Zipf law with no clinical structure and is barred
+# from reportable results. Synthea produces module-driven co-occurrence
+# (a diabetes condition really does pull metformin), is openly licensed, and
+# is citable — so it is a reportable corpus. Keep the distinction clear when
+# reading corpus_type in a manifest.
+synthea:
+  # Point --input at Synthea's CSV export directory (output/csv/).
+  export_format: csv
+  # One derived record == one clinical encounter.
+  record_unit: encounter
 
-  # Relative paths inside the MIMIC-IV root passed via --input.
   tables:
-    admissions: hosp/admissions.csv.gz
-    patients: hosp/patients.csv.gz
-    diagnoses_icd: hosp/diagnoses_icd.csv.gz
-    procedures_icd: hosp/procedures_icd.csv.gz
-    prescriptions: hosp/prescriptions.csv.gz
+    encounters: encounters.csv
+    conditions: conditions.csv
+    medications: medications.csv
+    procedures: procedures.csv
 
-  # Which structured fields become searchable keywords, and the namespace
-  # prefix each is given so that an ICD code and a drug name can never collide
-  # in the keyword universe.
+  # Codes rather than free-text DESCRIPTION: codes are the controlled
+  # vocabulary a real searchable index would be built over, and they avoid a
+  # keyword universe inflated by description wording variants.
   keyword_sources:
-    - table: diagnoses_icd
-      field: icd_code
-      prefix: "dx:"
+    - table: conditions
+      field: CODE
+      prefix: "cond:"        # SNOMED CT
       enabled: true
-    - table: procedures_icd
-      field: icd_code
-      prefix: "px:"
+    - table: medications
+      field: CODE
+      prefix: "med:"         # RxNorm
       enabled: true
-    - table: prescriptions
-      field: drug
-      prefix: "rx:"
+    - table: procedures
+      field: CODE
+      prefix: "proc:"        # SNOMED CT
       enabled: true
 
-  # Keyword filtering. Rare keywords bloat the universe without affecting
-  # search behaviour; ubiquitous ones carry no selectivity.
   keyword_filter:
-    min_document_frequency: 5         # benchmark: drop keywords in <5 records
-    max_document_frequency_ratio: 0.5 # benchmark: drop keywords in >50% records
-    max_keywords_per_record: 32       # benchmark: cap W_i, keeps index bounded
-    normalize: lowercase_strip        # drug names are free-text-ish
+    min_document_frequency: 5
+    max_document_frequency_ratio: 0.5
+    max_keywords_per_record: 32
+    normalize: lowercase_strip
 
-  # Timestamp field used for TS_i.
-  timestamp_field: admittime
+  timestamp_field: START
+  join_key: ENCOUNTER
+
+  # Domains come from the ORGANIZATION that created the encounter — a real
+  # institutional boundary, not a hash of the patient. This makes cross-domain
+  # search (Exp. 3) reflect genuine multi-institution structure: one patient
+  # seen at two organisations really does have records in two domains, which
+  # is what "administrative healthcare domain" is supposed to mean.
+  #
+  # Overrides corpus.domain_assignment above, which is the fallback for
+  # sources with no institutional field.
+  domain_assignment: hash_of_organization
 
 # -----------------------------------------------------------------------------
 # Synthetic corpus — Dataset/synthetic_generator.py
@@ -87,7 +104,7 @@ synthetic:
   # Keyword frequency in clinical corpora is heavy-tailed. A Zipf law is the
   # standard model and is what the SSE literature uses for synthetic indexes.
   #
-  # These values are placeholders until MIMIC-IV is available. Once
+  # These values are placeholders until a Synthea corpus exists. Once
   # prepare_dataset.py has run once, it writes the OBSERVED distribution into
   # dataset_manifest.json, and synthetic_generator.py --match-profile <manifest>
   # will reproduce it instead of using the values below.
@@ -99,7 +116,7 @@ synthetic:
     mean: 12.0                        # benchmark: ~typical ICD codes/admission
     sigma: 0.5
     min: 1
-    max: 32                           # matches mimic.keyword_filter cap
+    max: 32                           # matches synthea.keyword_filter cap
 
   # Fixed seed so the development corpus is byte-reproducible across machines.
   # This seeds corpus CONTENT only — never cryptographic key material.

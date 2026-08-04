@@ -121,20 +121,43 @@ Since the baselines do not natively support cross-domain search, in Exp. 3 they 
 
 | Property | Value |
 |----------|-------|
-| Source | **MIMIC-IV v3.1** (PhysioNet, doi: 10.13026/kpb9-mt58) |
+| Source | **Synthea** (MITRE), Apache 2.0 — Walonoski *et al.*, *JAMIA* 25(3), 2018, doi: 10.1093/jamia/ocx079 |
+| Record unit | One clinical encounter |
 | Records | 10⁴ – 10⁶ encrypted EHRs |
-| Distribution | Uniform across 4 administrative healthcare domains |
+| Keyword sources | SNOMED CT conditions (`cond:`), RxNorm medications (`med:`), SNOMED procedures (`proc:`) |
+| Distribution | Across 4 administrative healthcare domains, derived from `encounters.ORGANIZATION` |
 | Derived artifact | Keyword set `W_i` + metadata `(PID_i, VID_i, Dom_i, TS_i)` per record |
 
-MIMIC-IV is **credentialed-access** data: it requires a PhysioNet account, CITI training, and a signed DUA, and **must not be committed to this repository**. `Dataset/` therefore contains only:
+Two corpus types exist, and the distinction is load-bearing:
 
-- `prepare_dataset.py` — extracts keywords/metadata from a locally-obtained MIMIC-IV copy and emits the derived corpus,
-- `synthetic_generator.py` — a statistically-matched synthetic corpus (same keyword-frequency distribution, same records-per-domain split) for collaborators without MIMIC-IV credentials,
-- `dataset_manifest.json` — record counts, keyword-universe size, per-domain split, and the SHA-256 of the derived corpus.
+| `corpus_type` | Source | Reportable? |
+|---------------|--------|-------------|
+| `synthea` | Synthea CSV export — epidemiologically grounded disease modules, openly licensed, citable generator | **Yes** |
+| `synthetic` | `synthetic_generator.py` — a fitted Zipf law with no clinical structure | **No** |
 
-Results produced from the synthetic corpus are for development only and **must not** be reported in the paper. Every `results.csv` records which corpus it came from (see §7).
+Both are "not real patients", but only Synthea is a *citable instrument* with real keyword co-occurrence. Do not conflate them.
 
-> **Paper-side issue to fix in the .tex:** the MIMIC-IV citation and Cao *et al.* both use the key `ref55` (two `\bibitem{ref55}` entries). The dataset citation in §V currently resolves to the wrong reference.
+**Why Synthea.** Keyword **co-occurrence** is what Exp. 2 depends on: the claim is that latency tracks the candidate set `n_eff` rather than total index size, and `n_eff` is driven by posting-list overlap. Synthea's disease modules produce genuine co-occurrence — a diabetes condition really does pull metformin — which a fitted Zipf law cannot reproduce. It is also unbounded in size, needs no credentialing, and is openly licensed, so the derived corpus can be committed and a reviewer can reproduce the exact index instead of re-deriving it. Finally, `encounters.ORGANIZATION` gives a **real institutional domain split** rather than an arbitrary partition.
+
+**Stating it honestly in §V.** The evaluation measures cryptographic and search performance, not clinical validity, so a synthetic corpus with realistic keyword structure is appropriate — and Synthea is a peer-reviewed, citable generator, not an ad-hoc script. Say this plainly; do not imply the data is real.
+
+Generate the corpus with:
+
+```bash
+git clone https://github.com/synthetichealth/synthea && cd synthea
+./run_synthea -p 400000        # ~2–3 encounters/patient → past 10⁶
+```
+
+`Dataset/` contains:
+
+- `corpus.py` — shared corpus schema, manifest, and distribution statistics,
+- `prepare_dataset.py` — Synthea CSV export → derived corpus,
+- `synthetic_generator.py` — development-only corpus for pipeline smoke tests,
+- `dataset_manifest.json` — record counts, keyword-universe size, per-domain split, fitted frequency profile, and the SHA-256 of the derived corpus.
+
+Every `results.csv` records which corpus it came from (see §7); a `synthetic` run can never be mistaken for a reportable one.
+
+> **Paper-side issue to fix in the .tex:** two `\bibitem{ref55}` entries share one key. Resolve the duplicate and point the §V dataset citation at the Synthea reference.
 
 ---
 
@@ -199,7 +222,7 @@ Every experiment holds these fixed unless it is sweeping that variable.
 | ML-KEM parameter set | ML-KEM-768 | Paper §V |
 | Scheduler weights `λ₁…λ₅` | see `Experiment Configuration/scheduler.yaml` | **not specified in the paper** |
 | Bitmap / Bloom filter parameters | see `Experiment Configuration/index.yaml` | **not specified in the paper** |
-| Keyword universe size | see `dataset_manifest.json` | derived from MIMIC-IV |
+| Keyword universe size | see `dataset_manifest.json` | derived from the Synthea corpus |
 
 The rows marked *not specified in the paper* are open parameters. Fix them **once**, in [Experiment Configuration/](Experiment%20Configuration/), before generating any reportable data — and record the chosen values in the manuscript. The λ weights in particular are load-bearing: they determine the AASS selection rule, and a reviewer will ask how they were set. Choose them by a documented procedure (e.g. a one-time sweep on a held-out workload), commit that procedure's output, and do not retune them per experiment.
 
@@ -212,7 +235,7 @@ The rows marked *not specified in the paper* are open parameters. Fix them **onc
 - **Isolation.** One experiment at a time per instance. No other tenant workload, no plotting, no dataset preprocessing running concurrently.
 - **Cold vs. warm.** State which one each experiment reports. Defaults: Exp. 1–4 warm (index resident), Exp. 5–6 warm, Exp. 7–8 warm after a 30 s ramp-up.
 - **Outliers.** Do not delete them. Report mean ± CI over all 30 retained runs. If a run fails (crash, timeout, network partition), record the failure in `raw_runs.csv` with `status=failed` and re-run to restore n = 30 — never silently drop it.
-- **Provenance.** Every `results.csv` is accompanied by a `run_meta.json` capturing: git commit, instance type, Python version, library versions, dataset SHA-256, corpus type (`mimic` \| `synthetic`), config file hashes, and UTC start time.
+- **Provenance.** Every `results.csv` is accompanied by a `run_meta.json` capturing: git commit, instance type, Python version, library versions, dataset SHA-256, corpus type (`synthea` \| `synthetic`), config file hashes, and UTC start time.
 
 A figure whose underlying runs cannot be traced to a commit and a dataset hash cannot go in the paper.
 
@@ -243,8 +266,8 @@ PQ-AVDSE/
 │           └── test_primitives.py        # Property tests for every primitive
 ├── Dataset/
 │   ├── corpus.py                         # Shared corpus schema, manifest, statistics
-│   ├── prepare_dataset.py                # MIMIC-IV → derived searchable corpus
-│   ├── synthetic_generator.py            # Credential-free development corpus
+│   ├── prepare_dataset.py                # Synthea → derived searchable corpus
+│   ├── synthetic_generator.py            # Development-only corpus (not reportable)
 │   ├── dataset_manifest.json             # Counts, keyword universe, SHA-256
 │   └── derived/                          # Generated corpus (git-ignored)
 ├── Experiment Configuration/
@@ -252,7 +275,7 @@ PQ-AVDSE/
 │   ├── scheduler.yaml                    # λ₁…λ₅ and AASS cost-estimator params
 │   ├── index.yaml                        # Bitmap/Bloom, shard, Merkle parameters
 │   ├── crypto.yaml                       # ML-KEM, AES, pairing-curve selection
-│   ├── dataset.yaml                      # Corpus shape, MIMIC extraction, synthetic
+│   ├── dataset.yaml                      # Corpus shape, Synthea extraction, synthetic
 │   └── workload/                         # Recorded arrival traces for Exp. 7–8
 ├── Schemes/
 │   ├── ma_lb_pq_vdse/                    # [ours] → see SCHEME.md
@@ -419,9 +442,11 @@ chmod +x run_benchmark.sh
 python3.11 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# 2. Dataset (requires credentialed MIMIC-IV access)
-python3 Dataset/prepare_dataset.py --input /path/to/mimic-iv-3.1 --output Dataset/derived
-#    development only, no credentials needed:
+# 2. Dataset — generate a Synthea corpus first:
+#      git clone https://github.com/synthetichealth/synthea && cd synthea
+#      ./run_synthea -p 400000
+python3 Dataset/prepare_dataset.py --input /path/to/synthea/output/csv --output Dataset/derived
+#    development smoke test only, NOT reportable:
 python3 Dataset/synthetic_generator.py --records 100000 --domains 4 --output Dataset/derived
 
 # 3. Infrastructure (proposed scheme only)
@@ -449,9 +474,9 @@ python3 Plots/generate_plots.py --input Schemes --output Plots/output
 python -m venv .venv; .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 
-# 2. Dataset (requires credentialed MIMIC-IV access)
-python Dataset/prepare_dataset.py --input C:\path\to\mimic-iv-3.1 --output Dataset/derived
-#    development only, no credentials needed:
+# 2. Dataset — generate a Synthea corpus first (see Linux block above)
+python Dataset/prepare_dataset.py --input C:\path\to\synthea\output\csv --output Dataset/derived
+#    development smoke test only, NOT reportable:
 python Dataset/synthetic_generator.py --records 100000 --domains 4 --output Dataset/derived
 
 # 3. Infrastructure (proposed scheme only)
@@ -554,10 +579,10 @@ Supports incremental updates per Phase VII contract.
 ```
 
 ```
-exp(guo_vdsse): run exp1 trapdoor generation (n=30, MIMIC-IV)
+exp(guo_vdsse): run exp1 trapdoor generation (n=30, Synthea)
 
 Experiment: exp1
-Dataset: mimic (SHA-256: a3f8...)
+Dataset: synthea (SHA-256: a3f8...)
 ```
 
 ```
@@ -641,7 +666,7 @@ If a change turns out to need no README edit, that is a valid outcome — but it
 ### Do NOT modify shared resources without approval
 - **Do NOT modify the derived dataset** once results generation has begun — it is the single source of truth, and its SHA-256 is recorded in every `run_meta.json`.
 - **Do NOT modify** `Plots/generate_plots.py` or any file in `Experiment Configuration/` without team consensus; both affect every scheme's reported numbers.
-- **Do NOT commit MIMIC-IV data**, in any form, raw or lightly derived. It is credentialed data under a DUA.
+- **Do NOT commit the derived corpus.** Synthea's licence permits redistribution, so this is a repository-size rule, not a legal one: a 10⁶-record `corpus.jsonl` is hundreds of MB. Share it as a release artifact or via Zenodo, and let `dataset_manifest.json` (counts + SHA-256, committed) carry the provenance.
 
 ### Do NOT compute what you should measure
 - **Do NOT generate results analytically** from the complexity expressions in Table VI. The asymptotic analysis and the empirical evaluation are two independent pieces of evidence; deriving one from the other collapses them into one and makes the evaluation section worthless.
@@ -664,7 +689,7 @@ If a change turns out to need no README edit, that is a valid outcome — but it
 
 - [ ] All 8 experiments produce `results.csv` with `n_runs = 30` for every participating scheme
 - [ ] Every `results.csv` has a matching `run_meta.json` with a real git commit and dataset SHA-256
-- [ ] All reportable runs used the MIMIC-IV corpus, not the synthetic one
+- [ ] All reportable runs used the Synthea corpus (`corpus_type: synthea`), not `synthetic`
 - [ ] Open parameters (λ₁…λ₅, bitmap/Bloom, index size defaults) are fixed, committed, and stated in the manuscript
 - [ ] All 8 figures regenerate from scratch with a single `generate_plots.py` invocation
 - [ ] Figure filenames match the `\includegraphics` paths in §10
@@ -685,4 +710,5 @@ Newest last. One line per change, dated `YYYY-MM-DD`. Mark entries that invalida
 | 2026-08-03 | Restructured: split per-scheme details into `SCHEME.md` files (one per scheme folder). Added `AGENT_RULES.md` (AI agent goal, reviewer-level validation, constraints, debug workflow), `debug_history.md` (append-only debug log), `requirements.txt` (cross-platform Python dependencies). Added §1.1 system requirements, cross-platform (Linux + Windows) run instructions in §11, scheme guide links in §3 and §8, AI agent constraints in §14. | §1, §3, §8, §11, §13, §14, §16 |
 | 2026-08-03 | Added shared primitive layer `Common/crypto/` (hashes, RNG, AES-256-GCM, PRF + t-puncturable PRF, Merkle, Bloom, lattice trapdoor toolkit, pairing backends, ML-KEM-768) with the `Common/` scope rule in §8; added `Experiment Configuration/crypto.yaml` and `dataset.yaml` fixing every cryptographic and corpus parameter with published-vs-benchmark provenance per value; implemented `Dataset/corpus.py`, `prepare_dataset.py` (MIMIC-IV v3.1, record unit `admission` or `icu_stay`), and `synthetic_generator.py`. No experiment code and no results yet. | §8, §16 |
 | 2026-08-03 | Corrected `requirements.txt`: pairing libraries were listed as proposed-scheme-only, but Ref[41] is itself pairing-based (Type-I, DBDH — `References/Ref[41].txt:510-513`), so a pairing library is required to run a **baseline**. Reportable Ref[41] runs need `charm-crypto` (symmetric SS512, Linux-only); `petrelic` is Type-III and development-only. Also flagged that the `cryptography>=43.0.0` ML-KEM-768 attribution is unverified. | `requirements.txt` |
+| 2026-08-03 | **Dataset change: MIMIC-IV removed entirely; Synthea (MITRE, Apache 2.0) is the sole corpus.** Rationale: Synthea has no size ceiling (MIMIC-IV v3.1 caps at 546,028 hospitalizations / 94,458 ICU stays, so 10⁶ records was unreachable), needs no credentialing or DUA, is a peer-reviewed citable generator, produces real keyword co-occurrence that Exp. 2's `n_eff` claim depends on, and supplies a real institutional domain split via `encounters.ORGANIZATION`. `corpus_type` is now `synthea` (reportable) or `synthetic` (not reportable); `mimic` is gone. `prepare_dataset.py` rewritten Synthea-only. **[results-affecting]** — no results exist yet so nothing is invalidated, but manuscript §V must be rewritten to match, including the dataset citation. | §4, §6, §7, §8, §11, §12, §14, §15, §16 |
 | 2026-08-03 | Added `Common/crypto/tests/test_primitives.py` — property tests for every primitive (framing injectivity, GCM tamper detection, t-Pun-PRF correctness off/on the punctured set, Merkle incremental-update equivalence and odd-leaf promotion, Bloom no-false-negatives, gadget exactness, TrapGen/SamplePre/SampleLeft defining equations, pairing bilinearity, ML-KEM round trip). Runs standalone or under pytest; optional backends skip rather than fail. Added `.gitignore` covering `Dataset/derived/` so credentialed-derived data cannot be committed (§14). | §8, §16 |

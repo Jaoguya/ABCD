@@ -69,7 +69,7 @@ Think like a **journal reviewer**. After experiments complete, verify these will
 - [ ] All `run_meta.json` files reference the same dataset SHA-256
 - [ ] All schemes ran on the same Python version and instance type
 - [ ] Config file hashes are consistent across all runs
-- [ ] Corpus type is `mimic` for reportable data (not `synthetic`)
+- [ ] Corpus type is `synthea` for reportable data (not `synthetic`)
 - [ ] Scaling behavior is physically plausible (e.g., O(N) search should not appear O(1))
 
 #### Cross-Experiment Coherence

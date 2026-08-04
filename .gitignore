@@ -3,16 +3,16 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# CREDENTIALED DATA — never commit, in any form
+# GENERATED CORPUS — too large to commit
 # -----------------------------------------------------------------------------
-# MIMIC-IV is credentialed-access data under a signed DUA. README §14:
-# "Do NOT commit MIMIC-IV data, in any form, raw or lightly derived."
-# The derived corpus is keyword sets extracted from it and is covered by that
-# rule. Its SHA-256 lives in Dataset/dataset_manifest.json, which IS committed
-# and is what makes a run traceable without shipping the data.
+# Synthea's licence permits redistribution, so this is a repository-size rule,
+# not a legal one: a 10^6-record corpus.jsonl is hundreds of MB. Ship it as a
+# release artifact or via Zenodo. Dataset/dataset_manifest.json IS committed
+# and carries the counts and SHA-256 that make a run traceable.
 Dataset/derived/
-*.csv.gz
-mimic-iv*/
+# Synthea's own working tree, if cloned inside the repo.
+synthea/
+output/csv/
 
 # -----------------------------------------------------------------------------
 # SECRETS — never commit

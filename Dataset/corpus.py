@@ -1,6 +1,6 @@
 """Derived-corpus schema, manifest, and statistics.
 
-Shared by ``prepare_dataset.py`` (MIMIC-IV) and ``synthetic_generator.py``.
+Shared by ``prepare_dataset.py`` (Synthea) and ``synthetic_generator.py``.
 Both emit the SAME format, which is the point: a scheme must not be able to
 tell which corpus it is reading, or a development run and a reportable run
 would not be measuring the same thing.
@@ -73,10 +73,10 @@ def assign_domain(patient_id: str, domains: int) -> int:
 def pseudonymize(raw_id: str, *, salt: bytes = b"MA-LB-PQ-VDSE/pid") -> str:
     """Hash a source identifier into a stable pseudonym.
 
-    MIMIC-IV subject_ids are already de-identified, but they are the real
-    keys of a credentialed dataset. Hashing them means the derived corpus
-    carries no MIMIC-IV identifier, which keeps README §14's "do NOT commit
-    MIMIC-IV data, in any form, raw or lightly derived" satisfiable.
+    Synthea's patient UUIDs are synthetic, so this is not a privacy control.
+    It exists to give ``PID_i`` a uniform shape and length regardless of what
+    the source identifier looked like, so that trapdoor and index sizes do
+    not vary with an artefact of the corpus.
     """
     return hashlib.sha256(salt + str(raw_id).encode("utf-8")).hexdigest()[:32]
 
@@ -163,10 +163,10 @@ def frequency_profile(keyword_counts: Counter, *, top_k: int = 50) -> Dict[str, 
     """Fit a Zipf exponent to the keyword-frequency distribution.
 
     This is what makes "statistically-matched synthetic corpus" (README §4) a
-    checkable claim rather than an assertion: once MIMIC-IV has been
-    processed once, ``synthetic_generator.py --match-profile`` reads the
-    fitted exponent and universe size from the manifest and reproduces them,
-    instead of using the placeholder in dataset.yaml.
+    checkable claim rather than an assertion: once a Synthea corpus has been
+    built, ``synthetic_generator.py --match-profile`` reads the fitted
+    exponent and universe size from its manifest and reproduces them, instead
+    of using the placeholder in dataset.yaml.
 
     Fit is a least-squares line through ``log(rank)`` vs ``log(frequency)``;
     the Zipf exponent is the negated slope.
@@ -231,13 +231,22 @@ def write_manifest(
 ) -> Dict[str, Any]:
     """Write ``dataset_manifest.json`` (README §4).
 
-    ``corpus_type`` must be ``mimic`` or ``synthetic``. It propagates into
-    every ``run_meta.json``, and README §4 forbids reporting synthetic
-    results — so it is validated here rather than trusted.
+    ``corpus_type`` is one of:
+
+    ``synthea``    Synthea (MITRE), Apache 2.0, citable generator with
+                   epidemiologically grounded clinical structure. Reportable.
+    ``synthetic``  ``synthetic_generator.py`` — a fitted Zipf law with no
+                   clinical structure. NOT reportable (README §4).
+
+    The distinction matters and is easy to lose: both are "not real
+    patients", but only Synthea is a citable instrument with real
+    co-occurrence structure. The value propagates into every
+    ``run_meta.json``, so it is validated here rather than trusted.
     """
-    if corpus_type not in {"mimic", "synthetic"}:
+    reportable_types = {"synthea"}
+    if corpus_type not in reportable_types | {"synthetic"}:
         raise ValueError(
-            f"corpus_type must be 'mimic' or 'synthetic', got {corpus_type!r}"
+            f"corpus_type must be 'synthea' or 'synthetic', got {corpus_type!r}"
         )
 
     manifest: Dict[str, Any] = {
@@ -257,14 +266,20 @@ def write_manifest(
         "params": params,
         "config_hashes": config_hashes or {},
     }
+    manifest["reportable"] = corpus_type in reportable_types
     if corpus_type == "synthetic":
-        manifest["reportable"] = False
         manifest["warning"] = (
             "DEVELOPMENT ONLY. README §4: results produced from the synthetic "
-            "corpus must not be reported in the paper."
+            "corpus must not be reported in the paper. For a reportable "
+            "corpus, use Synthea via prepare_dataset.py."
         )
-    else:
-        manifest["reportable"] = True
+    elif corpus_type == "synthea":
+        manifest["citation"] = (
+            "Walonoski et al., Synthea: An approach, method, and software "
+            "mechanism for generating synthetic patients and the synthetic "
+            "electronic health care record, JAMIA 25(3), 2018. "
+            "doi:10.1093/jamia/ocx079"
+        )
 
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

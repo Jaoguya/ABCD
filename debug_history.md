@@ -36,6 +36,13 @@ Each entry is marked *not fixed* until resolved, then updated to *fixed*.
 - **How it will improve:** Options are (a) cap the Exp. 2 sweep at what the corpus supports, (b) use a finer record unit, or (c) read `N` as keyword/document pairs rather than records — 5x10^5 admissions at ~12 keywords each gives ~6x10^6 pairs, which does cover the range. Option (c) matches the phrase "searchable index size" but contradicts README §4's "Records | 10^4 - 10^6". The two README statements need reconciling either way.
 - **What changed:** `prepare_dataset.py` reports the ceiling it actually found and prints an explicit warning when the corpus holds fewer than 10^6 records, rather than silently producing a short sweep.
 
+### MIMIC-IV dropped; Synthea is now the sole corpus
+- **Date:** 2026-08-03
+- **Status:** *fixed* — supersedes "MIMIC-IV v3.1 cannot reach the 10^6 record top of README §4" above, which is now moot
+- **Why it changed:** The MIMIC-IV record ceiling (546,028 hospitalizations, 94,458 ICU stays — confirmed from the PhysioNet v3.1 page) made README §4's 10^4-10^6 range unreachable, and credentialing (CITI + DUA) blocked all reportable work for days to weeks. Two further problems: MIMIC-IV is retrospective hospital EHR rather than IoMT data, and its DUA barred committing the derived corpus, so a reviewer could never reproduce the exact index.
+- **How it will improve:** Synthea (MITRE, Apache 2.0) removes all four constraints — unbounded corpus size, no credentialing, redistributable derived corpus, and a real institutional domain split from `encounters.ORGANIZATION` instead of a hash of the patient ID. Critically it preserves the property Exp. 2 actually depends on: module-driven keyword co-occurrence, which drives posting-list overlap and hence `n_eff`. A fitted Zipf law cannot reproduce that, which is why `synthetic` remains non-reportable while `synthea` is reportable.
+- **What changed:** `dataset.yaml` — `mimic` block removed, `synthea` block added. `prepare_dataset.py` — rewritten Synthea-only (encounter record unit, SNOMED/RxNorm keyword namespaces, ORGANIZATION domains). `corpus.py` — `corpus_type` is now `synthea` | `synthetic`; `mimic` rejected. `synthetic_generator.py --match-profile` now expects a Synthea manifest. `.gitignore` — corpus exclusion is now a size rule, not a DUA rule. README §4, §6, §7, §8, §11, §12, §14, §15 updated. **Manuscript §V still needs the matching rewrite, including the dataset citation — not done.**
+
 ### Ref[41] is pairing-based, contradicting its own post-quantum claim
 - **Date:** 2026-08-03
 - **Status:** *fixed* — implemented as published; reported as an observation, not corrected
