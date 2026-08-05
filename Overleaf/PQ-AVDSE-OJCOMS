@@ -1895,11 +1895,11 @@ In contrast, the proposed framework generates a single authorization-bound trapd
 
 \subsubsection{Experimental Setup}
 
-The proposed framework was implemented in Python~3.11 and evaluated on Amazon AWS EC2 c6i.xlarge instances, each equipped with 4 vCPUs and 8~GB RAM. Four Fog Search Nodes and one cloud server were deployed within an AWS Virtual Private Cloud (VPC) to emulate a distributed cross-domain IoMT healthcare environment. Each FSN independently maintains authorization-aware searchable indexes and performs encrypted search, while the cloud server stores encrypted EHRs and blockchain metadata.
+The proposed framework was implemented in Python~3.11 and evaluated on Amazon AWS EC2 m6i.xlarge instances, each equipped with 4 vCPUs and 16~GB RAM. Four Fog Search Nodes and one cloud server were deployed within an AWS Virtual Private Cloud (VPC) to emulate a distributed cross-domain IoMT healthcare environment. Each FSN independently maintains authorization-aware searchable indexes and performs encrypted search, while the cloud server stores encrypted EHRs and blockchain metadata.
 
 The framework employs ML-KEM-768 for post-quantum secure key establishment, AES-256-GCM for symmetric encryption, SHA-256 for hashing and Merkle-tree construction, and Hyperledger Fabric~v2.5 for maintaining authorization commitments and audit records. Search indexes are implemented using bitmap-based authorization-aware filtering combined with authenticated Merkle trees to support efficient encrypted retrieval and verification.
 \textcolor{red}{
-Experiments were conducted using the MIMIC-IV dataset ~\cite{ref55}, from which encrypted searchable indexes containing $10^4$--$10^6$ electronic health records were generated and uniformly distributed across four administrative healthcare domains. Unless otherwise specified, each query contains five keywords, and every experiment reports the average of 30 independent runs with 95\% confidence intervals.
+Experiments were conducted using the Synthea synthetic patient generator~\cite{ref56}, from which encrypted searchable indexes containing $10^4$--$10^6$ electronic health records were generated and uniformly distributed across four administrative healthcare domains. Unless otherwise specified, each query contains five keywords, and every experiment reports the average of 30 independent runs with 95\% confidence intervals.
 }
 The proposed framework was compared with four representative searchable encryption schemes: Guo \textit{et al}.~\cite{ref35} (verifiable dynamic searchable encryption), XB-Muse~\cite{ref36} (dynamic searchable encryption), Thingom \textit{et al}.~\cite{ref41} (multi-authority searchable encryption), and Zhuang \textit{et al}.~\cite{ref52} (lattice-based post-quantum searchable encryption). The evaluation focuses on trapdoor generation, encrypted search efficiency, cross-domain search scalability, keyword update performance, retrieval verification, authorization synchronization, and authorization-aware load balancing under increasing workloads.
 
@@ -2276,8 +2276,8 @@ Y. Cao et al., ”Enabling Puncturable Encrypted Search Over Lattice
 for Privacy-Preserving in Mobile Cloud,” IEEE Transactions on Mobile
 Computing, early access, 2026, doi: 10.1109/TMC.2026.3682118.
 
-\bibitem{ref55}
-Johnson, A., Bulgarelli, L., Pollard, T., Gow, B., Moody, B., Horng, S., Celi, L. A., & Mark, R. (2024). MIMIC-IV (version 3.1). PhysioNet. RRID:SCR_007345. https://doi.org/10.13026/kpb9-mt58
+\bibitem{ref56}
+J. Walonoski et al., ”Synthea: An approach, method, and software mechanism for generating synthetic patients and the synthetic electronic health care record,” Journal of the American Medical Informatics Association, vol. 25, no. 3, pp. 230–238, 2018, doi: 10.1093/jamia/ocx079.
 
 
 \end{thebibliography}
