@@ -33,7 +33,9 @@ from Schemes.ma_lb_pq_vdse.src import types  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.authority import authority as authority_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.authority import initializer  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.authority import revocation as revocation_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.aim import aim as aim_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.chain import ledger as ledger_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.fsn import fsn as fsn_mod  # noqa: E402
 
 
 try:  # Make skips register as real skips when run under pytest.
@@ -1561,6 +1563,469 @@ def test_four_authorities_end_to_end_through_phase_ii_step_3():
     assert authorities[1].commitment() != commitments["AA2"]
     for authority in (authorities[0], authorities[2], authorities[3]):
         assert authority.commitment() == commitments[authority.authority_id]
+
+
+# ===========================================================================
+# fsn/fsn.py — Phase I Step 4
+# ===========================================================================
+DOMAINS = ("emergency", "hospital", "insurance", "laboratory")
+
+
+def test_fsn_set_is_built_with_one_domain_per_node_at_the_defaults():
+    """§V: d=4 domains over m=4 nodes. One domain each makes selectivity visible."""
+    config = config_mod.load()
+    nodes = fsn_mod.build_fsn_set(DOMAINS, config.topology.fog_search_nodes)
+    assert len(nodes) == 4
+    assert [node.node_id for node in nodes] == ["FSN1", "FSN2", "FSN3", "FSN4"]
+    assert all(len(node.domains) == 1 for node in nodes)
+    # Every domain is served exactly once.
+    served = [d for node in nodes for d in node.domains]
+    assert sorted(served) == sorted(DOMAINS)
+
+
+def test_fsn_fresh_node_state_is_empty():
+    """Phase I Step 4: nodes start with no entries, no queue, no auth state."""
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
+    assert node.entry_count == 0
+    assert node.queue_length == 0
+    assert node.vid() == 0
+    assert node.synced_authorities() == ()
+    assert node.queue_wait_ns() == 0
+
+
+def test_fsn_nodes_share_no_mutable_state():
+    """Nodes become independent processes; shared state would break that quietly."""
+    first, second = fsn_mod.build_fsn_set(("hospital", "laboratory"), 2)
+    first.shard.add_entries(500)
+    first.enqueue("q1")
+    first.apply_meta("AA1", types.AuthorizationMeta("hospital", 3, bytes(32)))
+    assert second.entry_count == 0
+    assert second.queue_length == 0
+    assert second.synced_authorities() == ()
+
+
+def test_fsn_shard_entry_accounting():
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
+    assert node.shard.add_entries(100) == 100
+    assert node.shard.add_entries(50) == 150
+    assert node.shard.remove_entries(50) == 100
+    assert node.entry_count == 100
+    try:
+        node.shard.remove_entries(1000)
+    except fsn_mod.FSNError:
+        return
+    raise AssertionError("removing more entries than held should raise")
+
+
+def test_fsn_queue_is_fifo_and_measures_wait_time():
+    """T_j^queue is a measured time, not a queue-length proxy."""
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
+    node.enqueue("q1", now_ns=1_000)
+    node.enqueue("q2", now_ns=2_000)
+    assert node.queue_length == 2
+    # Wait is measured from the OLDEST request.
+    assert node.queue_wait_ns(now_ns=5_000) == 4_000
+    assert node.dequeue().request_id == "q1"
+    assert node.queue_wait_ns(now_ns=5_000) == 3_000
+    assert node.dequeue().request_id == "q2"
+    assert node.queue_wait_ns(now_ns=5_000) == 0
+
+
+def test_fsn_dequeue_on_empty_raises():
+    try:
+        fsn_mod.FogSearchNode.create("FSN1", ["hospital"]).dequeue()
+    except fsn_mod.FSNError:
+        return
+    raise AssertionError("dequeue on an empty queue should raise")
+
+
+def test_fsn_utilization_is_a_busy_fraction():
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
+    node.record_service(30_000_000)          # 30 ms busy
+    assert abs(node.utilization(100_000_000) - 0.3) < 1e-9   # in a 100 ms window
+    assert node.served_count == 1
+    # Cannot exceed 1.0 even if service time overruns the window.
+    node.record_service(200_000_000)
+    assert node.utilization(100_000_000) == 1.0
+
+
+def test_fsn_applies_and_reports_authorization_state():
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
+    meta = types.AuthorizationMeta("hospital", 2, bytes(range(32)))
+    assert node.apply_meta("AA1", meta) is True
+    assert node.vid_for_authority("AA1") == 2
+    assert node.commitment_for_authority("AA1") == bytes(range(32))
+    # Re-applying identical state is not a change.
+    assert node.apply_meta("AA1", meta) is False
+
+
+def test_fsn_refuses_a_stale_authorization_version():
+    """Versions only advance; an older Meta is a replay or a reorder."""
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
+    node.apply_meta("AA1", types.AuthorizationMeta("hospital", 5, bytes(32)))
+    try:
+        node.apply_meta("AA1", types.AuthorizationMeta("hospital", 4, bytes(32)))
+    except fsn_mod.FSNError as exc:
+        assert "only advance" in str(exc)
+        return
+    raise AssertionError("a stale version must be refused")
+
+
+def test_fsn_vid_is_the_minimum_across_synced_authorities():
+    """A node is only as fresh as its stalest authority (see fsn.vid docstring)."""
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital", "laboratory"])
+    node.apply_meta("AA1", types.AuthorizationMeta("hospital", 7, bytes(32)))
+    node.apply_meta("AA2", types.AuthorizationMeta("laboratory", 2, bytes(32)))
+    assert node.vid() == 2
+    assert node.vid_for_domains(["hospital"]) == 7
+    assert node.vid_for_domains(["hospital", "laboratory"]) == 2
+
+
+def test_fsn_unsynchronized_domain_is_not_version_zero():
+    """An unsynchronized node must not read as merely being at version 0."""
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital", "laboratory"])
+    node.apply_meta("AA1", types.AuthorizationMeta("hospital", 1, bytes(32)))
+    try:
+        node.vid_for_domains(["laboratory"])
+    except fsn_mod.FSNError as exc:
+        assert "no authorization state" in str(exc)
+        return
+    raise AssertionError("an unsynchronized domain should raise, not return 0")
+
+
+def test_fsn_domain_assignment_packs_when_domains_exceed_nodes():
+    """Exp. 3 sweeps d to 10 against m=4."""
+    assignment = fsn_mod.assign_domains_to_fsns([f"dom{i}" for i in range(10)], 4)
+    assert len(assignment) == 4
+    assert sum(len(bucket) for bucket in assignment) == 10
+    assert all(bucket for bucket in assignment)          # no idle node
+    sizes = sorted(len(bucket) for bucket in assignment)
+    assert sizes[-1] - sizes[0] <= 1                     # balanced within one
+
+
+def test_fsn_assignment_rejects_more_nodes_than_domains():
+    """An unassigned node would never be selected and would skew Exp. 8."""
+    try:
+        fsn_mod.assign_domains_to_fsns(["only-one"], 4)
+    except fsn_mod.FSNError as exc:
+        assert "never be selected" in str(exc)
+        return
+    raise AssertionError("idle nodes should be refused")
+
+
+def test_fsn_assignment_rejects_duplicate_domains():
+    try:
+        fsn_mod.assign_domains_to_fsns(["a", "a", "b"], 2)
+    except ValueError:
+        return
+    raise AssertionError("duplicate domains should be refused")
+
+
+def test_fsn_requires_at_least_one_domain():
+    try:
+        fsn_mod.FogSearchNode.create("FSN1", [])
+    except fsn_mod.FSNError:
+        return
+    raise AssertionError("a node serving no domain should be refused")
+
+
+# ===========================================================================
+# aim/aim.py — Phase II Step 4
+# ===========================================================================
+def phase_i_ii_federation():
+    """Run Phase I and Phase II Steps 1-4 and return every participant.
+
+    The shared fixture for the end-to-end and selective-synchronization tests.
+    """
+    context = initializer.initialize(group_provider=stub_provider)
+    chain = fresh_ledger()
+    registry = authority_mod.AttributeNamespaceRegistry()
+    aim = aim_mod.AuthorizationIndexManager()
+
+    authorities = [
+        make_authority(f"AA{i}", domain, registry=registry, context=context)
+        for i, domain in enumerate(DOMAINS, start=1)
+    ]
+    for authority in authorities:
+        authority.register(chain)                       # Phase II Step 1
+        chain.publish_authorization_state(authority.state())   # Phase II Step 4
+
+    nodes = fsn_mod.build_fsn_set(DOMAINS, context.config.topology.fog_search_nodes)
+    results = aim_mod.initial_synchronization(
+        aim, chain, [a.authority_id for a in authorities], nodes
+    )
+    initializer.publish_public_parameters(
+        chain, context, [(a.authority_id, a.public_key) for a in authorities]
+    )
+    return context, chain, aim, authorities, nodes, results
+
+
+def test_aim_synchronizes_meta_from_the_ledger():
+    """Meta_i is derived from the anchored Reg_i and State_i, not a side channel."""
+    _, chain, aim, authorities, _, _ = phase_i_ii_federation()
+    for authority in authorities:
+        meta = aim.meta_for_authority(authority.authority_id)
+        assert meta.domain == authority.domain
+        assert meta.vid == authority.vid
+        assert meta.commitment == authority.commitment()
+
+
+def test_aim_requires_registration_before_synchronization():
+    chain = fresh_ledger()
+    aim = aim_mod.AuthorizationIndexManager()
+    try:
+        aim.synchronize_from_ledger(chain, "AA-absent")
+    except aim_mod.AIMError as exc:
+        assert "not registered" in str(exc)
+        return
+    raise AssertionError("an unregistered authority must not be synchronized")
+
+
+def test_aim_requires_a_published_state_before_synchronization():
+    """Phase II Step 3 must precede Step 4."""
+    chain = fresh_ledger()
+    aim = aim_mod.AuthorizationIndexManager()
+    make_authority("AA1").register(chain)      # registered, but no State_i
+    try:
+        aim.synchronize_from_ledger(chain, "AA1")
+    except aim_mod.AIMError as exc:
+        assert "no authorization state" in str(exc)
+        return
+    raise AssertionError("an authority with no state must not be synchronized")
+
+
+def test_aim_agrees_with_the_ledger():
+    _, chain, aim, _, _, _ = phase_i_ii_federation()
+    aim.verify_against_ledger(chain)            # must not raise
+
+
+def test_aim_detects_drift_from_the_ledger():
+    """The AIM is off-chain, so the check that it has not drifted must bite."""
+    _, chain, aim, authorities, _, _ = phase_i_ii_federation()
+    target = authorities[0].authority_id
+    held = aim.meta_for_authority(target)
+    # Forge a different commitment at the same version.
+    aim._meta[target] = types.AuthorizationMeta(
+        domain=held.domain, vid=held.vid, commitment=bytes(range(32))
+    )
+    try:
+        aim.verify_against_ledger(chain)
+    except aim_mod.AuthorizationStateMismatchError as exc:
+        assert target in str(exc)
+        return
+    raise AssertionError("AIM/ledger divergence must be detected")
+
+
+def test_aim_refuses_a_stale_meta():
+    aim = aim_mod.AuthorizationIndexManager()
+    aim.register_meta("AA1", types.AuthorizationMeta("hospital", 5, bytes(32)))
+    try:
+        aim.register_meta("AA1", types.AuthorizationMeta("hospital", 3, bytes(32)))
+    except aim_mod.AIMError:
+        return
+    raise AssertionError("a stale Meta must be refused")
+
+
+def test_aim_commitment_set_is_ordered_and_complete():
+    """C_U feeds AuthRoot_U, so its order must not depend on enumeration order."""
+    _, _, aim, authorities, _, _ = phase_i_ii_federation()
+    ids = [a.authority_id for a in authorities]
+    forward = aim.commitments(ids)
+    reverse = aim.commitments(list(reversed(ids)))
+    assert forward == reverse
+    assert len(forward) == 4
+    assert set(forward) == {a.commitment() for a in authorities}
+
+
+def test_aim_commitments_reject_an_unknown_authority():
+    _, _, aim, _, _, _ = phase_i_ii_federation()
+    try:
+        aim.commitments(["AA-absent"])
+    except aim_mod.AIMError:
+        return
+    raise AssertionError("an unknown authority should raise")
+
+
+def test_aim_maps_domains_to_authorities():
+    """Phase VI Step 2 resolves authorized shards through this mapping."""
+    _, _, aim, authorities, _, _ = phase_i_ii_federation()
+    assert set(aim.domains()) == set(DOMAINS)
+    for authority in authorities:
+        assert aim.authorities_for_domain(authority.domain) == (
+            authority.authority_id,
+        )
+
+
+def test_aim_version_table_covers_every_authority():
+    """The AIM side of C_j^sync = |VID_U - VID_j|."""
+    _, _, aim, authorities, _, _ = phase_i_ii_federation()
+    table = aim.version_table()
+    assert set(table) == {a.authority_id for a in authorities}
+    assert all(vid == 0 for vid in table.values())
+
+
+def test_aim_initial_synchronization_reaches_every_node():
+    """Phase II Step 4 is the INITIAL sync: all nodes, legitimately."""
+    _, _, _, authorities, nodes, results = phase_i_ii_federation()
+    assert len(results) == len(authorities)
+    for result in results:
+        assert result.touched_count == len(nodes)
+        assert result.updated_count == len(nodes)
+    for node in nodes:
+        assert len(node.synced_authorities()) == 4
+
+
+def test_aim_affected_fsns_is_the_domain_holder_only():
+    """Phase VII Step 6 selectivity: one domain per node means one node in four."""
+    _, _, aim, authorities, nodes, _ = phase_i_ii_federation()
+    for authority in authorities:
+        affected = aim.affected_fsns(authority.authority_id, nodes)
+        assert len(affected) == 1
+        assert affected[0].serves_domain(authority.domain)
+
+
+def test_aim_selective_propagation_touches_one_node_in_four():
+    """The Exp. 6 claim: FSNs touched must be the affected subset, not all m."""
+    _, chain, aim, authorities, nodes, _ = phase_i_ii_federation()
+    target = authorities[1]
+
+    # Phase VII Step 3: the authority revokes, increments, and republishes.
+    target.revocation.revoke("patient-7")
+    target.vid += 1
+    chain.publish_authorization_state(target.state())
+    aim.synchronize_from_ledger(chain, target.authority_id)
+
+    result = aim.propagate_selectively(target.authority_id, nodes)
+    assert result.touched_count == 1
+    assert result.updated_count == 1
+    assert result.vid == 1
+
+    # Only the affected node advanced; the rest keep the old version.
+    for node in nodes:
+        if node.serves_domain(target.domain):
+            assert node.vid_for_authority(target.authority_id) == 1
+        else:
+            assert node.vid_for_authority(target.authority_id) == 0
+
+
+def test_aim_selective_propagation_leaves_other_nodes_stale():
+    """Staleness is a normal condition the AASS scheduler routes around."""
+    _, chain, aim, authorities, nodes, _ = phase_i_ii_federation()
+    target = authorities[2]
+    target.vid += 1
+    chain.publish_authorization_state(target.state())
+    aim.synchronize_from_ledger(chain, target.authority_id)
+    aim.propagate_selectively(target.authority_id, nodes)
+
+    stale = aim.verify_fsn_synchronization(nodes, authority_id=target.authority_id)
+    # Only nodes SERVING that domain are considered for it, and that one is fresh.
+    assert stale == ()
+
+    # Before propagation, the domain holder would have been stale.
+    other = authorities[3]
+    other.vid += 1
+    chain.publish_authorization_state(other.state())
+    aim.synchronize_from_ledger(chain, other.authority_id)
+    assert aim.verify_fsn_synchronization(
+        nodes, authority_id=other.authority_id
+    ) != ()
+
+
+def test_aim_propagation_records_touched_and_updated_separately():
+    """Touched is the cost; updated is the effect. Re-propagating changes nothing."""
+    _, _, aim, authorities, nodes, _ = phase_i_ii_federation()
+    again = aim.propagate(authorities[0].authority_id, nodes)
+    assert again.touched_count == len(nodes)
+    assert again.updated_count == 0          # already at that version
+
+
+def test_aim_has_no_broadcast_method():
+    """Phase VII's selectivity is the measured claim; a broadcast would void it."""
+    forbidden = {"broadcast", "propagate_all", "sync_all"}
+    assert not forbidden & set(dir(aim_mod.AuthorizationIndexManager))
+
+
+# ===========================================================================
+# Phase I + Phase II end to end
+# ===========================================================================
+def test_phase_i_ii_end_to_end():
+    """Every step of Phases I and II, with the properties each one must hold."""
+    context, chain, aim, authorities, nodes, results = phase_i_ii_federation()
+    config = context.config
+
+    # Phase I Step 1 — P and the group.
+    assert context.primitive_set()[1:] == (
+        "sha256",
+        "aes-256-gcm",
+        "hkdf-sha256",
+        "ml-kem-768",
+    )
+    assert context.suite.pairing_type == "type-3"
+
+    # Phase I Step 2 — N_AA authorities, independent keys.
+    assert len(authorities) == config.authorities.count == 4
+    assert len({a.public_key.e_g1g2_alpha for a in authorities}) == 4
+
+    # Phase I Step 3 — PP anchored with every PK_i.
+    pp_keys = chain.keys(ledger_mod.NS_SYSTEM_PARAMETERS)
+    assert len(pp_keys) == 1
+    published_pp = chain.get(ledger_mod.NS_SYSTEM_PARAMETERS, pp_keys[0]).record
+    assert published_pp.authority_count == 4
+
+    # Phase I Step 4 — F = {FSN_1..FSN_m}, all namespaces initialised.
+    assert len(nodes) == config.topology.fog_search_nodes == 4
+    assert set(chain.namespace_sizes()) == set(ledger_mod.NAMESPACES)
+
+    # Phase II Step 1 — every Reg_i anchored, on a real corpus domain set.
+    assert chain.registered_authorities() == ["AA1", "AA2", "AA3", "AA4"]
+    assert {chain.get_registration(a).domain for a in chain.registered_authorities()} == set(DOMAINS)
+
+    # Phase II Step 2 — disjoint namespaces of the configured size.
+    all_attributes = [attr for a in authorities for attr in a.attributes]
+    assert len(all_attributes) == 4 * config.authorities.attributes_per_authority
+    assert len(set(all_attributes)) == len(all_attributes)
+
+    # Phase II Step 3 — distinct, recomputable commitments over empty rev lists.
+    assert len({a.commitment() for a in authorities}) == 4
+    for authority in authorities:
+        assert authority.revocation_root() == revocation_mod.EMPTY_REVOCATION_ROOT
+        assert chain.latest_authorization_state(
+            authority.authority_id
+        ).commitment == authority.commitment()
+
+    # Phase II Step 4 — AIM agrees with the chain; every node synchronized.
+    aim.verify_against_ledger(chain)
+    assert aim.verify_fsn_synchronization(nodes) == ()
+    assert all(node.vid() == 0 for node in nodes)
+    assert sum(r.touched_count for r in results) == 4 * len(nodes)
+
+    # The chain is intact end to end: 4 Reg_i + 4 State_i + 1 PP.
+    assert chain.entry_count() == 9
+    assert chain.verify_chain()
+
+    # No secret material anywhere on the chain.
+    for entry in chain.entries():
+        for authority in authorities:
+            assert authority.master_key.alpha not in entry.payload
+            assert authority.master_key.beta not in entry.payload
+
+
+def test_phase_i_ii_is_reproducible_up_to_key_material():
+    """Two runs must agree on every commitment, since those are derived state."""
+    first = phase_i_ii_federation()
+    second = phase_i_ii_federation()
+    assert [a.commitment() for a in first[3]] == [a.commitment() for a in second[3]]
+
+
+def test_phase_i_ii_end_state_is_not_reportable():
+    """The whole federation runs on an unfaithful group, so nothing may be reported."""
+    context, _, _, _, _, _ = phase_i_ii_federation()
+    assert not context.reportable
+    try:
+        context.assert_reportable()
+    except initializer.UnfaithfulGroupError:
+        return
+    raise AssertionError("a stub-group federation must not be reportable")
 
 
 # ===========================================================================
