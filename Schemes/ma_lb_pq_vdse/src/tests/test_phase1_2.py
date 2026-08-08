@@ -30,7 +30,9 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from Schemes.ma_lb_pq_vdse.src import config as config_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src import types  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.authority import authority as authority_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.authority import initializer  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.authority import revocation as revocation_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.chain import ledger as ledger_mod  # noqa: E402
 
 
@@ -965,6 +967,600 @@ def test_initializer_kem_setup_cost_is_reported_separately():
     assert all(
         cost[k] > 0 for k in ("keygen_ms", "encapsulate_ms", "decapsulate_ms")
     )
+
+
+# ===========================================================================
+# authority/revocation.py — RevRoot_i
+# ===========================================================================
+def test_revocation_empty_list_has_the_sentinel_root():
+    """Every authority starts empty at Phase II Step 3, so the root must exist."""
+    revocation = revocation_mod.RevocationList()
+    assert revocation.is_empty
+    assert revocation.root() == revocation_mod.EMPTY_REVOCATION_ROOT
+    assert len(revocation.root()) == 32
+
+
+def test_revocation_sentinel_is_not_all_zeros():
+    """bytes(32) would collide with a contrived tree and read as 'not computed'."""
+    assert revocation_mod.EMPTY_REVOCATION_ROOT != bytes(32)
+
+
+def test_revocation_sentinel_cannot_collide_with_a_populated_root():
+    """The sentinel must be distinguishable from every real tree root.
+
+    A populated root comes from merkle.hash_leaf/hash_node, which prefix their
+    inputs with 0x00/0x01; the sentinel is a domain-tagged sha256. Checked here
+    against a one-leaf tree, which is the closest case.
+    """
+    single = revocation_mod.RevocationList(["user-1"])
+    assert single.root() != revocation_mod.EMPTY_REVOCATION_ROOT
+    from Common.crypto import merkle
+
+    assert (
+        revocation_mod.EMPTY_REVOCATION_ROOT
+        != merkle.hash_leaf(revocation_mod.revocation_leaf("user-1"))
+    )
+
+
+def test_revocation_root_is_order_independent():
+    """RevRoot_i is over the SET, so a verifier holding it can recompute it."""
+    forward = revocation_mod.RevocationList(["u1", "u2", "u3"])
+    reverse = revocation_mod.RevocationList(["u3", "u1", "u2"])
+    assert forward.root() == reverse.root()
+
+
+def test_revocation_root_is_membership_sensitive():
+    base = revocation_mod.RevocationList(["u1", "u2"])
+    extra = revocation_mod.RevocationList(["u1", "u2", "u3"])
+    assert base.root() != extra.root()
+
+
+def test_revocation_is_idempotent():
+    revocation = revocation_mod.RevocationList(["u1"])
+    root = revocation.root()
+    revocation.revoke("u1")
+    assert revocation.root() == root
+    assert len(revocation) == 1
+
+
+def test_revocation_restore_returns_to_the_previous_root():
+    """The root is a function of the current set, not of its history."""
+    revocation = revocation_mod.RevocationList(["u1", "u2"])
+    before = revocation.root()
+    revocation.revoke("u3")
+    assert revocation.root() != before
+    revocation.restore("u3")
+    assert revocation.root() == before
+
+
+def test_revocation_restore_rejects_an_unrevoked_identifier():
+    try:
+        revocation_mod.RevocationList(["u1"]).restore("u2")
+    except revocation_mod.RevocationError:
+        return
+    raise AssertionError("restoring an unrevoked identifier should raise")
+
+
+def test_revocation_batch_costs_one_rebuild():
+    """Phase VII recomputes RevRoot once per version, and Exp. 6 sweeps to 1e5.
+
+    A rebuild per revocation would be O(delta^2) hashing and would make Exp. 6
+    measure this class instead of the IAS mechanism.
+    """
+    revocation = revocation_mod.RevocationList()
+    revocation.revoke_many(f"user-{i}" for i in range(500))
+    assert revocation.rebuild_count == 0     # nothing computed yet
+    revocation.root()
+    assert revocation.rebuild_count == 1
+    revocation.root()
+    assert revocation.rebuild_count == 1     # cached
+
+
+def test_revocation_mutation_invalidates_the_cached_root():
+    revocation = revocation_mod.RevocationList(["u1"])
+    first = revocation.root()
+    revocation.revoke("u2")
+    assert revocation.root() != first
+
+
+def test_revocation_inclusion_proof_verifies():
+    """'Authenticated' is why this is a Merkle tree rather than a flat digest."""
+    revocation = revocation_mod.RevocationList([f"user-{i}" for i in range(9)])
+    proof = revocation.prove("user-4")
+    assert revocation.verify("user-4", proof)
+    assert proof.path_length > 0
+
+
+def test_revocation_proof_fails_against_a_changed_root():
+    revocation = revocation_mod.RevocationList([f"user-{i}" for i in range(9)])
+    proof = revocation.prove("user-4")
+    revocation.revoke("user-99")
+    assert not revocation.verify("user-4", proof)
+
+
+def test_revocation_cannot_prove_an_unrevoked_identifier():
+    revocation = revocation_mod.RevocationList(["u1"])
+    try:
+        revocation.prove("u2")
+    except revocation_mod.RevocationError:
+        return
+    raise AssertionError("proving a non-member should raise")
+
+
+def test_revocation_empty_list_has_no_tree():
+    try:
+        revocation_mod.RevocationList().tree()
+    except revocation_mod.RevocationError as exc:
+        assert "sentinel" in str(exc)
+        return
+    raise AssertionError("an empty list has no Merkle tree")
+
+
+def test_revocation_leaf_rejects_empty_and_non_string():
+    for bad in ("", 42, None):
+        try:
+            revocation_mod.revocation_leaf(bad)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            continue
+        raise AssertionError(f"{bad!r} should not be a valid revoked identifier")
+
+
+def test_revocation_leaf_does_not_carry_the_plaintext_identifier():
+    """Leaves are hashed, so the tree does not expose user identifiers."""
+    leaf = revocation_mod.revocation_leaf("patient-12345")
+    assert b"patient-12345" not in leaf
+    assert len(leaf) == 32
+
+
+# ===========================================================================
+# authority/authority.py — Phase I Step 2, Phase II Steps 1-3
+# ===========================================================================
+class StubGroupOperations:
+    """Group arithmetic for tests only.
+
+    NOT the published construction — it is a hash-based stand-in that is
+    deterministic, distinct per exponent, and never in src/. Every key pair it
+    produces belongs to a context whose group is faithful=False, so
+    assert_reportable() refuses.
+    """
+
+    def __init__(self) -> None:
+        self._counter = 0
+
+    def random_exponent(self) -> bytes:
+        self._counter += 1
+        return types.hashes.sha256(
+            self._counter.to_bytes(4, "big"), domain=b"test/exponent"
+        )
+
+    def exponentiate_gt(self, base: bytes, exponent: bytes) -> bytes:
+        return types.hashes.sha256(base, exponent, domain=b"test/gt")
+
+    def exponentiate_g1(self, base: bytes, exponent: bytes) -> bytes:
+        return types.hashes.sha256(base, exponent, domain=b"test/g1")
+
+
+# One shared exponent source for the whole suite, so successive authorities draw
+# DIFFERENT exponents. A fresh stub per authority would restart its counter and
+# hand every authority the same alpha_i and beta_i — which a real backend's RNG
+# would never do, and which would quietly make the independence assertions
+# vacuous.
+_SHARED_OPERATIONS = StubGroupOperations()
+
+
+def make_authority(
+    authority_id: str = "AA1",
+    domain: str = "hospital",
+    registry: "authority_mod.AttributeNamespaceRegistry | None" = None,
+    attributes=None,
+    context=None,
+    operations=None,
+) -> authority_mod.Authority:
+    context = context or initializer.initialize(group_provider=stub_provider)
+    count = context.config.authorities.attributes_per_authority
+    return authority_mod.Authority.create(
+        context,
+        authority_id=authority_id,
+        domain=domain,
+        attributes=attributes or authority_mod.default_attributes(authority_id, count),
+        operations=operations or _SHARED_OPERATIONS,
+        registry=registry,
+    )
+
+
+def test_authority_step2_is_blocked_without_a_pairing_backend():
+    """Phase I Step 2 must refuse rather than invent group arithmetic."""
+    context = initializer.initialize(group_provider=stub_provider)
+    try:
+        authority_mod.setup_authority_keys(context)  # no operations injected
+    except authority_mod.GroupOperationsUnavailableError as exc:
+        assert "backend_implemented" in str(exc)
+        return
+    raise AssertionError("Step 2 must raise with no group operations")
+
+
+def test_authority_step2_produces_the_published_key_shape():
+    """MSK_i = (alpha_i, beta_i); PK_i = (g1, g2, e(g1,g2)^alpha, g1^beta)."""
+    context = initializer.initialize(group_provider=stub_provider)
+    master_key, public_key = authority_mod.setup_authority_keys(
+        context, StubGroupOperations()
+    )
+    assert master_key.alpha != master_key.beta
+    assert public_key.g1 == context.group.g1
+    assert public_key.g2 == context.group.g2
+    assert public_key.e_g1g2_alpha and public_key.g1_beta
+    assert public_key.e_g1g2_alpha != public_key.g1_beta
+
+
+def test_authority_step2_rejects_a_degenerate_exponent_source():
+    """alpha == beta means MSK_i has half the entropy it should."""
+
+    class ConstantExponents(StubGroupOperations):
+        def random_exponent(self) -> bytes:
+            return b"same-exponent-every-time"
+
+    context = initializer.initialize(group_provider=stub_provider)
+    try:
+        authority_mod.setup_authority_keys(context, ConstantExponents())
+    except authority_mod.AuthorityError as exc:
+        assert "uniform" in str(exc)
+        return
+    raise AssertionError("a constant exponent source should be rejected")
+
+
+def test_authority_step2_keys_are_independent_across_authorities():
+    context = initializer.initialize(group_provider=stub_provider)
+    first = make_authority("AA1", context=context)
+    second = make_authority("AA2", context=context)
+    assert first.master_key.alpha != second.master_key.alpha
+    assert first.public_key.e_g1g2_alpha != second.public_key.e_g1g2_alpha
+
+
+def test_authority_keys_from_a_stub_group_are_never_reportable():
+    context = initializer.initialize(group_provider=stub_provider)
+    make_authority(context=context)
+    assert not context.reportable
+
+
+# -- Phase II Step 1 --------------------------------------------------------
+def test_authority_step1_registers_and_anchors():
+    chain = fresh_ledger()
+    authority = make_authority("AA1", "hospital")
+    authority.register(chain)
+    stored = chain.get_registration("AA1")
+    assert stored == authority.registration()
+    assert stored.domain == "hospital"
+    assert chain.verify_chain()
+
+
+def test_authority_step1_rejects_a_second_registration():
+    chain = fresh_ledger()
+    authority = make_authority("AA1")
+    authority.register(chain)
+    try:
+        authority.register(chain)
+    except ledger_mod.ImmutabilityError:
+        return
+    raise AssertionError("re-registration must be refused")
+
+
+def test_authority_registration_carries_no_secret_material():
+    authority = make_authority()
+    encoded = authority.registration().encode()
+    assert authority.master_key.alpha not in encoded
+    assert authority.master_key.beta not in encoded
+
+
+# -- Phase II Step 2: disjoint namespaces -----------------------------------
+def test_namespace_digest_is_order_independent():
+    """H(A_i) is over a set, so insertion order must not change it."""
+    assert authority_mod.namespace_digest(["b", "a", "c"]) == (
+        authority_mod.namespace_digest(["a", "b", "c"])
+    )
+
+
+def test_namespace_digest_is_membership_sensitive():
+    assert authority_mod.namespace_digest(["a", "b"]) != (
+        authority_mod.namespace_digest(["a", "b", "c"])
+    )
+
+
+def test_namespace_digest_rejects_empty_and_duplicates():
+    for bad in ([], ["a", "a"]):
+        try:
+            authority_mod.namespace_digest(bad)
+        except authority_mod.AuthorityError:
+            continue
+        raise AssertionError(f"{bad!r} should not produce a namespace digest")
+
+
+def test_namespace_digest_is_domain_separated_from_the_commitment():
+    """A namespace digest must not be presentable as a C_i^auth."""
+    attributes = ["a", "b"]
+    assert authority_mod.namespace_digest(attributes) != types.hashes.sha256(
+        types.canonical(sorted(attributes))
+    )
+
+
+def test_namespace_registry_enforces_disjointness():
+    """Phase II Step 2: every attribute belongs exclusively to one authority."""
+    registry = authority_mod.AttributeNamespaceRegistry()
+    registry.claim("AA1", ["shared:attr", "aa1:only"])
+    try:
+        registry.claim("AA2", ["shared:attr", "aa2:only"])
+    except authority_mod.NamespaceConflictError as exc:
+        assert "shared:attr" in str(exc)
+        assert "AA1" in str(exc)
+        return
+    raise AssertionError("an overlapping namespace claim must be refused")
+
+
+def test_namespace_registry_allows_an_authority_to_reclaim_its_own():
+    registry = authority_mod.AttributeNamespaceRegistry()
+    registry.claim("AA1", ["aa1:x"])
+    registry.claim("AA1", ["aa1:x", "aa1:y"])  # idempotent for the same owner
+    assert registry.owner_of("aa1:x") == "AA1"
+    assert registry.attribute_count == 2
+
+
+def test_namespace_registry_conflict_leaves_no_partial_claim():
+    """A refused claim must not have registered its non-conflicting attributes."""
+    registry = authority_mod.AttributeNamespaceRegistry()
+    registry.claim("AA1", ["aa1:x"])
+    try:
+        registry.claim("AA2", ["aa2:new", "aa1:x"])
+    except authority_mod.NamespaceConflictError:
+        pass
+    assert registry.owner_of("aa2:new") is None
+
+
+def test_namespace_registry_release():
+    registry = authority_mod.AttributeNamespaceRegistry()
+    registry.claim("AA1", ["aa1:x"])
+    registry.release("AA1")
+    assert registry.owner_of("aa1:x") is None
+    registry.claim("AA2", ["aa1:x"])  # now free
+
+
+def test_authority_create_claims_its_namespace_in_the_registry():
+    registry = authority_mod.AttributeNamespaceRegistry()
+    context = initializer.initialize(group_provider=stub_provider)
+    make_authority("AA1", registry=registry, context=context)
+    make_authority("AA2", registry=registry, context=context)
+    per_authority = context.config.authorities.attributes_per_authority
+    assert registry.attribute_count == 2 * per_authority
+
+
+def test_authority_create_refuses_an_overlapping_namespace():
+    registry = authority_mod.AttributeNamespaceRegistry()
+    context = initializer.initialize(group_provider=stub_provider)
+    shared = authority_mod.default_attributes(
+        "SHARED", context.config.authorities.attributes_per_authority
+    )
+    make_authority("AA1", registry=registry, attributes=shared, context=context)
+    try:
+        make_authority("AA2", registry=registry, attributes=shared, context=context)
+    except authority_mod.NamespaceConflictError:
+        return
+    raise AssertionError("two authorities must not share attributes")
+
+
+def test_authority_create_enforces_the_configured_namespace_size():
+    """Unequal namespaces would give one authority more of the policy space."""
+    context = initializer.initialize(group_provider=stub_provider)
+    try:
+        make_authority("AA1", attributes=("only:one",), context=context)
+    except authority_mod.AuthorityError as exc:
+        assert "attributes_per_authority" in str(exc)
+        return
+    raise AssertionError("a namespace of the wrong size should be refused")
+
+
+def test_default_attributes_are_disjoint_by_construction():
+    first = set(authority_mod.default_attributes("AA1", 10))
+    second = set(authority_mod.default_attributes("AA2", 10))
+    assert len(first) == len(second) == 10
+    assert not first & second
+
+
+# -- Phase II Step 3: C_i^auth sensitivity ----------------------------------
+def test_commitment_binds_all_five_inputs():
+    """C_i^auth = H(ID || Dom || H(A_i) || VID || RevRoot).
+
+    Five separate assertions: changing ANY input must change the commitment.
+    This is the property the commitment exists to provide — a commitment that
+    survived a VID change would let a stale authorization state pass as current.
+    """
+    base_kwargs = dict(
+        authority_id="AA1",
+        domain="hospital",
+        namespace_digest_value=authority_mod.namespace_digest(["a", "b"]),
+        vid=0,
+        revocation_root=revocation_mod.EMPTY_REVOCATION_ROOT,
+    )
+    base = authority_mod.authorization_state_commitment(**base_kwargs)
+
+    variants = {
+        "authority_id": dict(base_kwargs, authority_id="AA2"),
+        "domain": dict(base_kwargs, domain="laboratory"),
+        "namespace": dict(
+            base_kwargs,
+            namespace_digest_value=authority_mod.namespace_digest(["a", "b", "c"]),
+        ),
+        "vid": dict(base_kwargs, vid=1),
+        "revocation_root": dict(
+            base_kwargs, revocation_root=revocation_mod.revocation_root(["u1"])
+        ),
+    }
+    for name, kwargs in variants.items():
+        assert (
+            authority_mod.authorization_state_commitment(**kwargs) != base
+        ), f"C_i^auth did not change when {name} changed"
+
+
+def test_commitment_is_deterministic_and_recomputable():
+    """A verifier must reproduce C_i^auth from the published State_i inputs."""
+    authority = make_authority()
+    assert authority.commitment() == authority.commitment()
+    assert authority.commitment() == authority_mod.authorization_state_commitment(
+        authority_id=authority.authority_id,
+        domain=authority.domain,
+        namespace_digest_value=authority.namespace_digest(),
+        vid=authority.vid,
+        revocation_root=authority.revocation_root(),
+    )
+
+
+def test_commitment_cannot_be_reframed_across_fields():
+    """Length-prefixed fields: no two distinct states may share a commitment.
+
+    Without prefixing, ID="AA" + Dom="1x" and ID="AA1" + Dom="x" would concatenate
+    identically.
+    """
+    shared = dict(
+        namespace_digest_value=authority_mod.namespace_digest(["a"]),
+        vid=0,
+        revocation_root=revocation_mod.EMPTY_REVOCATION_ROOT,
+    )
+    first = authority_mod.authorization_state_commitment(
+        authority_id="AA", domain="1x", **shared
+    )
+    second = authority_mod.authorization_state_commitment(
+        authority_id="AA1", domain="x", **shared
+    )
+    assert first != second
+
+
+def test_commitment_tracks_a_revocation():
+    """Phase VII Step 3 updates RevRoot; the commitment must follow."""
+    authority = make_authority()
+    before = authority.commitment()
+    authority.revocation.revoke("patient-1")
+    assert authority.commitment() != before
+
+
+def test_commitment_tracks_a_version_increment():
+    authority = make_authority()
+    before = authority.commitment()
+    authority.vid += 1
+    assert authority.commitment() != before
+
+
+def test_commitment_is_not_cached_across_state_changes():
+    """A cached commitment would survive the drift it exists to prevent."""
+    authority = make_authority()
+    first = authority.commitment()
+    authority.revocation.revoke("p1")
+    second = authority.commitment()
+    authority.revocation.restore("p1")
+    assert authority.commitment() == first != second
+
+
+def test_commitment_rejects_a_negative_vid():
+    try:
+        authority_mod.authorization_state_commitment(
+            authority_id="AA1",
+            domain="hospital",
+            namespace_digest_value=bytes(32),
+            vid=-1,
+            revocation_root=bytes(32),
+        )
+    except ValueError:
+        return
+    raise AssertionError("a negative VID should be refused")
+
+
+def test_authority_state_and_meta_agree_on_the_commitment():
+    """State_i and Meta_i are two views of one authorization state."""
+    authority = make_authority()
+    state, meta = authority.state(), authority.meta()
+    assert state.commitment == meta.commitment == authority.commitment()
+    assert state.vid == meta.vid == authority.vid
+    assert meta.domain == authority.domain
+
+
+def test_authority_meta_omits_the_public_key():
+    """The AIM forwards Dom/VID/C_auth to FSNs, not PK_i."""
+    authority = make_authority()
+    assert authority.public_key.e_g1g2_alpha not in authority.meta().encode()
+    assert authority.public_key.e_g1g2_alpha in authority.state().encode()
+
+
+def test_authority_repr_hides_key_material():
+    authority = make_authority()
+    text = repr(authority)
+    assert authority.master_key.alpha.hex() not in text
+    assert "redacted" in repr(authority.master_key)
+
+
+def test_authority_rejects_an_empty_namespace_directly():
+    context = initializer.initialize(group_provider=stub_provider)
+    master_key, public_key = authority_mod.setup_authority_keys(
+        context, StubGroupOperations()
+    )
+    try:
+        authority_mod.Authority(
+            authority_id="AA1",
+            domain="hospital",
+            attributes=(),
+            public_key=public_key,
+            master_key=master_key,
+        )
+    except authority_mod.AuthorityError:
+        return
+    raise AssertionError("an authority with no attributes should be refused")
+
+
+def test_authority_initial_vid_comes_from_config():
+    context = initializer.initialize(group_provider=stub_provider)
+    authority = make_authority(context=context)
+    assert authority.vid == context.config.authorities.initial_vid == 0
+
+
+# -- Phase I-II end to end --------------------------------------------------
+def test_four_authorities_end_to_end_through_phase_ii_step_3():
+    """N_AA=4, one per domain: keygen, registration, namespaces, commitments.
+
+    Stops at Step 3 — publishing State_i is Step 4, which the AIM drives.
+    """
+    context = initializer.initialize(group_provider=stub_provider)
+    chain = fresh_ledger()
+    registry = authority_mod.AttributeNamespaceRegistry()
+    domains = ("hospital", "laboratory", "insurance", "emergency")
+
+    authorities = [
+        make_authority(f"AA{i}", domain, registry=registry, context=context)
+        for i, domain in enumerate(domains, start=1)
+    ]
+    for authority in authorities:
+        authority.register(chain)
+
+    assert len(authorities) == context.config.authorities.count == 4
+    assert chain.registered_authorities() == ["AA1", "AA2", "AA3", "AA4"]
+    # Disjoint namespaces across the whole federation.
+    assert registry.attribute_count == 4 * (
+        context.config.authorities.attributes_per_authority
+    )
+    # Distinct commitments, all recomputable, all over empty revocation lists.
+    commitments = {a.authority_id: a.commitment() for a in authorities}
+    assert len(set(commitments.values())) == 4
+    for authority in authorities:
+        assert authority.revocation_root() == revocation_mod.EMPTY_REVOCATION_ROOT
+        assert authority.state().commitment == commitments[authority.authority_id]
+
+    # PP carries all four PK_i (Phase I Step 3).
+    pp = initializer.publish_public_parameters(
+        chain, context, [(a.authority_id, a.public_key) for a in authorities]
+    )
+    assert pp.authority_count == 4
+    assert chain.verify_chain()
+
+    # Only the affected authority's commitment moves when one revokes
+    # (Phase VII Step 3: "all other authorities retain their existing states").
+    authorities[1].revocation.revoke("patient-7")
+    assert authorities[1].commitment() != commitments["AA2"]
+    for authority in (authorities[0], authorities[2], authorities[3]):
+        assert authority.commitment() == commitments[authority.authority_id]
 
 
 # ===========================================================================
