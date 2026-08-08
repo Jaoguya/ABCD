@@ -19,6 +19,7 @@ Covers ``types.py`` (canonical encoding, protocol records) and
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 import traceback
 from pathlib import Path
@@ -27,7 +28,9 @@ from typing import Callable, List, Tuple
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
 
+from Schemes.ma_lb_pq_vdse.src import config as config_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src import types  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.authority import initializer  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.chain import ledger as ledger_mod  # noqa: E402
 
 
@@ -89,6 +92,13 @@ def make_state(
         commitment=bytes(range(32)) if commitment is None else commitment,
         vid=vid,
     )
+
+
+def kem_available() -> bool:
+    """Whether an ML-KEM-768 backend is live, so KEM tests skip rather than fail."""
+    from Common.crypto import kem
+
+    return any(kem.available_backends().values())
 
 
 def fresh_ledger() -> ledger_mod.InProcessLedger:
@@ -574,6 +584,387 @@ def test_ledger_four_authorities_one_per_domain():
     )
     assert chain.entry_count() == 8
     assert chain.verify_chain()
+
+
+# ===========================================================================
+# config.py
+# ===========================================================================
+def test_config_loads_and_validates():
+    """The committed configuration must be self-consistent as it stands."""
+    config = config_mod.load(reload=True)
+    assert config.defaults.keywords_per_query == 5      # §V
+    assert config.defaults.domains == 4                 # §V
+    assert config.topology.fog_search_nodes == 4        # §V
+    assert config.measurement.repetitions == 30         # §V
+    assert config.measurement.confidence_interval == 0.95
+
+
+def test_config_all_eight_experiments_include_us():
+    """SCHEME.md: the proposed scheme participates in all 8 experiments."""
+    config = config_mod.load()
+    assert len(config.our_experiments()) == 8
+
+
+def test_config_authority_topology_matches_the_decision():
+    """N_AA = 4, one per domain, |A_i| = 10 (both `benchmark` provenance)."""
+    authorities = config_mod.load().authorities
+    assert authorities.count == 4
+    assert authorities.authority_to_domain == "one_to_one"
+    assert authorities.attributes_per_authority == 10
+    assert authorities.initial_vid == 0
+    assert authorities.disjoint_attribute_universes
+
+
+def test_config_scheduler_weights_are_still_pending():
+    """README §14 issue #5 is open; the config must not claim otherwise."""
+    scheduler = config_mod.load().scheduler
+    assert not scheduler.weights.is_fixed
+    assert scheduler.weights.provisional
+    assert scheduler.refuse_reportable_runs_while_pending
+
+
+def test_config_refuses_reportable_run_on_pending_weights():
+    """The gate that stops Exp. 7-8 reporting an untuned scheduler as AASS."""
+    scheduler = config_mod.load().scheduler
+    try:
+        scheduler.require_fixed(context="exp7")
+    except config_mod.SchedulerWeightsPendingError as exc:
+        assert "pending_sweep" in str(exc)
+        assert "issue #5" in str(exc)
+        return
+    raise AssertionError("provisional weights must refuse a reportable run")
+
+
+def test_config_scheduler_has_exactly_the_four_ablation_variants():
+    assert set(config_mod.load().scheduler.variants) == {
+        "no_lb",
+        "round_robin",
+        "least_loaded",
+        "aass",
+    }
+
+
+def test_config_workload_holdout_is_distinct_and_not_reportable():
+    """The hold-out must differ in seed, or the weights are fitted in-sample."""
+    config = config_mod.load()
+    reported, holdout = config.reported_workload, config.holdout_workload
+    assert reported.reportable and not holdout.reportable
+    assert reported.trace_seed != holdout.trace_seed
+    assert reported.trace_path != holdout.trace_path
+
+
+def test_config_workload_inheritance_resolves():
+    """The hold-out overrides only seed and run counts; the rest is inherited."""
+    holdout = config_mod.load_workload("exp78_sweep_holdout.yaml")
+    # Overridden.
+    assert holdout.repetitions == 3
+    assert holdout.concurrency == (1000, 5000)
+    # Inherited from the reported workload rather than restated.
+    assert holdout.ramp_seconds == 30
+    assert holdout.verify_sha256
+    assert holdout.replay_identical_to_all_variants
+    # meta must NOT be inherited, or the hold-out would claim role `reported`.
+    assert holdout.role == "sweep_holdout"
+
+
+def test_config_exp7_and_exp8_are_the_same_runs():
+    """README §5: both metric sets come from one set of runs."""
+    config = config_mod.load()
+    exp7, exp8 = config.experiment("exp7"), config.experiment("exp8")
+    assert exp8.shares_runs_with == exp7.name
+    assert exp7.values == exp8.values == config.reported_workload.concurrency
+
+
+def test_config_validation_catches_an_fsn_mismatch():
+    """A validator that never fails is not a validator."""
+    config = config_mod.load()
+    broken = dataclasses.replace(
+        config, topology=dataclasses.replace(config.topology, fog_search_nodes=7)
+    )
+    try:
+        broken.validate()
+    except config_mod.ConfigError as exc:
+        assert "FSN count" in str(exc)
+        return
+    raise AssertionError("an FSN count mismatch should fail validation")
+
+
+def test_config_validation_catches_authority_domain_mismatch():
+    config = config_mod.load()
+    broken = dataclasses.replace(
+        config, authorities=dataclasses.replace(config.authorities, count=3)
+    )
+    try:
+        broken.validate()
+    except config_mod.ConfigError:
+        return
+    raise AssertionError("N_AA != domains under one_to_one should fail")
+
+
+def test_config_validation_catches_outlier_dropping():
+    """README §7 requires outliers kept; a config saying otherwise must fail."""
+    config = config_mod.load()
+    broken = dataclasses.replace(
+        config, measurement=dataclasses.replace(config.measurement, drop_outliers=True)
+    )
+    try:
+        broken.validate()
+    except config_mod.ConfigError as exc:
+        assert "outlier" in str(exc).lower()
+        return
+    raise AssertionError("drop_outliers must fail validation")
+
+
+def test_config_validation_catches_wrong_repetition_count():
+    config = config_mod.load()
+    broken = dataclasses.replace(
+        config, measurement=dataclasses.replace(config.measurement, repetitions=10)
+    )
+    try:
+        broken.validate()
+    except config_mod.ConfigError:
+        return
+    raise AssertionError("repetitions != 30 must fail validation")
+
+
+def test_config_missing_key_names_the_full_path():
+    """A typo must fail loudly rather than default to something plausible."""
+    try:
+        config_mod._require({"a": {"b": 1}}, "a", "c", source="test.yaml")
+    except config_mod.ConfigError as exc:
+        assert "a.c" in str(exc) and "test.yaml" in str(exc)
+        return
+    raise AssertionError("an absent key should raise naming its path")
+
+
+def test_config_hashes_include_the_workload_files():
+    """The workload trace determines Exp. 7-8, so it belongs in provenance."""
+    hashes = config_mod.config_hashes()
+    assert "global.yaml" in hashes
+    assert "scheduler.yaml" in hashes
+    assert any(name.startswith("workload/") for name in hashes)
+    assert all(len(value) == 64 for value in hashes.values())
+
+
+def test_config_corpus_reference_detects_manifest_drift():
+    """Catches exactly the stale-manifest case found in the tree on 2026-08-08."""
+    stale = {
+        "records": 1206159,          # corpus v1
+        "keyword_universe_size": 2102,
+        "keyword_document_pairs": 18785334,
+        "domains": 4,
+    }
+    try:
+        config_mod.verify_corpus_reference(stale)
+    except config_mod.CorpusReferenceError as exc:
+        assert "records" in str(exc)
+        return
+    raise AssertionError("a v1 manifest must not validate against index.yaml")
+
+
+def test_config_corpus_reference_accepts_the_frozen_corpus():
+    config = config_mod.load()
+    reference = config.index.corpus_reference
+    config_mod.verify_corpus_reference(
+        {
+            "records": reference["records"],
+            "keyword_universe_size": reference["keyword_universe"],
+            "keyword_document_pairs": reference["keyword_document_pairs"],
+            "domains": reference["domains"],
+        }
+    )
+
+
+def test_config_thread_pinning_reports_without_raising():
+    """A dev host that has not sourced provision.sh must still run tests."""
+    report = config_mod.thread_pinning_report()
+    assert "OMP_NUM_THREADS" in report
+    config_mod.verify_thread_pinning(require=False)
+
+
+# ===========================================================================
+# authority/initializer.py — Phase I Steps 1 and 3
+# ===========================================================================
+def stub_group(**overrides) -> initializer.GroupDescription:
+    """A group NOT from a real backend, hence faithful=False.
+
+    Lives in the test file, not in src: the scheme must contain no code path
+    that could produce a group without a real pairing backend.
+    """
+    params = dict(
+        curve="BN254",
+        backend="stub-not-a-backend",
+        g1=b"g1-element",
+        g2=b"g2-element",
+        e_g1_g2=b"egt-element",
+        faithful=False,
+    )
+    params.update(overrides)
+    return initializer.GroupDescription(**params)
+
+
+def stub_provider(_pairing_params) -> initializer.GroupDescription:
+    return stub_group()
+
+
+def test_initializer_refuses_to_resolve_a_group_today():
+    """No Type-III charm backend exists; Step 1 must say so, not substitute SS512."""
+    params = config_mod.load().crypto["pairing"]
+    try:
+        initializer.resolve_group(params)
+    except initializer.PairingBackendMissingError as exc:
+        message = str(exc)
+        assert "Type-III" in message
+        assert "CharmSS512Backend" in message  # names what is installed and why not
+        return
+    raise AssertionError("resolve_group must raise until the backend exists")
+
+
+def test_initializer_step1_builds_the_primitive_set():
+    """Phase I Step 1: P = {H, SHA-256, AES-256-GCM, HKDF, ML-KEM}."""
+    context = initializer.initialize(group_provider=stub_provider)
+    assert context.suite.hash_algorithm == "sha256"
+    assert context.suite.aead_algorithm == "aes-256-gcm"
+    assert context.suite.kdf_algorithm == "hkdf-sha256"
+    assert context.suite.kem_algorithm == "ml-kem-768"
+    assert context.suite.pairing_type == "type-3"
+    assert context.primitive_set() == (
+        "H",
+        "sha256",
+        "aes-256-gcm",
+        "hkdf-sha256",
+        "ml-kem-768",
+    )
+
+
+def test_initializer_step1_self_tests_the_primitives():
+    """A broken ML-KEM backend must fail at Phase I, not in Phase III."""
+    if not kem_available():
+        raise Skip("no ML-KEM-768 backend available")
+    context = initializer.initialize(group_provider=stub_provider, self_test=True)
+    assert context.kem.self_test()
+    assert context.suite.kem_backend == context.kem.backend
+
+
+def test_initializer_records_the_live_kem_backend():
+    """run_meta.json must show whether a number came from liboqs or pure Python."""
+    if not kem_available():
+        raise Skip("no ML-KEM-768 backend available")
+    context = initializer.initialize(group_provider=stub_provider)
+    assert context.suite.kem_backend in {"cryptography", "liboqs", "kyber_py"}
+
+
+def test_initializer_stub_group_is_not_reportable():
+    """The seam must not become a route to a reportable number."""
+    context = initializer.initialize(group_provider=stub_provider)
+    assert not context.reportable
+    try:
+        context.assert_reportable()
+    except initializer.UnfaithfulGroupError:
+        return
+    raise AssertionError("an unfaithful group must refuse a reportable run")
+
+
+def test_initializer_rejects_a_faithful_group_on_the_wrong_curve():
+    """A provider must not deliver a curve other than the configured one."""
+
+    def wrong_curve(_params):
+        return stub_group(curve="SS512", faithful=True)
+
+    try:
+        initializer.initialize(group_provider=wrong_curve)
+    except initializer.UnfaithfulGroupError as exc:
+        assert "SS512" in str(exc)
+        return
+    raise AssertionError("an unconfigured curve should be refused")
+
+
+def test_initializer_accepts_the_configured_fallback_curve():
+    """MNT224 is the recorded fallback, so a faithful MNT224 group is allowed."""
+
+    def fallback(_params):
+        return stub_group(curve="MNT224", backend="charm_type3", faithful=True)
+
+    context = initializer.initialize(group_provider=fallback)
+    assert context.reportable
+    context.assert_reportable()
+    assert context.suite.pairing_curve == "MNT224"
+
+
+def test_initializer_group_precomputes_the_pairing_generator():
+    """e(g_1,g_2) is computed once, not once per authority (Phase I Step 2)."""
+    context = initializer.initialize(group_provider=stub_provider)
+    assert context.group.e_g1_g2
+
+
+def test_initializer_group_rejects_empty_elements():
+    try:
+        stub_group(g1=b"")
+    except ValueError:
+        return
+    raise AssertionError("an empty group element should be rejected")
+
+
+def test_initializer_step3_publishes_pp_to_the_ledger():
+    """Phase I Step 3: PP is assembled and anchored."""
+    context = initializer.initialize(group_provider=stub_provider)
+    chain = fresh_ledger()
+    keys = [
+        (f"AA{i}", make_public_key(f"AA{i}".encode())) for i in range(1, 5)
+    ]
+    pp = initializer.publish_public_parameters(chain, context, keys)
+    assert pp.authority_count == 4
+    assert chain.keys(ledger_mod.NS_SYSTEM_PARAMETERS) == [pp.digest().hex()]
+    assert chain.verify_chain()
+
+
+def test_initializer_step3_requires_every_authority_in_pp():
+    """PP carries {PK_i} for i = 1..N_AA; a short set is a setup bug."""
+    context = initializer.initialize(group_provider=stub_provider)
+    try:
+        initializer.build_public_parameters(
+            context, [("AA1", make_public_key(b"AA1"))]
+        )
+    except initializer.InitializationError as exc:
+        assert "N_AA=4" in str(exc)
+        return
+    raise AssertionError("PP with fewer than N_AA authority keys should be refused")
+
+
+def test_initializer_step3_pp_carries_the_suite_and_generators():
+    context = initializer.initialize(group_provider=stub_provider)
+    pp = initializer.build_public_parameters(context)
+    assert pp.suite == context.suite
+    assert pp.g1 == context.group.g1
+    assert pp.g2 == context.group.g2
+    # PP must not contain the precomputed pairing generator: Phase I Step 3
+    # lists e itself, and each PK_i carries e(g_1,g_2)^{alpha_i}.
+    assert context.group.e_g1_g2 not in pp.encode()
+
+
+def test_initializer_pp_digest_is_stable_across_contexts():
+    """Two identical initializations must agree on PP, or provenance is useless."""
+    keys = [(f"AA{i}", make_public_key(f"AA{i}".encode())) for i in range(1, 5)]
+    first = initializer.build_public_parameters(
+        initializer.initialize(group_provider=stub_provider), keys
+    )
+    second = initializer.build_public_parameters(
+        initializer.initialize(group_provider=stub_provider), keys
+    )
+    assert first.digest() == second.digest()
+
+
+def test_initializer_kem_setup_cost_is_reported_separately():
+    """Exp. 1 excludes encapsulation; it is a one-time figure with a backend tag."""
+    if not kem_available():
+        raise Skip("no ML-KEM-768 backend available")
+    cost = initializer.measure_kem_setup_cost(repetitions=3)
+    for key in ("keygen_ms", "encapsulate_ms", "decapsulate_ms", "backend"):
+        assert key in cost
+    assert cost["repetitions"] == 3
+    assert all(
+        cost[k] > 0 for k in ("keygen_ms", "encapsulate_ms", "decapsulate_ms")
+    )
 
 
 # ===========================================================================
