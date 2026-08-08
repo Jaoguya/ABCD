@@ -35,6 +35,7 @@ from Common.crypto import kem as kem_mod  # noqa: E402
 from Common.crypto import symmetric  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src import types  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.aim import aim as aim_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.authority import keygen as keygen_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.user import delivery as delivery_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.user import profile as profile_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.user import registration as reg_mod  # noqa: E402
@@ -920,6 +921,469 @@ def test_profile_carries_no_key_material():
     encoded = vap.encode()
     assert marker not in encoded
     assert authorities[0].master_key.alpha not in encoded
+
+
+# ===========================================================================
+# authority/keygen.py — Phase III Step 2 (RW15 multi-authority KeyGen)
+# ===========================================================================
+class StubABEOperations(base.StubGroupOperations):
+    """Group arithmetic for tests only. NOT a group.
+
+    Hash-based stand-ins for exponentiation, multiplication and hash-to-G_1.
+    They are deterministic and injective enough to test the *structure* and the
+    *bindings* of SK_{U,i} — which component depends on which input — and nothing
+    more. No algebraic identity of a real bilinear group holds here, so no test
+    below asserts one. Verifying the construction against real group algebra
+    needs the charm Type-III backend on the experiment host.
+
+    Lives in the test file, never in src/, for the same reason as the stub group
+    provider: src must contain no path that mints a key without a real backend.
+    """
+
+    def multiply_g1(self, left: bytes, right: bytes) -> bytes:
+        return types.hashes.sha256(left, right, domain=b"test/g1-mul")
+
+    def hash_to_g1(self, data: bytes) -> bytes:
+        return types.hashes.sha256(data, domain=b"test/g1-hash")
+
+
+class FixedRandomnessABEOperations(StubABEOperations):
+    """Stub ops with a CONSTANT t_u.
+
+    Removing the per-attribute randomness is what lets a test isolate the
+    H(UID)^{beta_i} collusion-resistance term: with t_u fixed, any difference
+    between two users' keys must come from the identity binding rather than from
+    fresh randomness.
+    """
+
+    def random_exponent(self) -> bytes:
+        return b"fixed-exponent-for-isolation"
+
+
+def keygen_authority(authority_id: str = "AA1", domain: str = "hospital"):
+    """An authority whose keys came from the stub group."""
+    return base.make_authority(authority_id, domain)
+
+
+def test_keygen_is_blocked_without_group_operations():
+    """No Type-III backend yet: KeyGen must refuse, not invent arithmetic.
+
+    Catches ``AuthorityError`` rather than ``KeyGenError`` specifically: the
+    first operation KeyGen needs is ``exponentiate_g1``, which
+    ``UnavailableABEOperations`` inherits from Phase I Step 2's unavailable
+    operations, so the raise legitimately comes from there. Both are
+    ``AuthorityError`` and both name the same missing backend — re-wrapping it
+    into a KeyGen-specific type would obscure the shared cause.
+    """
+    authority = keygen_authority()
+    try:
+        keygen_mod.issue_key_share(
+            authority, uid="DU-1", attributes=authority.attributes[:2]
+        )
+    except base.authority_mod.AuthorityError as exc:
+        assert "backend_implemented" in str(exc)
+        return
+    raise AssertionError("KeyGen must raise with no group operations")
+
+
+def test_keygen_produces_one_component_pair_per_attribute():
+    """SK_{U,i} covers exactly S_{U,i}, in sorted order."""
+    authority = keygen_authority()
+    granted = tuple(sorted(authority.attributes[:3]))
+    key = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=granted,
+        operations=StubABEOperations(),
+    )
+    assert key.attributes == granted
+    assert len(key.components) == 3
+    for component in key.components:
+        assert component.k and component.k_prime
+        assert component.k != component.k_prime
+
+
+def test_keygen_binds_each_component_to_its_attribute():
+    """F(u)^{t_u} means a component must depend on which attribute it is for."""
+    authority = keygen_authority()
+    key = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=authority.attributes[:4],
+        operations=FixedRandomnessABEOperations(),   # t_u constant
+    )
+    # With t_u fixed, K_u still differs per attribute — only F(u) can do that.
+    assert len({component.k for component in key.components}) == 4
+    # K'_u = g_1^{t_u} does NOT depend on the attribute, so with t fixed they
+    # coincide. Asserting this pins down which component carries F(u).
+    assert len({component.k_prime for component in key.components}) == 1
+
+
+def test_keygen_uses_fresh_randomness_per_attribute():
+    """RW15 draws t_u per attribute, not once per key.
+
+    ``K'_u = g_1^{t_u}`` depends on nothing but ``t_u``, so under real (varying)
+    randomness the components' ``K'`` values must all differ. Paired with
+    ``binds_each_component_to_its_attribute``, which holds t constant and asserts
+    they coincide, this pins down exactly where t_u enters — and it is what
+    catches a single t shared across the whole key, which the per-issuance test
+    cannot see because two issuances differ either way.
+    """
+    authority = keygen_authority()
+    key = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=authority.attributes[:4],
+        operations=StubABEOperations(),
+    )
+    k_primes = [component.k_prime for component in key.components]
+    assert len(set(k_primes)) == 4, "t_u is shared across attributes"
+
+
+def test_keygen_is_randomised_per_issuance():
+    """Re-issuing the same set must not reproduce the key.
+
+    Otherwise two deliveries of one attribute set would be interchangeable, and
+    a revoked key would remain valid after reissue.
+    """
+    authority = keygen_authority()
+    operations = StubABEOperations()
+    granted = authority.attributes[:3]
+    first = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=granted,
+        operations=operations,
+    )
+    second = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=granted,
+        operations=operations,
+    )
+    assert first.attributes == second.attributes
+    assert [c.k for c in first.components] != [c.k for c in second.components]
+
+
+def test_keygen_binds_to_the_user_identity():
+    """H(UID)^{beta_i} — the collusion-resistance term, isolated.
+
+    With t_u held constant, two users granted the SAME attributes must still
+    receive different K_u. Any difference can only come from the identity
+    binding, so this fails if H(UID)^{beta_i} is dropped — where a test relying
+    on fresh t_u would keep passing.
+    """
+    authority = keygen_authority()
+    granted = authority.attributes[:3]
+    keys = [
+        keygen_mod.key_generation(
+            authority.master_key,
+            authority.public_key,
+            authority_id=authority.authority_id,
+            uid=uid,
+            attributes=granted,
+            operations=FixedRandomnessABEOperations(),
+        )
+        for uid in ("DU-1", "DU-2")
+    ]
+    assert keys[0].attributes == keys[1].attributes
+    for left, right in zip(keys[0].components, keys[1].components):
+        assert left.k != right.k, "K_u is not bound to the user identity"
+    # K'_u = g_1^{t_u} carries no identity, so with t fixed it is shared. That
+    # is correct, and it confirms the identity binding lives in K_u alone.
+    assert [c.k_prime for c in keys[0].components] == [
+        c.k_prime for c in keys[1].components
+    ]
+
+
+def test_keygen_binds_to_the_issuing_authority():
+    """Two authorities issuing the same attribute names produce different keys."""
+    context = base.initializer.initialize(group_provider=base.stub_provider)
+    first = base.make_authority("AA1", "hospital", context=context)
+    second = base.make_authority("AA2", "laboratory", context=context)
+    shared_attributes = ("shared:a", "shared:b")
+    keys = [
+        keygen_mod.key_generation(
+            authority.master_key,
+            authority.public_key,
+            authority_id=authority.authority_id,
+            uid="DU-1",
+            attributes=shared_attributes,
+            operations=FixedRandomnessABEOperations(),
+        )
+        for authority in (first, second)
+    ]
+    for left, right in zip(keys[0].components, keys[1].components):
+        assert left.k != right.k
+
+
+def test_keygen_hash_domains_separate_identities_from_attributes():
+    """F(u) must not collide with H(UID) when a name is shared."""
+    assert keygen_mod._identity_input("shared") != keygen_mod._attribute_input(
+        "shared"
+    )
+
+
+def test_keygen_refuses_an_empty_attribute_set():
+    authority = keygen_authority()
+    try:
+        keygen_mod.key_generation(
+            authority.master_key,
+            authority.public_key,
+            authority_id=authority.authority_id,
+            uid="DU-1",
+            attributes=[],
+            operations=StubABEOperations(),
+        )
+    except keygen_mod.KeyGenError:
+        return
+    raise AssertionError("an empty attribute set should be refused")
+
+
+def test_keygen_enforces_the_subset_rule_at_issuance():
+    """S_{U,i} subseteq A_i, checked where the key is actually minted."""
+    authority = keygen_authority()
+    try:
+        keygen_mod.issue_key_share(
+            authority,
+            uid="DU-1",
+            attributes=["AA2:not-mine"],
+            operations=StubABEOperations(),
+        )
+    except keygen_mod.KeyGenError as exc:
+        assert "outside its namespace" in str(exc)
+        return
+    raise AssertionError("issuing outside A_i must be refused")
+
+
+def test_keygen_key_material_round_trips():
+    """The user must recover exactly the key that was issued."""
+    authority = keygen_authority()
+    share = keygen_mod.issue_key_share(
+        authority,
+        uid="DU-1",
+        attributes=authority.attributes[:4],
+        operations=StubABEOperations(),
+    )
+    recovered = keygen_mod.recover_key(share)
+    assert recovered.authority_id == authority.authority_id
+    assert recovered.uid == "DU-1"
+    assert recovered.attributes == tuple(sorted(authority.attributes[:4]))
+    assert len(recovered.components) == 4
+
+
+def test_keygen_key_material_pairs_elements_with_the_right_attributes():
+    """Elements are positional, so a desync would silently mis-assign components."""
+    authority = keygen_authority()
+    key = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=authority.attributes[:3],
+        operations=StubABEOperations(),
+    )
+    share = types.AttributeKeyShare(
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=key.attributes,
+        key_material=key.to_key_material(),
+    )
+    recovered = keygen_mod.recover_key(share)
+    assert recovered.components == key.components
+
+
+def test_keygen_key_material_rejects_a_length_mismatch():
+    authority = keygen_authority()
+    key = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=authority.attributes[:3],
+        operations=StubABEOperations(),
+    )
+    try:
+        keygen_mod.RWAttributeKey.from_key_material(
+            authority_id="AA1",
+            uid="DU-1",
+            attributes=("only", "two"),          # key holds three
+            raw=key.to_key_material(),
+        )
+    except types.EncodingError as exc:
+        assert "expected" in str(exc)
+        return
+    raise AssertionError("an element/attribute count mismatch should be refused")
+
+
+def test_keygen_key_material_rejects_trailing_bytes():
+    authority = keygen_authority()
+    share = keygen_mod.issue_key_share(
+        authority,
+        uid="DU-1",
+        attributes=authority.attributes[:2],
+        operations=StubABEOperations(),
+    )
+    tampered = types.AttributeKeyShare(
+        authority_id=share.authority_id,
+        uid=share.uid,
+        attributes=share.attributes,
+        key_material=share.key_material + b"\x00",
+    )
+    try:
+        keygen_mod.recover_key(tampered)
+    except types.EncodingError as exc:
+        assert "trailing" in str(exc)
+        return
+    raise AssertionError("trailing bytes in key material should be refused")
+
+
+def test_keygen_master_key_never_appears_in_the_share():
+    """MSK_i must not be recoverable from what leaves the authority."""
+    authority = keygen_authority()
+    share = keygen_mod.issue_key_share(
+        authority,
+        uid="DU-1",
+        attributes=authority.attributes[:3],
+        operations=StubABEOperations(),
+    )
+    assert authority.master_key.alpha not in share.key_material
+    assert authority.master_key.beta not in share.key_material
+
+
+def test_keygen_attribute_key_repr_redacts():
+    authority = keygen_authority()
+    key = keygen_mod.key_generation(
+        authority.master_key,
+        authority.public_key,
+        authority_id=authority.authority_id,
+        uid="DU-1",
+        attributes=authority.attributes[:2],
+        operations=StubABEOperations(),
+    )
+    text = repr(key)
+    assert "redacted" in text
+    assert key.components[0].k.hex() not in text
+
+
+# -- integration: Steps 1-3 in one authority-side call ----------------------
+def test_keygen_issue_and_deliver_round_trip():
+    """Validate, generate, seal, open, recover — Phase III Steps 1-3."""
+    require_kem()
+    authority = keygen_authority()
+    user = make_user(role="physician")
+    receipt = keygen_mod.issue_and_deliver(
+        authority,
+        user.request(),
+        policy=reg_mod.RolePrefixPolicy(
+            accepted_roles=("physician",),
+            attributes_per_role=3,
+            domain=authority.domain,
+        ),
+        operations=StubABEOperations(),
+    )
+    opened = delivery_mod.open_key_delivery(
+        receipt.delivery, user.decapsulation_key, expected_uid=user.uid
+    )
+    user.accept_share(opened)
+    recovered = keygen_mod.recover_key(opened)
+    assert len(recovered.components) == 3
+    assert set(recovered.attributes) <= set(authority.attributes)
+    assert user.attribute_set() == recovered.attributes
+
+
+def test_keygen_issue_and_deliver_binds_the_authority_version():
+    """A key issued before a revocation must not pass as one issued after."""
+    require_kem()
+    authority = keygen_authority()
+    user = make_user(role="physician")
+    policy = reg_mod.RolePrefixPolicy(
+        accepted_roles=("physician",),
+        attributes_per_role=2,
+        domain=authority.domain,
+    )
+    before = keygen_mod.issue_and_deliver(
+        authority, user.request(), policy=policy, operations=StubABEOperations()
+    )
+    assert before.delivery.vid == 0
+
+    authority.revocation.revoke("patient-7")
+    authority.vid += 1
+    after = keygen_mod.issue_and_deliver(
+        authority, user.request(), policy=policy, operations=StubABEOperations()
+    )
+    assert after.delivery.vid == 1
+    # The old delivery still opens at its own version, and the AEAD binding stops
+    # it being presented as the new one.
+    assert delivery_mod.open_key_delivery(before.delivery, user.decapsulation_key)
+    replayed = types.EncryptedKeyDelivery(
+        authority_id=before.delivery.authority_id,
+        uid=before.delivery.uid,
+        vid=1,
+        kem_ciphertext=before.delivery.kem_ciphertext,
+        sealed_key=before.delivery.sealed_key,
+    )
+    try:
+        delivery_mod.open_key_delivery(replayed, user.decapsulation_key)
+    except delivery_mod.DeliveryAuthenticationError:
+        return
+    raise AssertionError("a key delivery must not replay across versions")
+
+
+def test_keygen_issue_and_deliver_refuses_before_minting_a_key():
+    """Validation precedes generation, so a refusal mints nothing."""
+    require_kem()
+    authority = keygen_authority()
+    user = make_user(role="janitor")
+    try:
+        keygen_mod.issue_and_deliver(
+            authority,
+            user.request(),
+            policy=reg_mod.RolePrefixPolicy(
+                accepted_roles=("physician",),
+                attributes_per_role=2,
+                domain=authority.domain,
+            ),
+            operations=UnmintableOperations(),   # would raise if reached
+        )
+    except reg_mod.CredentialRejected:
+        return
+    raise AssertionError("a refused request must not reach key generation")
+
+
+class UnmintableOperations(StubABEOperations):
+    """Raises on any operation, so entering key generation at all is detected.
+
+    key_generation's first call is exponentiate_g1, not random_exponent, so every
+    method has to raise for this to be a real tripwire.
+    """
+
+    _MESSAGE = "key generation should not have been reached"
+
+    def random_exponent(self) -> bytes:
+        raise AssertionError(self._MESSAGE)
+
+    def exponentiate_g1(self, base_element: bytes, exponent: bytes) -> bytes:
+        raise AssertionError(self._MESSAGE)
+
+    def exponentiate_gt(self, base_element: bytes, exponent: bytes) -> bytes:
+        raise AssertionError(self._MESSAGE)
+
+    def multiply_g1(self, left: bytes, right: bytes) -> bytes:
+        raise AssertionError(self._MESSAGE)
+
+    def hash_to_g1(self, data: bytes) -> bytes:
+        raise AssertionError(self._MESSAGE)
 
 
 # ===========================================================================
