@@ -458,6 +458,290 @@ class AuthorizationMeta(Record):
         return (self.domain, self.vid, self.commitment)
 
 
+# ===========================================================================
+# Phase III — User Registration and Version-Bound Authorization Profile
+# ===========================================================================
+@dataclass(frozen=True)
+class UserRequest(Record):
+    """``Req_U = (UID, Dom, Role, Cred)`` — Phase III Step 1.
+
+    ``kem_encapsulation_key`` is ``pk_U^KEM``, which the manuscript introduces in
+    Step 3 without saying who generates it or how it reaches the authority. It is
+    carried here, inside the authenticated request, for a security reason rather
+    than convenience: Step 3 encrypts ``SK_{U,i}`` to whatever ``pk_U^KEM`` the
+    authority holds, so an unbound KEM key could be substituted by an adversary
+    who would then receive the user's attribute keys. Binding it into ``Req_U``
+    makes the substitution visible. The user is also the only party that can hold
+    the matching decapsulation key, so the user is the only party that can
+    generate it.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"user-request/v1"
+
+    uid: str
+    domain: str
+    role: str
+    credential: bytes
+    kem_encapsulation_key: bytes
+
+    def __post_init__(self) -> None:
+        _check_identifier("uid", self.uid)
+        _check_identifier("domain", self.domain)
+        _check_identifier("role", self.role)
+        for name in ("credential", "kem_encapsulation_key"):
+            value = getattr(self, name)
+            if not isinstance(value, (bytes, bytearray)):
+                raise TypeError(f"{name} must be bytes")
+            if not value:
+                raise ValueError(f"{name} must not be empty")
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (
+            self.uid,
+            self.domain,
+            self.role,
+            self.credential,
+            self.kem_encapsulation_key,
+        )
+
+
+@dataclass(frozen=True)
+class AttributeKeyShare:
+    """``SK_{U,i} <- KeyGen(MSK_i, S_{U,i})`` — Phase III Step 2. NEVER published.
+
+    Deliberately NOT a :class:`Record`, on the same grounds as
+    :class:`AuthorityMasterKey`: this is user secret key material, so it must not
+    be reachable by anything that publishes. ``encode`` and ``digest`` raise.
+
+    Sealing it for transport is the one legitimate serialisation, and it goes
+    through :meth:`to_sealed_bytes`, whose name says what it is for. Phase III
+    Step 3 is the only caller.
+
+    ``key_material`` is **opaque** here. The manuscript gives ``KeyGen`` as an
+    interface and never defines the structure of ``SK_{U,i}``
+    (see ``PHASE_III_PLAN.md`` open decision 1), so this layer carries whatever
+    the ABE construction produces without asserting a shape it has no basis for.
+    """
+
+    authority_id: str
+    uid: str
+    attributes: Tuple[str, ...]
+    key_material: bytes
+
+    def __post_init__(self) -> None:
+        _check_identifier("authority_id", self.authority_id)
+        _check_identifier("uid", self.uid)
+        if not self.attributes:
+            raise ValueError("an attribute key share must cover at least one attribute")
+        if len(set(self.attributes)) != len(self.attributes):
+            raise ValueError("duplicate attribute in the key share")
+        if not isinstance(self.key_material, (bytes, bytearray)):
+            raise TypeError("key_material must be bytes")
+        if not self.key_material:
+            raise ValueError("key_material must not be empty")
+
+    def encode(self) -> bytes:  # pragma: no cover - exists to raise
+        raise SecretMaterialError(
+            "SK_{U,i} is user secret key material and has no published encoding; "
+            "use to_sealed_bytes() and seal it under a per-delivery key"
+        )
+
+    def digest(self) -> bytes:  # pragma: no cover - exists to raise
+        raise SecretMaterialError("refusing to digest user secret key material")
+
+    def to_sealed_bytes(self) -> bytes:
+        """Canonical bytes for AEAD sealing in Phase III Step 3 ONLY.
+
+        Not a publication path: the result is only ever passed to
+        ``AES-256-GCM.Enc`` under a key derived from a per-user ML-KEM shared
+        secret. The authority and attribute set travel with the key material so
+        the recipient can verify it received the share it expected.
+        """
+        return canonical(
+            [self.authority_id, self.uid, sorted(self.attributes), self.key_material]
+        )
+
+    @classmethod
+    def from_sealed_bytes(cls, raw: bytes) -> "AttributeKeyShare":
+        """Inverse of :meth:`to_sealed_bytes`, for the receiving user."""
+        authority_id, uid, attributes, key_material = _decode_sealed_share(raw)
+        return cls(
+            authority_id=authority_id,
+            uid=uid,
+            attributes=tuple(attributes),
+            key_material=key_material,
+        )
+
+    def __repr__(self) -> str:
+        return (
+            f"AttributeKeyShare(authority_id={self.authority_id!r}, "
+            f"uid={self.uid!r}, |S_U,i|={len(self.attributes)}, "
+            f"key_material=<redacted>)"
+        )
+
+    __str__ = __repr__
+
+
+@dataclass(frozen=True)
+class EncryptedKeyDelivery(Record):
+    """Phase III Step 3 output: ``(ct_i, EncKey_i)`` bound to its recipient.
+
+    A :class:`Record`, unlike the share it carries: this is ciphertext, so it can
+    be transported and audited. ``uid``, ``authority_id`` and ``vid`` are the
+    values bound into the HKDF ``info`` and the AEAD associated data, carried
+    alongside so the recipient can derive the same key and so a delivery cannot
+    be replayed to a different user or across a version change.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"key-delivery/v1"
+
+    authority_id: str
+    uid: str
+    vid: int
+    kem_ciphertext: bytes
+    sealed_key: bytes
+
+    def __post_init__(self) -> None:
+        _check_identifier("authority_id", self.authority_id)
+        _check_identifier("uid", self.uid)
+        _check_vid(self.vid)
+        for name in ("kem_ciphertext", "sealed_key"):
+            value = getattr(self, name)
+            if not isinstance(value, (bytes, bytearray)):
+                raise TypeError(f"{name} must be bytes")
+            if not value:
+                raise ValueError(f"{name} must not be empty")
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (
+            self.authority_id,
+            self.uid,
+            self.vid,
+            self.kem_ciphertext,
+            self.sealed_key,
+        )
+
+    @property
+    def size_bytes(self) -> int:
+        return len(self.kem_ciphertext) + len(self.sealed_key)
+
+
+@dataclass(frozen=True)
+class VersionBoundAuthorizationProfile(Record):
+    """``VAP_U = (UID, D_U, AuthRoot_U, VID_U, C_U)`` — Phase III Step 4.
+
+    Authorization metadata, not key material: the AIM maintains it, and the AIM
+    is not trusted with keys. ``domains`` and ``commitments`` are stored in
+    canonical sorted order so the profile's digest does not depend on the order
+    the user's authorities were enumerated in.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"vap/v1"
+
+    uid: str
+    domains: Tuple[str, ...]
+    auth_root: bytes
+    vid: int
+    commitments: Tuple[bytes, ...]
+
+    def __post_init__(self) -> None:
+        _check_identifier("uid", self.uid)
+        _check_digest("auth_root", self.auth_root)
+        _check_vid(self.vid)
+        if not self.domains:
+            raise ValueError("D_U must name at least one authorized domain")
+        if list(self.domains) != sorted(self.domains):
+            raise ValueError(
+                "domains must be sorted so the VAP digest is order-independent; "
+                "use profile.build_profile()"
+            )
+        if len(set(self.domains)) != len(self.domains):
+            raise ValueError("duplicate domain in D_U")
+        if not self.commitments:
+            raise ValueError("C_U must contain at least one authority commitment")
+        if list(self.commitments) != sorted(self.commitments):
+            raise ValueError(
+                "commitments must be sorted so H(C_U) is order-independent; "
+                "use profile.build_profile()"
+            )
+        for commitment in self.commitments:
+            _check_digest("commitment", commitment)
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (
+            self.uid,
+            list(self.domains),
+            self.auth_root,
+            self.vid,
+            list(self.commitments),
+        )
+
+    @property
+    def authority_count(self) -> int:
+        """``N_U`` — the number of participating Attribute Authorities."""
+        return len(self.commitments)
+
+
+def _decode_sealed_share(raw: bytes) -> Tuple[str, str, list, bytes]:
+    """Minimal decoder for :meth:`AttributeKeyShare.to_sealed_bytes`.
+
+    Deliberately narrow: it reverses exactly the one encoding it has to, rather
+    than being a general canonical decoder. A general decoder would be a second
+    parser for the format every commitment in the scheme depends on, and the
+    encoder is the only side that needs to be trusted for those.
+    """
+    view = memoryview(raw)
+    offset = 0
+
+    def read_tag(expected: bytes) -> None:
+        nonlocal offset
+        tag = bytes(view[offset : offset + 1])
+        if tag != expected:
+            raise EncodingError(
+                f"sealed share: expected tag {expected.hex()} at offset {offset}, "
+                f"got {tag.hex()}"
+            )
+        offset += 1
+
+    def read_length() -> int:
+        nonlocal offset
+        length = int.from_bytes(view[offset : offset + 4], "big")
+        offset += 4
+        return length
+
+    def read_str() -> str:
+        read_tag(_T_STR)
+        length = read_length()
+        nonlocal offset
+        value = bytes(view[offset : offset + length]).decode("utf-8")
+        offset += length
+        return value
+
+    def read_bytes() -> bytes:
+        read_tag(_T_BYTES)
+        length = read_length()
+        nonlocal offset
+        value = bytes(view[offset : offset + length])
+        offset += length
+        return value
+
+    read_tag(_T_SEQ)
+    count = read_length()
+    if count != 4:
+        raise EncodingError(f"sealed share: expected 4 fields, got {count}")
+    authority_id = read_str()
+    uid = read_str()
+    read_tag(_T_SEQ)
+    attribute_count = read_length()
+    attributes = [read_str() for _ in range(attribute_count)]
+    key_material = read_bytes()
+    if offset != len(raw):
+        raise EncodingError(
+            f"sealed share: {len(raw) - offset} trailing bytes after decoding"
+        )
+    return authority_id, uid, attributes, key_material
+
+
 __all__ = [
     "DIGEST_BYTES",
     "EncodingError",
@@ -472,4 +756,8 @@ __all__ = [
     "AuthorityRegistration",
     "AuthorityState",
     "AuthorizationMeta",
+    "UserRequest",
+    "AttributeKeyShare",
+    "EncryptedKeyDelivery",
+    "VersionBoundAuthorizationProfile",
 ]
