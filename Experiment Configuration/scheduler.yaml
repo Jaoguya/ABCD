@@ -1,0 +1,154 @@
+# =============================================================================
+# scheduler.yaml — AASS scheduler parameters (proposed scheme only)
+# =============================================================================
+# Phase VI Step 3 defines the Adaptive Authorization-Aware Search Scheduling
+# score
+#
+#   SC_j = L1*C_j^auth + L2*C_j^index + L3*C_j^verify + L4*C_j^sync + L5*C_j^queue
+#   FSN* = arg min_j SC_j                                          (Alg. 1)
+#
+# README §6: the lambda weights are "**not in the paper — must be fixed**", and
+# §6 further requires: "Choose them once by a documented procedure (e.g. a
+# sweep on a held-out workload), commit that output, and leave them alone."
+# README §14 open issue #5 records them as blocking Exp. 7-8.
+#
+# THE WEIGHTS BELOW ARE NOT YET DETERMINED. `weights.status` is
+# `pending_sweep`, and code MUST refuse to produce reportable Exp. 7-8 results
+# while it holds that value (see `enforcement` at the bottom). The listed
+# values are a starting point for the sweep, not a result of it.
+#
+# AGENT_RULES "Bias Detection": no per-figure lambda retuning. One sweep, one
+# committed vector, identical across Exp. 7 and Exp. 8.
+# =============================================================================
+
+meta:
+  version: 1
+  created: 2026-08-08
+
+# -----------------------------------------------------------------------------
+# Cost terms — published, Phase VI Step 3. These are the paper's estimators and
+# must not be substituted.
+# -----------------------------------------------------------------------------
+cost_terms:
+  auth:
+    formula: "|P_Q|"                  # published: number of authorization
+                                      # policies involved in the query
+    source: aim
+  index:
+    formula: "|Cand_Q^(j)|"           # published: estimated candidate set size
+                                      # from local searchable-index statistics
+    source: fsn_index_statistics
+  verify:
+    formula: "|R_Q^(j)| * log(N_j)"   # published: predicted matching ciphertexts
+                                      # x log of FSN_j's index entry count
+    source: fsn_index_statistics
+  sync:
+    formula: "|VID_U - VID_j|"        # published: version-synchronisation cost.
+                                      # This is the term that makes the AASS
+                                      # scheduler prefer fresh FSNs
+                                      # (Phase VII Step 6).
+    source: aim_version_table
+  queue:
+    formula: "T_j^queue"              # published: current queue waiting time
+    source: fsn_queue
+
+# -----------------------------------------------------------------------------
+# Normalization — NOT IN THE PAPER, and load-bearing.
+#
+# The five published estimators have incommensurable units and magnitudes: at
+# the §6 defaults |P_Q| is O(1), |Cand_Q^(j)| is O(10^4), |R|*log N is O(10^3),
+# |VID_U - VID_j| is O(1), and T_j^queue is a time in ms. Applying raw weights
+# to raw terms would let C_index dominate SC_j by four orders of magnitude
+# regardless of the lambdas, which would make the weight vector — and therefore
+# the AASS claim — vacuous.
+#
+# Each term is therefore mapped to [0,1] before weighting, by dividing by the
+# maximum observed across the candidate FSNs for that request. This is
+# scale-free, needs no calibration constants, and keeps arg min unchanged when
+# only one term varies.
+# -----------------------------------------------------------------------------
+normalization:
+  method: max_over_candidate_fsns    # benchmark
+  # If every FSN reports the same value for a term, that term contributes
+  # equally to all of them and cannot affect arg min; it is mapped to 0 rather
+  # than 1 so it does not silently consume weight.
+  degenerate_term_value: 0.0         # benchmark
+  epsilon: 1.0e-9                    # benchmark: guards division by zero
+
+# -----------------------------------------------------------------------------
+# Weights — PENDING THE SWEEP. Do not report Exp. 7-8 from these.
+# -----------------------------------------------------------------------------
+weights:
+  status: pending_sweep              # -> `fixed` only after sweep.procedure runs
+  determined_on: null
+  determined_by: null                # commit hash of the sweep output
+  provisional: true
+  # Uniform starting point. Uniform is the honest prior: it encodes no belief
+  # that any one cost term matters more, so the sweep has to earn every
+  # deviation from it.
+  lambda_1_auth: 0.2
+  lambda_2_index: 0.2
+  lambda_3_verify: 0.2
+  lambda_4_sync: 0.2
+  lambda_5_queue: 0.2
+  sum_to_one: true                   # benchmark: with normalized terms, only
+                                     # the direction of the vector matters
+
+# -----------------------------------------------------------------------------
+# Sweep procedure — the "documented procedure" README §6 demands.
+# -----------------------------------------------------------------------------
+sweep:
+  status: not_run
+  # HELD-OUT workload: the sweep must not be tuned on the same trace that
+  # produces the reported Exp. 7-8 figures, or the reported numbers are
+  # in-sample and a reviewer is entitled to discount them.
+  workload: workload/exp78_sweep_holdout.yaml
+  reported_workload: workload/exp78_workload.yaml
+  grid:
+    step: 0.1                        # simplex grid on L1..L5 summing to 1.0
+    # 5 weights, step 0.1, summing to 1 -> C(14,4) = 1001 vectors
+    expected_vectors: 1001
+  objective:
+    # Optimizing throughput ALONE would let the scheduler pin one node at
+    # saturation while posting good aggregate numbers — precisely what Exp. 8
+    # exists to expose (README §5). The objective therefore includes both, so
+    # the weight vector cannot be chosen to flatter Exp. 7 at Exp. 8's expense.
+    primary: throughput_queries_per_second
+    constraint: fsn_utilization_stddev
+    rule: "maximize primary subject to constraint <= median across the grid"
+  tie_break: prefer_uniform          # benchmark: on ties, the vector closest to
+                                     # the uniform prior wins, so the procedure
+                                     # cannot silently pick an extreme corner
+  output: Schemes/ma_lb_pq_vdse/exp7_search_throughput/lambda_sweep.csv
+
+# -----------------------------------------------------------------------------
+# Ablation variants — README §5 / SCHEME.md. Internal ablation, NOT a
+# cross-scheme comparison. All four see byte-identical workloads.
+# -----------------------------------------------------------------------------
+variants:
+  no_lb:
+    selection: fixed_node
+    fixed_node_index: 0
+    authorization_aware: false
+  round_robin:
+    selection: cyclic
+    authorization_aware: false
+  least_loaded:
+    selection: min_queue_length
+    authorization_aware: false
+  aass:
+    selection: argmin_score
+    authorization_aware: true
+    uses_weights: true
+
+# -----------------------------------------------------------------------------
+# Enforcement — makes the "must be fixed" rule mechanical instead of a comment.
+# -----------------------------------------------------------------------------
+enforcement:
+  # Exp. 7-8 runners must raise if weights.status != "fixed" unless the run is
+  # explicitly marked non-reportable (e.g. the sweep itself, or a smoke test).
+  refuse_reportable_runs_while_pending: true
+  # AGENT_RULES: scheduler weights are fixed across Exp. 7-8. A per-experiment
+  # or per-figure override is a bias defect, not a configuration option.
+  allow_per_experiment_override: false
+  allow_per_figure_override: false

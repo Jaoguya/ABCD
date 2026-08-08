@@ -8,6 +8,16 @@ Each entry is marked *not fixed* until resolved, then updated to *fixed*.
 
 <!-- Append new entries below this line. Do not modify entries above. -->
 
+### macOS development host had no runnable Python environment for the primitive layer
+- **Date:** 2026-08-08
+- **Status:** *fixed* (development host only — the AWS experiment host is unaffected)
+- **Why it changed:** `python3 Common/crypto/tests/test_primitives.py` failed at import with `ModuleNotFoundError: No module named 'mmh3'` on the macOS development machine. Probing the interpreter showed only `numpy`, `matplotlib`, and `cryptography` present; `mmh3`, `bitarray`, `scipy`, `pyyaml`, `pandas`, `pycryptodome` and every ML-KEM backend were absent. The "Environment complete" entry of 2026-08-04 covers the Ubuntu AWS host, not this machine, so the crypto layer had never executed here.
+- **How it will improve:** Phase I of the proposed scheme instantiates `P = {H, SHA-256, AES-256-GCM, HKDF, ML-KEM}` (manuscript Phase I Step 1), so an ML-KEM backend is a precondition for writing Phase I at all, not an optional extra. The suite now runs locally, giving a fast pre-commit check before work moves to the experiment host.
+- **What changed:**
+  - Created a project-local `.venv` (already git-ignored, `.gitignore:59`) and installed the global requirements: `mmh3`, `bitarray`, `scipy`, `pandas`, `pyyaml`, `pycryptodome`, `tqdm`, `psutil`, `numpy`, `matplotlib`, `cryptography`. **No repository file was modified.**
+  - **ML-KEM** — `liboqs-python` installed but its bundled liboqs auto-build failed with `/bin/sh: cmake: command not found`. Resolved by installing the `cmake` **PyPI wheel into the venv** (cmake 4.4.2) rather than via Homebrew, keeping the toolchain inside the virtualenv and leaving the host system untouched. liboqs then built and installed to `~/_oqs`; `oqs.oqs_version()` reports **0.16.0 — the same version pinned on the AWS host**, so the dev and experiment hosts share one ML-KEM backend.
+  - **Result:** `61 passed, 4 skipped, 0 failed out of 65`. The 4 skips are all pairing (`charm-crypto` is Linux-only, `petrelic` still does not build), which affects **Ref[41] only** — no primitive needed by `ma_lb_pq_vdse` is unverified on this host. See the separate blocker below: our own MA-CP-ABE also needs a pairing backend, and no curve is configured for it yet.
+
 ### Ref[36] recovered — and requires Intel SGX
 - **Date:** 2026-08-05
 - **Status:** *fixed* (corruption) / *not fixed* (SGX requirement — needs a decision)

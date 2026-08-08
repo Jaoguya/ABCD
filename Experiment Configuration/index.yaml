@@ -1,0 +1,143 @@
+# =============================================================================
+# index.yaml — Searchable-index structure parameters
+# =============================================================================
+# README §6 lists "Bitmap / Bloom parameters" as **not in the paper — must be
+# fixed**. This file fixes them once, with the reasoning recorded, so that a
+# reviewer asking "how was this sized?" has an answer that is not "it was
+# tuned until the figure looked right".
+#
+# Provenance key:
+#   published  — stated in the proposed paper (cite the line)
+#   derived    — computed from a published value or from the frozen corpus
+#   benchmark  — a benchmark choice, NOT specified in any paper
+#
+# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING for Exp. 2, 3, 5, 7 and 8.
+# =============================================================================
+
+meta:
+  version: 1
+  created: 2026-08-08
+
+# -----------------------------------------------------------------------------
+# Corpus facts these parameters are sized against — measured, from the FROZEN
+# corpus (README §4, SHA-256 fd4b7654...). Restated here so the sizing
+# arithmetic below can be checked without opening another file. Code must read
+# these from dataset.yaml / the manifest, NOT from this block.
+# -----------------------------------------------------------------------------
+corpus_reference:
+  records: 1141072
+  keyword_universe: 2006
+  keyword_document_pairs: 36172487
+  mean_keywords_per_record: 31.70
+  domains: 4
+
+# -----------------------------------------------------------------------------
+# Dynamic Search Index (DSI) — Phase IV Step 3.
+# Index entry I_j = (T_j, CID_i, PID_i, VID_i), inserted independently so that
+# insert/delete/policy-change never rebuilds the index (Phase IV Step 3, and
+# the property Exp. 5 measures).
+# -----------------------------------------------------------------------------
+dsi:
+  # published (Phase IV Step 2): T_j = H(w_j || PID_i || VID_i || Dom_i)
+  token_hash: sha256
+  token_bits: 256               # derived: full SHA-256 output, no truncation.
+                                # Truncating would shrink the index and speed up
+                                # search — a free win that the paper does not
+                                # claim, so it is not taken.
+  entry_fields: [token, cid, pid, vid]   # published: Phase IV Step 3
+  independently_updateable: true          # published: Phase IV Step 3
+  # Every || in the construction is realised as a length-prefixed join
+  # (Common/crypto/hashes.py::_join) so that different field splits cannot
+  # collide. Costs nothing measurable; closes an ambiguity in the notation.
+  length_prefixed_concatenation: true
+
+# -----------------------------------------------------------------------------
+# Authorization-aware bitmap filtering.
+# Source: §V Experimental Setup — "Search indexes are implemented using
+# bitmap-based authorization-aware filtering combined with authenticated Merkle
+# trees". §V states the MECHANISM but no sizes; the sizes below are benchmark.
+#
+# This is the structure that produces the n_eff secondary metric of Exp. 2 —
+# the only measurement that can demonstrate the PDSI claim (README §5).
+# -----------------------------------------------------------------------------
+bitmap:
+  enabled: true                 # published: §V names bitmap-based filtering
+  # One bitmap per (domain, policy) pair over the shard's entry ordinals: the
+  # AIM intersects the user's authorized (Dom, PID) bitmaps to obtain the
+  # candidate set before any token comparison (Phase VI Step 2, "the request is
+  # rejected without traversing the encrypted index").
+  granularity: domain_policy    # benchmark: alternatives are domain-only
+                                # (coarser, weaker pruning) or per-entry
+                                # (larger than the index it filters)
+  word_bits: 64                 # benchmark: native word size, 4 vCPU x86-64
+  backend: bitarray             # benchmark: requirements.txt already pins it
+  # Compression is deliberately OFF: a compressed bitmap would make pruning
+  # cost depend on data entropy, and Exp. 2 attributes latency to n_eff.
+  compression: none             # benchmark
+  # n_eff (entries actually traversed after pruning) is reported per README §5.
+  report_n_eff: true
+
+# -----------------------------------------------------------------------------
+# Bloom filter — candidate pre-filter per index shard.
+# NOT part of the published PDSI construction; it is the standard membership
+# pre-check and is sized here for completeness because README §6 requires the
+# Bloom parameters to be fixed.
+#
+# NOTE: ours is sized from OUR corpus. Ref[52]'s BF(32,3) in crypto.yaml is
+# that paper's PUBLISHED parameter and must not be copied here, nor this one
+# copied there (README §8: a shared construction means one is unfaithful).
+# -----------------------------------------------------------------------------
+bloom:
+  enabled: true                 # benchmark
+  # Sized for the default shard: index_size 10^5 / 4 FSNs = 25,000 entries per
+  # shard, at 10 bits per entry -> 250,000 bits, which gives a ~1% false
+  # positive rate at the optimal k.
+  bits_per_entry: 10            # benchmark: standard ~1% FPR sizing
+  target_false_positive_rate: 0.01   # benchmark
+  num_hashes: 7                 # derived: k = ln(2) * m/n = 0.693 * 10 = 6.93 -> 7
+  hash: mmh3                    # benchmark: matches Common/crypto/bloom.py
+  # A false positive costs one wasted entry comparison, never a wrong result:
+  # the token comparison behind it is exact. Recorded so a reviewer can see
+  # the filter cannot manufacture matches.
+  false_positives_are_safe: true
+
+# -----------------------------------------------------------------------------
+# Shard assignment across Fog Search Nodes.
+# Determines what Exp. 8 measures: if shards are unbalanced, utilization spread
+# reflects the partitioning rather than the scheduler.
+# -----------------------------------------------------------------------------
+sharding:
+  shards: 4                     # published: §V, one shard set per FSN (m=4)
+  key: domain                   # benchmark: shard by administrative domain, so
+                                # authorization locality is real (it is an input
+                                # to C_j^auth in the AASS score) rather than
+                                # simulated. The frozen corpus has EXACTLY
+                                # 285,268 records per domain, so domain
+                                # sharding is also balanced by construction.
+  # With d > m (Exp. 3 sweeps d to 10) domains are packed onto FSNs
+  # largest-first, the same rule Dataset/prepare_dataset.py uses for domains.
+  overflow_policy: pack_largest_first   # benchmark
+  replication: 1                # benchmark: no replication; the paper claims no
+                                # replica-based availability, and replicas would
+                                # give the scheduler a choice it does not have.
+
+# -----------------------------------------------------------------------------
+# Merkle commitment structure — Phase IV Step 4 / Phase VII Step 4.
+# -----------------------------------------------------------------------------
+merkle:
+  hash: sha256                  # published: §V "SHA-256 for hashing and
+                                # Merkle-tree construction"
+  batch_scope: per_record       # published: Phase IV Step 4 — "batches all
+                                # index entries associated with ONE IoMT record
+                                # into a Merkle tree"
+  leaf: "H(I_j)"                # published: Phase IV Step 4
+  # published (Phase VII Step 4): Root' = MerkleUpdate(Root, L_delta), i.e.
+  # only the affected authentication paths are recomputed. A full rebuild is a
+  # Phase VII implementation bug (README §5, Exp. 5 rule).
+  incremental_update: true
+  domain_separated_leaves: true # derived: Common/crypto/merkle.py prefixes
+                                # leaves 0x00 and nodes 0x01
+  odd_leaf_policy: promote      # derived: merkle.py promotes rather than
+                                # duplicating the last leaf (duplication admits
+                                # a known second-preimage on the root)
+  report_proof_metrics: true    # README §5 Exp. 4: proof size (KB), path length
