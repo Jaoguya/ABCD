@@ -42,6 +42,7 @@ from Schemes.ma_lb_pq_vdse.src.fsn import fsn as fsn_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import commit as commit_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import dsi as dsi_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import extract as extract_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.index import tokens as tokens_mod  # noqa: E402
 
 
 try:  # Make skips register as real skips when run under pytest.
@@ -832,15 +833,419 @@ def test_phase_iv_end_to_end_without_step_2():
                 assert entry.policy_id.split("/")[0] in shard.domains
 
 
-def test_phase_iv_no_module_constructs_a_token():
-    """Step 2 is an open decision; nothing here may have quietly decided it.
+def test_phase_iv_tokenization_lives_only_in_tokens_py():
+    """Step 2 has exactly one home.
 
-    Checked structurally: neither index module exposes a token-building entry
-    point, so the matching relation cannot have been settled in passing.
+    Was written when Step 2 was undecided, to prove no module had settled the
+    matching relation in passing. It still holds now that tokens.py exists: the
+    other three modules must not grow a second, divergent token construction —
+    two definitions of T_j is one too many, as with C_i^auth and Commit_i.
     """
     for module in (dsi_mod, commit_mod, extract_mod):
         names = {n for n in dir(module) if not n.startswith("_")}
         assert not {"index_token", "query_token", "encode_keyword"} & names
+    assert hasattr(tokens_mod.TokenScheme, "index_token")
+
+
+# ===========================================================================
+# index/tokens.py — Phase IV Step 2, Option D
+# ===========================================================================
+SEARCH_KEY = hashes.sha256(b"test-search-key", domain=b"test/search-key")
+
+
+def keyed_scheme() -> tokens_mod.TokenScheme:
+    return tokens_mod.TokenScheme.keyed(SEARCH_KEY)
+
+
+def test_tokens_index_and_query_tokens_are_identical():
+    """THE Option D property: T_j == T_Q, so matching is an equality.
+
+    Phase VI Step 4's relation was an undefined arrow; Option D makes it equality,
+    and that is what lets one trapdoor serve every domain (Exp. 3).
+    """
+    scheme = keyed_scheme()
+    for keyword in ("cond:44054006", "obs:8867-4:b3", "med:1049502"):
+        assert scheme.index_token(keyword) == scheme.query_token(keyword)
+
+
+def test_tokens_do_not_depend_on_policy_version_or_domain():
+    """The change Option D makes, asserted directly.
+
+    The published token bound all three. Under Option D none of them can reach
+    the lookup key — there is no parameter by which they could — so the same
+    keyword in two policies, two versions, or two domains yields one token.
+    """
+    scheme = keyed_scheme()
+    token = scheme.index_token("cond:44054006")
+    # A token is a function of the keyword alone: no signature accepts policy,
+    # version or domain, so re-deriving under any of them is identical.
+    assert scheme.index_token("cond:44054006") == token
+    # And the policy tag — which does bind them — is a different value entirely.
+    for policy_id, vid, domain in (
+        ("dom0/pol0", 0, "dom0"),
+        ("dom0/pol1", 1, "dom1"),
+    ):
+        tag = scheme.policy_tag(policy_id=policy_id, vid=vid, domain=domain)
+        assert tag != token
+
+
+def test_tokens_survive_a_version_bump():
+    """No version in the token: skew degrades results instead of zeroing them.
+
+    With a version-bearing token, any VID_U != VID_i yields zero matches — a
+    silent empty answer. It also means an authority version bump would
+    re-tokenize its whole domain (~9.0M entries).
+    """
+    scheme = keyed_scheme()
+    shard, extracted = indexed_shard_tokenized(scheme, records=1, keywords=5)
+    record = extracted[0]
+    token = scheme.query_token(record.keywords[0])
+    postings_before = dict(shard._postings)
+
+    shard.repolicy(0, policy_id=f"{record.domain}/pol-new", vid=99)
+    assert shard._postings == postings_before
+    assert scheme.query_token(record.keywords[0]) == token
+
+
+def test_tokens_are_deterministic_and_distinct():
+    scheme = keyed_scheme()
+    assert scheme.index_token("a") == scheme.index_token("a")
+    assert scheme.index_token("a") != scheme.index_token("b")
+
+
+def test_tokens_cannot_be_reframed_across_keywords():
+    """canonical() length-prefixes, so no two keywords collide by framing."""
+    scheme = keyed_scheme()
+    assert scheme.index_token("ab") != scheme.index_token("a")
+
+
+def test_tokens_require_an_explicit_keyed_or_unkeyed_choice():
+    """No default: keying H is a security decision AND an Exp. 1 cost decision."""
+    try:
+        tokens_mod.TokenScheme()  # type: ignore[call-arg]
+    except TypeError:
+        return
+    raise AssertionError("TokenScheme must not have a default keying mode")
+
+
+def test_tokens_keyed_and_unkeyed_differ():
+    keyword = "cond:44054006"
+    assert (
+        keyed_scheme().index_token(keyword)
+        != tokens_mod.TokenScheme.unkeyed().index_token(keyword)
+    )
+
+
+def test_tokens_keyed_scheme_depends_on_the_key():
+    other = hashes.sha256(b"another-key", domain=b"test/search-key")
+    assert keyed_scheme().index_token("a") != tokens_mod.TokenScheme.keyed(
+        other
+    ).index_token("a")
+
+
+def test_tokens_unkeyed_is_invertible_by_dictionary_attack():
+    """The concrete risk, demonstrated rather than asserted.
+
+    The frozen corpus has a 2,006-keyword vocabulary. An honest-but-curious node
+    holding unkeyed tokens recovers every keyword by hashing that vocabulary —
+    2,006 evaluations. Simulated here at a smaller scale; the arithmetic is the
+    same.
+    """
+    scheme = tokens_mod.TokenScheme.unkeyed()
+    vocabulary = [f"cond:{i:06d}" for i in range(500)]
+    observed = scheme.index_token(vocabulary[137])
+
+    rainbow = {scheme.index_token(word): word for word in vocabulary}
+    assert rainbow[observed] == vocabulary[137]   # keyword fully recovered
+
+
+def test_tokens_keyed_resists_the_same_dictionary_attack():
+    """Without the key the same attack recovers nothing."""
+    scheme = keyed_scheme()
+    vocabulary = [f"cond:{i:06d}" for i in range(500)]
+    observed = scheme.index_token(vocabulary[137])
+
+    attacker = tokens_mod.TokenScheme.unkeyed()
+    rainbow = {attacker.index_token(word): word for word in vocabulary}
+    assert observed not in rainbow
+
+
+def test_tokens_reject_a_short_search_key():
+    """crypto.yaml fixes prf.key_bits: 256."""
+    try:
+        tokens_mod.TokenScheme.keyed(b"too-short")
+    except tokens_mod.TokenError as exc:
+        assert "32 bytes" in str(exc)
+        return
+    raise AssertionError("a short search key should be refused")
+
+
+def test_tokens_reject_an_empty_keyword():
+    try:
+        keyed_scheme().index_token("")
+    except tokens_mod.TokenError:
+        return
+    raise AssertionError("an empty keyword should be refused")
+
+
+def test_tokens_are_full_width_by_default():
+    """index.yaml sets token_bits: 256 — truncating would be an unclaimed win."""
+    scheme = keyed_scheme()
+    assert scheme.token_bits == 256
+    assert len(scheme.index_token("a")) == 32
+
+
+def test_tokens_honour_a_configured_width():
+    narrow = tokens_mod.TokenScheme.keyed(SEARCH_KEY, token_bits=128)
+    assert len(narrow.index_token("a")) == 16
+    for bad in (0, 300, 100):        # zero, over 256, not a byte multiple
+        try:
+            tokens_mod.TokenScheme.keyed(SEARCH_KEY, token_bits=bad)
+        except tokens_mod.TokenError:
+            continue
+        raise AssertionError(f"token_bits={bad} should be refused")
+
+
+def test_tokens_from_config_matches_index_yaml():
+    config = config_mod.load()
+    scheme = tokens_mod.TokenScheme.from_config(config, SEARCH_KEY)
+    assert scheme.token_bits == config.index.token_bits == 256
+    assert scheme.is_keyed
+
+
+def test_tokens_repr_flags_the_unkeyed_mode():
+    """An unkeyed scheme should be visible in a log, not silently ordinary."""
+    assert "UNKEYED" in repr(tokens_mod.TokenScheme.unkeyed())
+    assert "UNKEYED" not in repr(keyed_scheme())
+
+
+# -- the policy tag ---------------------------------------------------------
+def test_policy_tag_binds_all_three_inputs():
+    """PolicyTag_i = H(PID_i || VID_i || Dom_i): three assertions."""
+    scheme = keyed_scheme()
+    kwargs = dict(policy_id="dom0/pol0", vid=1, domain="dom0")
+    base = scheme.policy_tag(**kwargs)
+    for name, replacement in (
+        ("policy_id", "dom0/pol1"),
+        ("vid", 2),
+        ("domain", "dom1"),
+    ):
+        assert scheme.policy_tag(**{**kwargs, name: replacement}) != base, (
+            f"{name} not bound"
+        )
+
+
+def test_policy_tag_is_never_a_valid_lookup_key():
+    """A tag must not be presentable as a keyword token, or one could search for
+    a policy instead of a keyword.
+
+    The guarantee is the canonical encoding's ARITY, not the domain tags: a token
+    hashes a one-element sequence and a tag a three-element one, so no keyword can
+    produce a tag value. Asserted over the whole vocabulary shape rather than one
+    example, because a single-example test would pass for the wrong reason.
+    """
+    scheme = keyed_scheme()
+    tag = scheme.policy_tag(policy_id="p", vid=0, domain="d")
+    tokens = {scheme.index_token(w) for w in ("p", "d", "p0d", "pd", "0")}
+    assert tag not in tokens
+    # The payloads differ in arity, which is what makes the above hold generally.
+    assert types.canonical(["p"]) != types.canonical(["p", 0, "d"])
+
+
+def test_policy_tag_cannot_be_reframed():
+    scheme = keyed_scheme()
+    assert scheme.policy_tag(policy_id="ab", vid=0, domain="c") != (
+        scheme.policy_tag(policy_id="a", vid=0, domain="bc")
+    )
+
+
+def test_policy_tag_is_recomputable_and_verifiable():
+    scheme = keyed_scheme()
+    record = extract_mod.extract(
+        make_corpus_record(), assignment=make_assignment()
+    )
+    tag = scheme.policy_tag_for(record.metadata)
+    assert scheme.verify_policy_tag(
+        tag,
+        policy_id=record.policy_id,
+        vid=record.metadata.vid,
+        domain=record.domain,
+    )
+    assert not scheme.verify_policy_tag(
+        tag,
+        policy_id=record.policy_id,
+        vid=record.metadata.vid + 1,
+        domain=record.domain,
+    )
+
+
+def test_policy_tag_is_unkeyed_and_therefore_recomputable_by_a_verifier():
+    """The tag must be checkable by anyone holding (PID, VID, Dom).
+
+    Deliberately independent of the search key: a verifier in Phase VIII holds
+    the authorization metadata but not the data owner's search key.
+    """
+    kwargs = dict(policy_id="dom0/pol0", vid=1, domain="dom0")
+    assert keyed_scheme().policy_tag(**kwargs) == (
+        tokens_mod.TokenScheme.unkeyed().policy_tag(**kwargs)
+    )
+
+
+def test_policy_tag_rejects_invalid_inputs():
+    scheme = keyed_scheme()
+    for kwargs in (
+        dict(policy_id="", vid=0, domain="d"),
+        dict(policy_id="p", vid=0, domain=""),
+        dict(policy_id="p", vid=-1, domain="d"),
+    ):
+        try:
+            scheme.policy_tag(**kwargs)
+        except ValueError:
+            continue
+        raise AssertionError(f"{kwargs} should be refused")
+
+
+# -- the trapdoor -----------------------------------------------------------
+def test_trapdoor_is_q_tokens_and_reports_its_size():
+    """Exp. 1: latency over q = 1..20, with trapdoor size as the secondary metric."""
+    scheme = keyed_scheme()
+    for q in (1, 5, 20):
+        trapdoor = tokens_mod.generate_trapdoor(
+            scheme, [f"kw{i}" for i in range(q)]
+        )
+        assert trapdoor.keyword_count == q
+        assert trapdoor.size_bytes == q * 32
+        assert trapdoor.is_domain_independent
+
+
+def test_trapdoor_rejects_empty_and_duplicate_queries():
+    scheme = keyed_scheme()
+    for keywords in ([], ["a", "a"]):
+        try:
+            tokens_mod.generate_trapdoor(scheme, keywords)
+        except tokens_mod.TokenError:
+            continue
+        raise AssertionError(f"keywords={keywords} should be refused")
+
+
+def test_trapdoor_default_query_size_matches_the_paper():
+    """§V fixes q = 5 ("each query contains five keywords")."""
+    config = config_mod.load()
+    scheme = tokens_mod.TokenScheme.from_config(config, SEARCH_KEY)
+    trapdoor = tokens_mod.generate_trapdoor(
+        scheme, [f"kw{i}" for i in range(config.defaults.keywords_per_query)]
+    )
+    assert trapdoor.keyword_count == 5
+
+
+# -- integration: one trapdoor across domains (the Exp. 3 claim) ------------
+def indexed_shard_tokenized(
+    scheme: tokens_mod.TokenScheme,
+    *,
+    records: int = 4,
+    keywords: int = 6,
+    policies_per_domain: int = 2,
+    dom: int = 0,
+):
+    """A shard whose entries carry REAL Option D tokens."""
+    assignment = make_assignment(policies_per_domain)
+    shard = make_shard((DOMAINS[dom],))
+    extracted = []
+    for rid in range(records):
+        record = extract_mod.extract(
+            make_corpus_record(
+                rid=rid, patient=f"patient-{dom}{rid:04d}", dom=dom, keywords=keywords
+            ),
+            assignment=assignment,
+        )
+        entries = tuple(
+            types.IndexEntry(
+                token=scheme.index_token(keyword),
+                cid=f"Qm-{dom}-{rid}",
+                policy_id=record.policy_id,
+                vid=record.metadata.vid,
+            )
+            for keyword in record.keywords
+        )
+        shard.insert_record(entries, domain=record.domain)
+        extracted.append(record)
+    return shard, extracted
+
+
+def test_tokens_one_trapdoor_matches_across_domains():
+    """Exp. 3's claim, end to end: ONE trapdoor, two domains, hits in both.
+
+    Under the published four-input token this is impossible — the token would
+    embed Dom_i and could not match the other domain's entries at all. That is
+    the whole reason Option D exists.
+    """
+    scheme = keyed_scheme()
+    shared_keyword = "cond:44054006"
+    shards = {}
+    authorized = []
+    for dom in (0, 1):
+        assignment = make_assignment(1)
+        shard = make_shard((DOMAINS[dom],))
+        record = extract_mod.extract(
+            make_corpus_record(rid=dom, patient=f"patient-{dom}", dom=dom, keywords=5),
+            assignment=assignment,
+        )
+        shard.insert(
+            types.IndexEntry(
+                token=scheme.index_token(shared_keyword),
+                cid=f"Qm-{dom}",
+                policy_id=record.policy_id,
+                vid=record.metadata.vid,
+            ),
+            domain=record.domain,
+        )
+        shards[DOMAINS[dom]] = shard
+        authorized.append((record.domain, record.policy_id))
+
+    trapdoor = tokens_mod.generate_trapdoor(scheme, [shared_keyword])
+    assert trapdoor.keyword_count == 1        # ONE trapdoor, not one per domain
+
+    hits = 0
+    for domain, shard in shards.items():
+        found, stats = shard.lookup(trapdoor.tokens, authorized)
+        assert len(found) == 1, f"{domain} did not match the shared trapdoor"
+        assert stats.n_eff == 1
+        hits += len(found)
+    assert hits == 2
+
+
+def test_tokens_integrate_with_commitments():
+    """Real tokens flow through Steps 3-5 unchanged."""
+    scheme = keyed_scheme()
+    assignment = make_assignment(2)
+    record = extract_mod.extract(
+        make_corpus_record(keywords=6), assignment=assignment
+    )
+    entries = tuple(
+        types.IndexEntry(
+            token=scheme.index_token(keyword),
+            cid="Qm-cid",
+            policy_id=record.policy_id,
+            vid=record.metadata.vid,
+        )
+        for keyword in record.keywords
+    )
+    auth_root_do = hashes.sha256(b"AuthRoot_DO", domain=b"test/auth-root")
+    commitment = commit_mod.commit_record(
+        record_id=record.record_id,
+        entries=entries,
+        policy_id=record.policy_id,
+        vid=record.metadata.vid,
+        auth_root_do=auth_root_do,
+    )
+    for index in range(len(entries)):
+        assert commitment.verify(commitment.prove(index))
+    assert commit_mod.verify_commitment(
+        commitment,
+        policy_id=record.policy_id,
+        vid=record.metadata.vid,
+        auth_root_do=auth_root_do,
+    )
 
 
 # ===========================================================================
