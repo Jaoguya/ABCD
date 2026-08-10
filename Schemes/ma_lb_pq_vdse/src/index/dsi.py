@@ -103,6 +103,10 @@ class DynamicSearchIndex:
     _entries: List[Optional[IndexEntry]] = field(default_factory=list, repr=False)
     _entry_domain: List[Optional[str]] = field(default_factory=list, repr=False)
     _postings: Dict[bytes, List[int]] = field(default_factory=dict, repr=False)
+    # CID -> ordinals. Phase VII's ApplyIAS and Phase VIII's retrieval both
+    # need a record's entries by CID; scanning would be O(N) per update, and
+    # Exp. 5 sweeps k to 10^5.
+    _by_cid: Dict[str, List[int]] = field(default_factory=dict, repr=False)
     _bitmaps: Dict[Tuple[str, str], bitarray] = field(default_factory=dict, repr=False)
     _capacity: int = field(default=0, repr=False)
     _live: int = field(default=0, repr=False)
@@ -143,6 +147,19 @@ class DynamicSearchIndex:
     def policy_pairs(self) -> Tuple[Tuple[str, str], ...]:
         """The ``(domain, policy)`` pairs this shard holds bitmaps for."""
         return tuple(sorted(self._bitmaps))
+
+    def ordinals_for_cid(self, cid: str) -> Tuple[int, ...]:
+        """Live ordinals holding entries of one record.
+
+        Phase VII Step 2 rewrites a record's entries and Phase VII Step 6 applies
+        an IAS message scoped to one ``CID_i``; both need this in O(|W_i|) rather
+        than O(N).
+        """
+        return tuple(sorted(self._by_cid.get(cid, ())))
+
+    def records_held(self) -> int:
+        """Distinct records with at least one live entry in this shard."""
+        return len(self._by_cid)
 
     def entry(self, ordinal: int) -> IndexEntry:
         entry = self._entry_or_none(ordinal)
@@ -190,6 +207,7 @@ class DynamicSearchIndex:
         self._entries.append(entry)
         self._entry_domain.append(domain)
         self._postings.setdefault(entry.token, []).append(ordinal)
+        self._by_cid.setdefault(entry.cid, []).append(ordinal)
         self._bitmap_for(domain, entry.policy_id)[ordinal] = 1
         self._live += 1
         self._bloom = None  # membership set changed
@@ -218,6 +236,11 @@ class DynamicSearchIndex:
             postings.remove(ordinal)
         if not postings:
             self._postings.pop(entry.token, None)
+        by_cid = self._by_cid.get(entry.cid, [])
+        if ordinal in by_cid:
+            by_cid.remove(ordinal)
+        if not by_cid:
+            self._by_cid.pop(entry.cid, None)
         self._live -= 1
         self._deleted += 1
         self._bloom = None
