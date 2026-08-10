@@ -1593,10 +1593,15 @@ def test_fsn_fresh_node_state_is_empty():
     assert node.queue_wait_ns() == 0
 
 
+def make_index_entry(token: bytes, policy_id: str = "p0", vid: int = 0):
+    """A minimal IndexEntry for FSN-level tests (Phase IV owns the real ones)."""
+    return types.IndexEntry(token=token, cid="cid-0", policy_id=policy_id, vid=vid)
+
+
 def test_fsn_nodes_share_no_mutable_state():
     """Nodes become independent processes; shared state would break that quietly."""
     first, second = fsn_mod.build_fsn_set(("hospital", "laboratory"), 2)
-    first.shard.add_entries(500)
+    first.insert_entries([make_index_entry(b"t1")], domain="hospital")
     first.enqueue("q1")
     first.apply_meta("AA1", types.AuthorizationMeta("hospital", 3, bytes(32)))
     assert second.entry_count == 0
@@ -1604,17 +1609,29 @@ def test_fsn_nodes_share_no_mutable_state():
     assert second.synced_authorities() == ()
 
 
-def test_fsn_shard_entry_accounting():
+def test_fsn_owns_its_shard_so_n_j_has_one_source():
+    """N_j reads through to the index — no second counter to drift.
+
+    An earlier revision tracked the count on the node AND in the index; a
+    scheduler costing queries against a stale N_j would produce plausible, wrong
+    Exp. 2 numbers.
+    """
     node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
-    assert node.shard.add_entries(100) == 100
-    assert node.shard.add_entries(50) == 150
-    assert node.shard.remove_entries(50) == 100
-    assert node.entry_count == 100
+    node.insert_entries(
+        [make_index_entry(b"t%d" % i) for i in range(5)], domain="hospital"
+    )
+    assert node.entry_count == node.index.entry_count == 5
+    node.index.delete(0)
+    assert node.entry_count == node.index.entry_count == 4
+
+
+def test_fsn_refuses_entries_for_a_domain_it_does_not_serve():
+    node = fsn_mod.FogSearchNode.create("FSN1", ["hospital"])
     try:
-        node.shard.remove_entries(1000)
+        node.insert_entries([make_index_entry(b"t1")], domain="laboratory")
     except fsn_mod.FSNError:
         return
-    raise AssertionError("removing more entries than held should raise")
+    raise AssertionError("a foreign-domain insert should be refused")
 
 
 def test_fsn_queue_is_fifo_and_measures_wait_time():

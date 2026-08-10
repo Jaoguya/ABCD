@@ -86,12 +86,9 @@ def make_record(rid: int = 0, dom: int = 0, keywords: int = 6):
 
 
 def make_endpoints(domains=DOMAINS, node_count: int = 4):
-    """Nodes and shards from ONE domain assignment, then paired."""
-    assignment = fsn_mod.assign_domains_to_fsns(domains, node_count)
-    return prop_mod.build_endpoints(
-        fsn_mod.build_fsn_set(domains, node_count),
-        dsi_mod.build_shards(assignment),
-    )
+    """The Fog Search Node set. Each node owns its own shard now, so there is no
+    separate endpoint object to keep in step with it."""
+    return fsn_mod.build_fsn_set(domains, node_count)
 
 
 # ===========================================================================
@@ -111,16 +108,16 @@ def test_sync_payload_binds_every_field():
     record, entries, payload = make_record()
     base_digest = payload.digest()
     variants = (
-        prop_mod.SyncPayload(
+        types.SyncPayload(
             entries=entries[:-1], policy_id=payload.policy_id, vid=payload.vid,
             cid=payload.cid,
         ),
-        prop_mod.SyncPayload(
+        types.SyncPayload(
             entries=tuple(e.with_policy(policy_id="dom0/other", vid=payload.vid)
                           for e in entries),
             policy_id="dom0/other", vid=payload.vid, cid=payload.cid,
         ),
-        prop_mod.SyncPayload(
+        types.SyncPayload(
             entries=tuple(e.with_policy(policy_id=payload.policy_id, vid=9)
                           for e in entries),
             policy_id=payload.policy_id, vid=9, cid=payload.cid,
@@ -150,13 +147,13 @@ def test_sync_payload_refuses_entries_under_another_policy():
         entries[-1].with_policy(policy_id="dom0/other", vid=7),
     )
     try:
-        prop_mod.SyncPayload(
+        types.SyncPayload(
             entries=mixed,
             policy_id=record.policy_id,
             vid=record.metadata.vid,
             cid=prop_mod.placeholder_cid(0),
         )
-    except prop_mod.PropagationError as exc:
+    except ValueError as exc:
         assert "single pair" in str(exc)
         return
     raise AssertionError("entries under a different policy should be refused")
@@ -172,13 +169,13 @@ def test_sync_payload_refuses_entries_from_another_record():
         vid=record.metadata.vid,
     )
     try:
-        prop_mod.SyncPayload(
+        types.SyncPayload(
             entries=entries + (foreign,),
             policy_id=record.policy_id,
             vid=record.metadata.vid,
             cid=prop_mod.placeholder_cid(0),
         )
-    except prop_mod.PropagationError as exc:
+    except ValueError as exc:
         assert "spanning records" in str(exc)
         return
     raise AssertionError("a payload spanning records should be refused")
@@ -187,10 +184,10 @@ def test_sync_payload_refuses_entries_from_another_record():
 def test_sync_payload_refuses_an_empty_entry_set():
     record, _, _ = make_record()
     try:
-        prop_mod.SyncPayload(
+        types.SyncPayload(
             entries=(), policy_id=record.policy_id, vid=0, cid="cid"
         )
-    except prop_mod.PropagationError:
+    except ValueError:
         return
     raise AssertionError("an empty Sync_i should be refused")
 
@@ -218,7 +215,7 @@ def test_route_selects_only_the_serving_node():
     for domain in DOMAINS:
         targets = prop_mod.route(domain, endpoints)
         assert len(targets) == 1
-        assert targets[0].serves(domain)
+        assert targets[0].serves_domain(domain)
 
 
 def test_route_refuses_an_unserved_domain():
@@ -237,14 +234,13 @@ def test_propagation_lands_only_on_the_serving_node():
     endpoints = make_endpoints()
     record, _, payload = make_record(rid=0, dom=0, keywords=6)
     receipt = prop_mod.propagate_to_authorized(
-        payload, domain=record.domain, endpoints=endpoints
+        payload, domain=record.domain, nodes=endpoints
     )
     assert receipt.touched_count == 1
     assert receipt.entry_count == 6
     for endpoint in endpoints:
-        expected = 6 if endpoint.serves(record.domain) else 0
+        expected = 6 if endpoint.serves_domain(record.domain) else 0
         assert endpoint.entry_count == expected
-        endpoint.assert_consistent()
 
 
 def test_propagation_raises_n_j_by_exactly_the_keyword_count():
@@ -253,11 +249,11 @@ def test_propagation_raises_n_j_by_exactly_the_keyword_count():
     before = {e.node_id: e.entry_count for e in endpoints}
     record, _, payload = make_record(rid=0, dom=1, keywords=6)
     prop_mod.propagate_to_authorized(
-        payload, domain=record.domain, endpoints=endpoints
+        payload, domain=record.domain, nodes=endpoints
     )
     for endpoint in endpoints:
         delta = endpoint.entry_count - before[endpoint.node_id]
-        assert delta == (6 if endpoint.serves(record.domain) else 0)
+        assert delta == (6 if endpoint.serves_domain(record.domain) else 0)
 
 
 def test_propagation_keeps_the_node_and_shard_counts_in_step():
@@ -266,11 +262,10 @@ def test_propagation_keeps_the_node_and_shard_counts_in_step():
     for rid in range(6):
         record, _, payload = make_record(rid=rid, dom=rid % 4)
         prop_mod.propagate_to_authorized(
-            payload, domain=record.domain, endpoints=endpoints
+            payload, domain=record.domain, nodes=endpoints
         )
         for endpoint in endpoints:
-            endpoint.assert_consistent()
-            assert endpoint.node.entry_count == endpoint.index.entry_count
+                assert endpoint.entry_count == endpoint.index.entry_count
 
 
 def test_propagation_refuses_a_replay():
@@ -279,11 +274,11 @@ def test_propagation_refuses_a_replay():
     endpoints = make_endpoints()
     record, _, payload = make_record()
     prop_mod.propagate_to_authorized(
-        payload, domain=record.domain, endpoints=endpoints
+        payload, domain=record.domain, nodes=endpoints
     )
     try:
         prop_mod.propagate_to_authorized(
-            payload, domain=record.domain, endpoints=endpoints
+            payload, domain=record.domain, nodes=endpoints
         )
     except prop_mod.PropagationError as exc:
         assert "already applied" in str(exc)
@@ -294,10 +289,12 @@ def test_propagation_refuses_a_replay():
 def test_propagation_refuses_a_node_that_does_not_serve_the_domain():
     endpoints = make_endpoints()
     record, _, payload = make_record(dom=0)
-    wrong = [e for e in endpoints if not e.serves(record.domain)][0]
+    wrong = [e for e in endpoints if not e.serves_domain(record.domain)][0]
     try:
-        wrong.apply(payload, domain=record.domain)
-    except prop_mod.PropagationError as exc:
+        wrong.apply_sync(payload, domain=record.domain)
+    except fsn_mod.FSNError as exc:
+        # The node owns the check now; propagate() re-raises it as a
+        # PropagationError so callers have one type to handle.
         assert "not an authorized node" in str(exc)
         return
     raise AssertionError("a non-serving node should refuse the payload")
@@ -314,7 +311,7 @@ def test_propagation_reports_the_payload_size():
     endpoints = make_endpoints()
     record, _, payload = make_record(keywords=6)
     receipt = prop_mod.propagate_to_authorized(
-        payload, domain=record.domain, endpoints=endpoints
+        payload, domain=record.domain, nodes=endpoints
     )
     assert receipt.payload_bytes == payload.size_bytes > 0
     assert receipt.cid == payload.cid
@@ -343,7 +340,7 @@ def test_propagation_scales_when_domains_exceed_nodes():
             )
             for kw in record.keywords
         )
-        payload = prop_mod.SyncPayload(
+        payload = types.SyncPayload(
             entries=entries,
             policy_id=record.policy_id,
             vid=record.metadata.vid,
@@ -363,33 +360,29 @@ def test_propagation_accounts_for_every_entry_across_shards():
     for rid in range(12):
         record, _, payload = make_record(rid=rid, dom=rid % 4, keywords=6)
         prop_mod.propagate_to_authorized(
-            payload, domain=record.domain, endpoints=endpoints
+            payload, domain=record.domain, nodes=endpoints
         )
         total += payload.entry_count
     assert sum(endpoint.entry_count for endpoint in endpoints) == total == 72
 
 
-def test_endpoints_must_agree_on_their_domains():
-    """The node set and the shard set are partitioned by one rule, not two."""
+def test_node_and_shard_domains_cannot_disagree():
+    """The node owns its shard, so there is no pairing to get wrong.
+
+    Previously a node and a shard were separate objects that had to be matched;
+    a mismatched pairing would have routed entries to the wrong shard. Now the
+    node builds its own index over its own domains, so the two cannot differ.
+    """
     node = fsn_mod.FogSearchNode.create("FSN1", [DOMAINS[0]])
-    shard = dsi_mod.DynamicSearchIndex(domains=frozenset([DOMAINS[1]]))
-    try:
-        prop_mod.ShardEndpoint(node=node, index=shard)
-    except prop_mod.PropagationError as exc:
-        assert "must be partitioned by one rule" in str(exc)
-        return
-    raise AssertionError("a mismatched node/shard pairing should be refused")
+    assert node.domains == node.index.domains == frozenset([DOMAINS[0]])
 
 
-def test_build_endpoints_refuses_mismatched_counts():
+def test_every_node_in_the_set_owns_a_distinct_shard():
     nodes = fsn_mod.build_fsn_set(DOMAINS, 4)
-    shards = dsi_mod.build_shards(fsn_mod.assign_domains_to_fsns(DOMAINS, 4))[:3]
-    try:
-        prop_mod.build_endpoints(nodes, shards)
-    except prop_mod.PropagationError as exc:
-        assert "exactly one shard set" in str(exc)
-        return
-    raise AssertionError("mismatched node and shard counts should be refused")
+    indexes = [id(node.index) for node in nodes]
+    assert len(set(indexes)) == 4
+    for node in nodes:
+        assert node.domains == node.index.domains
 
 
 # ===========================================================================
@@ -424,7 +417,7 @@ def test_catalog_refuses_a_conflicting_row_for_one_cid():
     catalog = prop_mod.IndexCatalog()
     record, entries, payload = make_record()
     catalog.record(payload, domain=record.domain)
-    conflicting = prop_mod.SyncPayload(
+    conflicting = types.SyncPayload(
         entries=tuple(
             e.with_policy(policy_id="dom0/other", vid=e.vid) for e in entries
         ),
@@ -474,11 +467,11 @@ def test_catalog_get_raises_for_an_unknown_cid():
 
 def test_catalog_entry_binds_every_field():
     fields = dict(cid="c", policy_id="p", vid=1, domain="d")
-    base_digest = prop_mod.CatalogEntry(**fields).digest()
+    base_digest = types.CatalogEntry(**fields).digest()
     for name, replacement in (
         ("cid", "c2"), ("policy_id", "p2"), ("vid", 2), ("domain", "d2")
     ):
-        assert prop_mod.CatalogEntry(**{**fields, name: replacement}).digest() != (
+        assert types.CatalogEntry(**{**fields, name: replacement}).digest() != (
             base_digest
         ), f"{name} not bound"
 
@@ -530,7 +523,7 @@ def test_phase_v_end_to_end_index_shard_catalog_search():
             entries=entries, metadata=record.metadata, cid=cid
         )
         receipt = prop_mod.propagate_to_authorized(      # Phase V Step 4
-            payload, domain=record.domain, endpoints=endpoints
+            payload, domain=record.domain, nodes=endpoints
         )
         assert receipt.touched_count == 1
         catalog.record(payload, domain=record.domain)     # Phase V Step 5
@@ -539,7 +532,9 @@ def test_phase_v_end_to_end_index_shard_catalog_search():
     assert len(catalog) == 8
     assert sum(e.entry_count for e in endpoints) == 8 * 6
     for endpoint in endpoints:
-        endpoint.assert_consistent()
+        # N_j has a single source now, so this is the count itself, not a
+        # reconciliation between two counters.
+        assert endpoint.entry_count == endpoint.index.entry_count
 
     # A query for a record's keyword, on the shard serving its domain, returns it.
     record, entries, cid = outsourced[0]
@@ -562,7 +557,7 @@ def test_phase_v_ciphertext_never_reaches_a_node():
     marker = b"ENCRYPTED-RECORD-BODY"
     record, _, payload = make_record()
     prop_mod.propagate_to_authorized(
-        payload, domain=record.domain, endpoints=endpoints
+        payload, domain=record.domain, nodes=endpoints
     )
     assert marker not in payload.encode()
     for endpoint in endpoints:

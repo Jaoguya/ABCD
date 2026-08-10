@@ -1,36 +1,36 @@
-"""Fog Search Nodes — Phase I Step 4.
+"""Fog Search Nodes — Phase I Step 4, and the receiving side of Phase V Step 4.
 
 Phase I Step 4 initializes the Fog Search Node set
 
     F = {FSN_1, FSN_2, ..., FSN_m}
 
 "where each Fog Search Node maintains searchable-index shards and executes
-encrypted search requests". This module builds the ``F`` that later phases fill:
-per-node shard state, the request queue, and the synchronized authorization
-version ``VID_j``.
+encrypted search requests". This module builds that ``F``: each node owns its
+PDSI shard, its synchronized authorization version ``VID_j``, and its request
+queue.
 
 Everything here exists because Phase VI Step 3 reads it. The AASS score
 
     SC_j = L1*C_j^auth + L2*C_j^index + L3*C_j^verify + L4*C_j^sync + L5*C_j^queue
 
-estimates its terms from ``|Cand_Q^(j)|`` (local index statistics), ``N_j`` (the
-node's entry count), ``|VID_U - VID_j|`` (version skew), and ``T_j^queue``. Those
-counters are created here rather than retrofitted when Exp. 7-8 needs them,
-because a counter added later tends to be a counter that measures something
-slightly different from what the scheduler actually used.
+estimates its terms from ``|Cand_Q^(j)|`` (the shard's authorization bitmaps),
+``N_j`` (its entry count), ``|VID_U - VID_j|`` (version skew), and
+``T_j^queue`` (measured waiting time).
 
-**Shard contents are Phase IV's.** A shard tracks its domains and its entry
-count; the layout of the index entries themselves is
-``I_j = (T_j, CID_i, PID_i, VID_i)`` from Phase IV Step 3, and guessing that
-structure now would mean building the PDSI before the phase that defines it.
-``N_j`` is what Phase VI needs, and ``N_j`` is available.
+**The node owns its shard.** An earlier revision had ``ShardState`` tracking a
+separate entry count alongside the index's own, which meant ``N_j`` had two
+sources that could drift — and a scheduler costing queries against a stale
+``N_j`` produces plausible, wrong Exp. 2 numbers. The node now holds a
+:class:`~..index.dsi.DynamicSearchIndex` directly and ``entry_count`` reads
+through to it, so there is exactly one count.
 
 **No shared state between nodes.** README §1 requires each FSN to be an
-independent process. Phases I-II run them in one process, so nothing here may
-hold a reference to another node, to the AIM, or to the ledger: the AIM pushes
-state in (:meth:`FogSearchNode.apply_meta`), and a node never reaches out. That
-is what makes the later process split a change of transport rather than a change
-of behaviour.
+independent process. Phases I-VI run them in one process, so nothing here holds a
+reference to another node, to the AIM, or to the ledger: the AIM pushes
+authorization state in (:meth:`FogSearchNode.apply_meta`), Phase V Step 4 pushes
+index state in (:meth:`FogSearchNode.apply_sync`), and a node never reaches out.
+That is what makes the later process split a change of transport rather than of
+behaviour.
 """
 
 from __future__ import annotations
@@ -40,11 +40,12 @@ import time
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Deque, Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple
+from typing import Deque, Dict, FrozenSet, Iterable, List, Optional, Sequence, Set, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
-from ..types import AuthorizationMeta  # noqa: E402
+from ..index.dsi import DynamicSearchIndex  # noqa: E402
+from ..types import AuthorizationMeta, IndexEntry, SyncPayload  # noqa: E402
 
 
 class FSNError(RuntimeError):
@@ -64,50 +65,17 @@ class QueuedRequest:
 
 
 @dataclass
-class ShardState:
-    """One FSN's searchable-index shard.
-
-    ``domains`` is the set of administrative domains whose entries live on this
-    node. ``index.yaml`` shards by domain, which is what makes authorization
-    locality real: ``C_j^auth`` and the AIM's shard selection both key off it,
-    rather than off a hash that has no relationship to who is authorized for what.
-    """
-
-    domains: FrozenSet[str]
-    entry_count: int = 0
-
-    def add_entries(self, count: int) -> int:
-        """Record ``count`` new index entries. Returns the new ``N_j``."""
-        if count < 0:
-            raise ValueError(f"count must be non-negative, got {count}")
-        self.entry_count += count
-        return self.entry_count
-
-    def remove_entries(self, count: int) -> int:
-        if count < 0:
-            raise ValueError(f"count must be non-negative, got {count}")
-        if count > self.entry_count:
-            raise FSNError(
-                f"cannot remove {count} entries from a shard holding "
-                f"{self.entry_count}"
-            )
-        self.entry_count -= count
-        return self.entry_count
-
-    def serves_domain(self, domain: str) -> bool:
-        return domain in self.domains
-
-
-@dataclass
 class FogSearchNode:
-    """``FSN_j`` — index shard, request queue, and synchronized ``VID_j``."""
+    """``FSN_j`` — its PDSI shard, request queue, and synchronized ``VID_j``."""
 
     node_id: str
-    shard: ShardState
+    index: DynamicSearchIndex
     _queue: Deque[QueuedRequest] = field(default_factory=deque, repr=False)
     # Meta_i per authority, as delivered by the AIM in Phase II Step 4 and
     # updated by IAS in Phase VII Step 6.
     _synced: Dict[str, AuthorizationMeta] = field(default_factory=dict, repr=False)
+    # CIDs whose Sync_i this node has applied — the Phase V Step 4 replay guard.
+    _applied: Set[str] = field(default_factory=set, repr=False)
     _service_ns: int = field(default=0, repr=False)
     _served: int = field(default=0, repr=False)
 
@@ -117,7 +85,14 @@ class FogSearchNode:
 
     # -- construction -------------------------------------------------------
     @classmethod
-    def create(cls, node_id: str, domains: Iterable[str]) -> "FogSearchNode":
+    def create(
+        cls,
+        node_id: str,
+        domains: Iterable[str],
+        *,
+        bloom_bits_per_entry: int = 10,
+        bloom_num_hashes: int = 7,
+    ) -> "FogSearchNode":
         domains = frozenset(domains)
         if not domains:
             raise FSNError(
@@ -125,7 +100,67 @@ class FogSearchNode:
                 f"an unassigned node would never be selected and would distort "
                 f"the Exp. 8 utilization spread"
             )
-        return cls(node_id=node_id, shard=ShardState(domains=domains))
+        return cls(
+            node_id=node_id,
+            index=DynamicSearchIndex(
+                domains=domains,
+                bloom_bits_per_entry=bloom_bits_per_entry,
+                bloom_num_hashes=bloom_num_hashes,
+            ),
+        )
+
+    # -- shard state (Phase IV Step 3 / Phase V Step 4) ---------------------
+    @property
+    def entry_count(self) -> int:
+        """``N_j`` — index entries held. One source of truth: the shard itself."""
+        return self.index.entry_count
+
+    @property
+    def domains(self) -> FrozenSet[str]:
+        return self.index.domains
+
+    def serves_domain(self, domain: str) -> bool:
+        return domain in self.index.domains
+
+    def insert_entries(
+        self, entries: Sequence[IndexEntry], *, domain: str
+    ) -> Tuple[int, ...]:
+        """Add index entries to this node's shard."""
+        if not self.serves_domain(domain):
+            raise FSNError(
+                f"{self.node_id} serves {sorted(self.domains)} and cannot hold "
+                f"entries for domain {domain!r}"
+            )
+        return self.index.insert_record(entries, domain=domain)
+
+    def has_applied(self, cid: str) -> bool:
+        return cid in self._applied
+
+    def apply_sync(self, payload: SyncPayload, *, domain: str) -> int:
+        """Apply ``Sync_i`` — the receiving side of Phase V Step 4.
+
+        Refuses a replay: a second application of the same ``CID_i`` would insert
+        the record's entries twice, inflating ``N_j`` and returning duplicate hits
+        for one record — a corruption no Merkle proof would catch, because each
+        duplicate entry is individually well-formed.
+        """
+        if not self.serves_domain(domain):
+            raise FSNError(
+                f"{self.node_id} serves {sorted(self.domains)} and is not an "
+                f"authorized node for domain {domain!r}"
+            )
+        if self.has_applied(payload.cid):
+            raise FSNError(
+                f"{self.node_id} has already applied Sync_i for CID "
+                f"{payload.cid!r}; re-applying would double-insert the record"
+            )
+        self.index.insert_record(payload.entries, domain=domain)
+        self._applied.add(payload.cid)
+        return payload.entry_count
+
+    @property
+    def applied_records(self) -> int:
+        return len(self._applied)
 
     # -- authorization state (Phase II Step 4 / Phase VII Step 6) -----------
     def apply_meta(self, authority_id: str, meta: AuthorizationMeta) -> bool:
@@ -204,8 +239,8 @@ class FogSearchNode:
         board. Taking the maximum would let one freshly-synced authority mask
         staleness in every other.
 
-        ``benchmark`` provenance, and it only affects the ``aass`` variant — the
-        three authorization-oblivious variants never read ``C_j^sync``. Prefer
+        ``benchmark`` provenance, matching ``user/profile.py::aggregate_vid`` so
+        that ``|VID_U - VID_j|`` subtracts comparable quantities. Prefer
         :meth:`vid_for_domains`, which is strictly more accurate when the query's
         domains are known.
 
@@ -272,19 +307,6 @@ class FogSearchNode:
             raise ValueError("window_ns must be positive")
         return min(1.0, self._service_ns / window_ns)
 
-    # -- Phase VI inputs ----------------------------------------------------
-    @property
-    def entry_count(self) -> int:
-        """``N_j`` — index entries held, used by ``C_j^verify``."""
-        return self.shard.entry_count
-
-    @property
-    def domains(self) -> FrozenSet[str]:
-        return self.shard.domains
-
-    def serves_domain(self, domain: str) -> bool:
-        return self.shard.serves_domain(domain)
-
     def __repr__(self) -> str:
         return (
             f"FogSearchNode(id={self.node_id!r}, "
@@ -329,24 +351,44 @@ def assign_domains_to_fsns(
 
 
 def build_fsn_set(
-    domains: Sequence[str], fsn_count: int, *, prefix: str = "FSN"
+    domains: Sequence[str],
+    fsn_count: int,
+    *,
+    prefix: str = "FSN",
+    bloom_bits_per_entry: int = 10,
+    bloom_num_hashes: int = 7,
 ) -> Tuple[FogSearchNode, ...]:
-    """Phase I Step 4: build ``F = {FSN_1, ..., FSN_m}``.
+    """Phase I Step 4: build ``F = {FSN_1, ..., FSN_m}``, each with its shard.
 
     Node identifiers are 1-based to match the manuscript's ``FSN_1..FSN_m``.
     """
     assignment = assign_domains_to_fsns(domains, fsn_count)
     return tuple(
-        FogSearchNode.create(f"{prefix}{index}", node_domains)
+        FogSearchNode.create(
+            f"{prefix}{index}",
+            node_domains,
+            bloom_bits_per_entry=bloom_bits_per_entry,
+            bloom_num_hashes=bloom_num_hashes,
+        )
         for index, node_domains in enumerate(assignment, start=1)
+    )
+
+
+def build_fsn_set_from_config(config, domains: Sequence[str]) -> Tuple[FogSearchNode, ...]:
+    """Build ``F`` with ``m`` and the Bloom sizing taken from configuration."""
+    return build_fsn_set(
+        domains,
+        config.topology.fog_search_nodes,
+        bloom_bits_per_entry=config.index.bloom_bits_per_entry,
+        bloom_num_hashes=config.index.bloom_num_hashes,
     )
 
 
 __all__ = [
     "FSNError",
     "QueuedRequest",
-    "ShardState",
     "FogSearchNode",
     "assign_domains_to_fsns",
     "build_fsn_set",
+    "build_fsn_set_from_config",
 ]

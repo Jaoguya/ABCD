@@ -756,6 +756,104 @@ class IndexEntry(Record):
         )
 
 
+# ===========================================================================
+# Phase V — Secure Data Outsourcing
+# ===========================================================================
+@dataclass(frozen=True)
+class SyncPayload(Record):
+    """``Sync_i = (I_i, PID_i, VID_i, CID_i)`` — Phase V Step 4 (`:797`).
+
+    ``I_i`` is the *record's* entry set — note the index shift from Phase IV's
+    ``I_j``, a single entry, to ``I_i``, all of one record's entries.
+
+    **Carries no ciphertext, deliberately.** Step 4 gives each Fog Search Node
+    "only searchable-index shards and corresponding metadata"; the entries
+    reference IPFS by ``CID_i`` and ``CT_i`` stays there. A payload carrying data
+    would turn every node into a replica of the encrypted store, which is exactly
+    what Step 4's low-overhead claim rests on not happening.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"sync-payload/v1"
+
+    entries: Tuple["IndexEntry", ...]
+    policy_id: str
+    vid: int
+    cid: str
+
+    def __post_init__(self) -> None:
+        if not self.entries:
+            raise ValueError(
+                "Sync_i must carry at least one index entry; the corpus "
+                "guarantees |W_i| >= 5"
+            )
+        _check_identifier("policy_id", self.policy_id)
+        _check_identifier("cid", self.cid)
+        _check_vid(self.vid)
+        # The payload binds ONE (PID_i, VID_i) pair, exactly as Commit_i does. An
+        # entry under a different pair would be synchronised under a policy it
+        # does not belong to, and the node's bitmap would authorize it wrongly.
+        mismatched = [
+            entry
+            for entry in self.entries
+            if entry.policy_id != self.policy_id or entry.vid != self.vid
+        ]
+        if mismatched:
+            raise ValueError(
+                f"{len(mismatched)} of {len(self.entries)} entries carry a "
+                f"policy/version other than ({self.policy_id!r}, {self.vid}); "
+                f"Sync_i binds a single pair"
+            )
+        if any(entry.cid != self.cid for entry in self.entries):
+            raise ValueError(
+                f"every entry in Sync_i must reference CID {self.cid!r}; a "
+                f"payload spanning records would be applied atomically to one "
+                f"shard when its records may belong to different domains"
+            )
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (list(self.entries), self.policy_id, self.vid, self.cid)
+
+    @property
+    def entry_count(self) -> int:
+        """``|I_i|`` — equals ``|W_i|`` for a freshly indexed record."""
+        return len(self.entries)
+
+    @property
+    def size_bytes(self) -> int:
+        """On-wire size of the synchronisation message.
+
+        The Phase V counterpart of Exp. 6's IAS message size, and the figure that
+        backs Step 4's "low synchronization overhead" claim.
+        """
+        return len(self.encode())
+
+
+@dataclass(frozen=True)
+class CatalogEntry(Record):
+    """``(CID_i, PID_i, VID_i)`` — one row of Phase V Step 5's catalog (`:813`).
+
+    ``domain`` is carried alongside the published triple because locating a
+    *shard* requires knowing which node holds it, and shards are domain-keyed —
+    the triple alone identifies the record but not its location.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"catalog-entry/v1"
+
+    cid: str
+    policy_id: str
+    vid: int
+    domain: str
+
+    def __post_init__(self) -> None:
+        _check_identifier("cid", self.cid)
+        _check_identifier("policy_id", self.policy_id)
+        _check_identifier("domain", self.domain)
+        _check_vid(self.vid)
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (self.cid, self.policy_id, self.vid, self.domain)
+
+
 def _decode_sealed_share(raw: bytes) -> Tuple[str, str, list, bytes]:
     """Minimal decoder for :meth:`AttributeKeyShare.to_sealed_bytes`.
 
@@ -836,4 +934,6 @@ __all__ = [
     "VersionBoundAuthorizationProfile",
     "RecordMetadata",
     "IndexEntry",
+    "SyncPayload",
+    "CatalogEntry",
 ]
