@@ -191,6 +191,33 @@ def estimate_candidate_count(node: FogSearchNode, request: SearchRequest) -> int
     return node.index.authorized_bitmap(request.authorized).count(1)
 
 
+def synchronized_version(node: FogSearchNode, request: SearchRequest) -> int:
+    """``VID_j`` for this request — scoped to the domains it actually touches.
+
+    Not ``node.vid()``. Phase II Step 4's initial synchronisation pushes *every*
+    authority's ``Meta_i`` to *every* node, so ``node.vid()`` — the minimum across
+    all synchronised authorities — is dominated by the stalest authority anywhere
+    in the federation. A revocation in one domain would then leave ``C_j^sync``
+    unchanged at nodes serving it, because unrelated domains' authorities are still
+    at their old versions: the freshness signal AASS is built on would be diluted
+    by domains the query never touches.
+
+    Scoping to ``request.domains ∩ node.domains`` is the accurate form
+    ``FogSearchNode.vid_for_domains`` exists for. Falls back to ``node.vid()`` only
+    when the intersection is empty or unsynchronised, where there is nothing more
+    precise to say.
+    """
+    domains = set(request.domains) & set(node.domains)
+    if not domains:
+        return node.vid()
+    try:
+        return node.vid_for_domains(sorted(domains))
+    except Exception:
+        # The node holds no state for one of those domains — an unsynchronised
+        # node, which node.vid() floors at 0.
+        return node.vid()
+
+
 def estimate_costs(node: FogSearchNode, request: SearchRequest) -> CostVector:
     """The five raw terms of Phase VI Step 3 for one node."""
     entries = node.entry_count
@@ -202,7 +229,7 @@ def estimate_costs(node: FogSearchNode, request: SearchRequest) -> CostVector:
         auth=float(request.policy_count),
         index=float(estimate_candidate_count(node, request)),
         verify=float(estimate_result_count(node, request)) * log_entries,
-        sync=float(abs(request.vid_u - node.vid())),
+        sync=float(abs(request.vid_u - synchronized_version(node, request))),
         queue=float(node.queue_wait_ns()),
     )
 

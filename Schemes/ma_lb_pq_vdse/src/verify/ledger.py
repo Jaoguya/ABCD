@@ -21,7 +21,7 @@ Two distinct checks, and the manuscript names only the first:
    agree with whatever it liked. ``chain/ledger.py``'s ``verify_chain`` recomputes
    every link, which is the work Exp. 4 times.
 
-**The anchor record is Phase VII's** ``UpdateAnchor`` (``sync/ias.py``), whose
+**The anchor record is Phase VII's** ``BlockchainAnchor`` (``sync/ias.py``), whose
 fields are exactly ``BC_i``. Phase V Step 3 — which should write the *initial*
 ``BC_i`` when a record is first outsourced — is not implemented, so a record that
 has never been updated has no anchor. :func:`verify_blockchain_consistency`
@@ -49,7 +49,7 @@ from ..chain.ledger import (  # noqa: E402
     NS_VERSION_IDENTIFIERS,
     NotFoundError,
 )
-from ..sync.ias import UpdateAnchor  # noqa: E402
+from ..types import BlockchainAnchor  # noqa: E402
 from .proof import StepResult, VerificationBundle  # noqa: E402
 
 
@@ -61,7 +61,7 @@ class ChainVerificationError(RuntimeError):
 class AnchorLookup:
     """The anchored ``BC_i`` for one record, and how it was found."""
 
-    anchor: UpdateAnchor
+    anchor: BlockchainAnchor
     key: str
     versions_available: Tuple[int, ...]
 
@@ -114,9 +114,9 @@ def lookup_anchor(
             f"{target}"
         ) from None
     anchor = entry.record
-    if not isinstance(anchor, UpdateAnchor):
+    if not isinstance(anchor, BlockchainAnchor):
         raise ChainVerificationError(
-            f"the record anchored at {key!r} is not an UpdateAnchor"
+            f"the record anchored at {key!r} is not an BlockchainAnchor"
         )
     return AnchorLookup(anchor=anchor, key=key, versions_available=versions)
 
@@ -202,14 +202,14 @@ class AnchorHistory:
     """A record's anchored versions — the "tamper-evident history" of Step 7."""
 
     cid: str
-    anchors: Tuple[UpdateAnchor, ...]
+    anchors: Tuple[BlockchainAnchor, ...]
 
     @property
     def versions(self) -> Tuple[int, ...]:
         return tuple(anchor.vid for anchor in self.anchors)
 
     @property
-    def latest(self) -> UpdateAnchor:
+    def latest(self) -> BlockchainAnchor:
         return self.anchors[-1]
 
     def is_monotone(self) -> bool:
@@ -232,8 +232,8 @@ def anchor_history(ledger: Ledger, cid: str) -> AnchorHistory:
     anchors = []
     for key in keys:
         record = ledger.get(NS_VERSION_IDENTIFIERS, key).record
-        if not isinstance(record, UpdateAnchor):
-            raise ChainVerificationError(f"{key!r} is not an UpdateAnchor")
+        if not isinstance(record, BlockchainAnchor):
+            raise ChainVerificationError(f"{key!r} is not an BlockchainAnchor")
         anchors.append(record)
     return AnchorHistory(cid=cid, anchors=tuple(anchors))
 

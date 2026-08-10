@@ -300,8 +300,13 @@ def test_insert_adds_only_the_new_keywords():
     )
     evolution = ias_mod.evolve_index_entries(entries, request, token_for=token_for)
     assert evolution.entries_inserted == 2
-    assert evolution.entries_rewritten == 0
     assert len(evolution.entries) == 8
+    # The record's other entries are rewritten too: Step 2's I_j' primes VID_i',
+    # and all of a record's entries share one (PID_i, VID_i) pair, which Commit_i
+    # and Sync_i both bind. Bounded by |W_i|, so still per-record.
+    assert evolution.entries_rewritten == 6
+    assert all(e.vid == entries[0].vid + 1 for e in evolution.entries)
+    assert evolution.tokens_rewritten == 0
 
 
 def test_insert_refuses_a_keyword_already_indexed():
@@ -404,7 +409,7 @@ def test_insert_rebuilds_only_that_records_tree():
         commitment,
         evolution,
         policy_id=entries[0].policy_id,
-        vid=entries[0].vid,
+        vid=evolution.entries[0].vid,
         auth_root_do=AUTH_ROOT_DO,
     )
     assert result.rebuilt
@@ -719,13 +724,19 @@ def test_anchor_records_the_published_tuple():
 
 
 def test_anchor_history_is_append_only():
-    """"a tamper-evident history of dynamic index evolution"."""
+    """"a tamper-evident history of dynamic index evolution".
+
+    Uses Modify, not Revoke: BC_i' carries the RECORD's version, and a revocation
+    changes no index entry — so Root_i' and Commit_i' equal the anchored ones and
+    there is nothing new to record. Only updates that change the record produce a
+    new anchor.
+    """
     nodes, authority, record, entries, commitment, cid = outsourced_record()
     chain = ledger_mod.InProcessLedger()
     current_entries, current_commitment = entries, commitment
     for round_index in range(3):
         receipt = ias_mod.synchronize(
-            revoke_request(cid, f"patient-{round_index}"),
+            modify_request(cid, f"{record.domain}/pol-{round_index}"),
             authority=authority,
             nodes=nodes,
             commitment=current_commitment,
@@ -734,9 +745,43 @@ def test_anchor_history_is_append_only():
             ledger=chain,
         )
         current_commitment = receipt.commitment_evolution.commitment
+        current_entries = receipt.index_evolution.entries
     keys = chain.keys(ledger_mod.NS_VERSION_IDENTIFIERS)
     assert len(keys) == 3                     # every version retained
     assert keys == sorted(keys)               # and ordered by version
+    assert chain.verify_chain()
+
+
+def test_revocation_anchors_nothing_new():
+    """A revoke leaves Root_i and Commit_i unchanged, so BC_i' would duplicate BC_i.
+
+    The record's version and the authority's version are separate counters; keying
+    the anchor by the authority's would collide with the Phase V Step 3 anchor
+    whenever the two happen to coincide.
+    """
+    nodes, authority, record, entries, commitment, cid = outsourced_record()
+    chain = ledger_mod.InProcessLedger()
+    ias_mod.anchor_update(
+        chain,
+        message=ias_mod.IASMessage(
+            cid=cid, delta_vid=0,
+            authority_commitment=hashes.sha256(b"c", domain=b"t"),
+            entries=(), root=commitment.root, commit=commitment.commit,
+            authority_id=authority.authority_id, domain=record.domain,
+        ),
+        vid=record.metadata.vid,
+    )
+    before = len(chain.keys(ledger_mod.NS_VERSION_IDENTIFIERS))
+    ias_mod.synchronize(
+        revoke_request(cid, "patient-7"),
+        authority=authority,
+        nodes=nodes,
+        commitment=commitment,
+        entries=entries,
+        auth_root_do=AUTH_ROOT_DO,
+        ledger=chain,
+    )
+    assert len(chain.keys(ledger_mod.NS_VERSION_IDENTIFIERS)) == before
     assert chain.verify_chain()
 
 

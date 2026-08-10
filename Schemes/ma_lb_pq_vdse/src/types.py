@@ -854,6 +854,124 @@ class CatalogEntry(Record):
         return (self.cid, self.policy_id, self.vid, self.domain)
 
 
+@dataclass(frozen=True)
+class OutsourcedMetadata(Record):
+    """``Meta_i = (CID_i, PID_i, VID_i, Root_i, Commit_i)`` — Phase V Step 2 (`:767`).
+
+    **Third distinct record the manuscript calls ``Meta_i``**, alongside
+    :class:`AuthorizationMeta` (Phase II Step 4, `:483`) and
+    :class:`RecordMetadata` (Phase IV Step 1, `:621`). One symbol, three tuples;
+    they are separate types here because they carry different fields, are produced
+    by different parties, and travel to different places.
+
+    "The metadata are maintained by the cloud--fog infrastructure and synchronized
+    with the consortium blockchain" — so this is the off-chain register, and
+    :class:`BlockchainAnchor` is what actually goes on-chain.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"outsourced-metadata/v1"
+
+    cid: str
+    policy_id: str
+    vid: int
+    root: bytes
+    commit: bytes
+
+    def __post_init__(self) -> None:
+        _check_identifier("cid", self.cid)
+        _check_identifier("policy_id", self.policy_id)
+        _check_vid(self.vid)
+        _check_digest("root", self.root)
+        _check_digest("commit", self.commit)
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (self.cid, self.policy_id, self.vid, self.root, self.commit)
+
+
+@dataclass(frozen=True)
+class BlockchainAnchor(Record):
+    """``BC_i = (CID_i, Commit_i, Root_i, VID_i, TS_i)`` — the on-chain transaction.
+
+    One record for two steps that publish the same tuple: Phase V Step 3 (`:780`)
+    anchors a record's initial state, and Phase VII Step 7 (`:1127`) anchors each
+    update as ``BC_i'``. Phase VIII Step 3 (`:1203`) verifies against whichever is
+    current. Three phases share it, which is why it lives here rather than in any
+    one of them.
+
+    "Since only compact metadata are recorded, the blockchain storage complexity
+    remains independent of the encrypted IoMT data size" — no ciphertext, and no
+    index entries either: five fields, two of them digests.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"blockchain-anchor/v1"
+
+    cid: str
+    commit: bytes
+    root: bytes
+    vid: int
+    timestamp_ns: int
+
+    def __post_init__(self) -> None:
+        _check_identifier("cid", self.cid)
+        _check_digest("commit", self.commit)
+        _check_digest("root", self.root)
+        _check_vid(self.vid)
+        if self.timestamp_ns < 0:
+            raise ValueError(f"timestamp_ns must be non-negative, got {self.timestamp_ns}")
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (self.cid, self.commit, self.root, self.vid, self.timestamp_ns)
+
+
+@dataclass(frozen=True)
+class SearchToken(Record):
+    """``ST = (T_Q, AuthRoot_U, VID_U, rho)`` — Phase VI Step 1 (`:829`).
+
+    ``T_Q`` is the keyword-token set from ``index/tokens.py``; ``rho`` is "a fresh
+    random nonce preventing replay attacks", which only prevents anything if a
+    verifier tracks it — see ``aim/verification.py``.
+
+    Note on the published ``T_Q = {H(w_i || VID_U)}``: Option D makes the token
+    ``H(w)`` alone. Nothing is lost, because ``ST`` **already transmits ``VID_U``
+    in the clear** as its own field — hashing it into every token gave the server
+    no information it did not already have, while making one trapdoor unusable
+    across domains whose versions differ.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"search-token/v1"
+
+    tokens: Tuple[bytes, ...]
+    auth_root: bytes
+    vid_u: int
+    nonce: bytes
+
+    def __post_init__(self) -> None:
+        if not self.tokens:
+            raise ValueError("T_Q must contain at least one keyword token")
+        if len(set(self.tokens)) != len(self.tokens):
+            raise ValueError("duplicate token in T_Q")
+        _check_digest("auth_root", self.auth_root)
+        _check_vid(self.vid_u)
+        if len(self.nonce) < 16:
+            raise ValueError(
+                f"rho must be at least 16 bytes to prevent replay, got "
+                f"{len(self.nonce)}"
+            )
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (list(self.tokens), self.auth_root, self.vid_u, self.nonce)
+
+    @property
+    def keyword_count(self) -> int:
+        """``q`` — the Exp. 1 sweep variable."""
+        return len(self.tokens)
+
+    @property
+    def size_bytes(self) -> int:
+        """Exp. 1 secondary metric: trapdoor size, in bytes."""
+        return len(self.encode())
+
+
 def _decode_sealed_share(raw: bytes) -> Tuple[str, str, list, bytes]:
     """Minimal decoder for :meth:`AttributeKeyShare.to_sealed_bytes`.
 
@@ -936,4 +1054,7 @@ __all__ = [
     "IndexEntry",
     "SyncPayload",
     "CatalogEntry",
+    "OutsourcedMetadata",
+    "BlockchainAnchor",
+    "SearchToken",
 ]

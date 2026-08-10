@@ -63,7 +63,13 @@ from ..index.commit import (  # noqa: E402
     policy_commitment,
     update_record_commitment,
 )
-from ..types import AuthorizationMeta, IndexEntry, Record, canonical  # noqa: E402
+from ..types import (  # noqa: E402
+    AuthorizationMeta,
+    BlockchainAnchor,
+    IndexEntry,
+    Record,
+    canonical,
+)
 
 
 class IASError(RuntimeError):
@@ -287,14 +293,20 @@ def evolve_index_entries(
             tokens_rewritten=0,
         )
 
+    # Step 2 writes the updated entry as I_j' = (T_j', CID_i, PID_i', VID_i') —
+    # the RECORD's version is primed. It must advance for any update that changes
+    # the record's root or policy, for two reasons: Phase VIII Step 3 keys BC_i by
+    # the record's version, so an unchanged version would collide with the existing
+    # anchor while carrying a different root; and all of a record's entries share
+    # one (PID_i, VID_i) pair, which Commit_i and Sync_i both bind.
+    #
+    # A revoke does not reach here, so the authority's VID_k and the record's VID_i
+    # stay the separate counters they are.
+    target_vid = (entries[0].vid + 1) if new_vid is None else new_vid
+    target_policy = delta.policy_id or entries[0].policy_id
+
     if op is Operation.MODIFY:
-        policy_id = delta.policy_id
-        vid = entries[0].vid if new_vid is None else new_vid
-        remaining = [
-            entry.with_policy(policy_id=policy_id, vid=vid) for entry in remaining
-        ]
-        rewritten = len(remaining)
-        # tokens stays 0: the token does not encode policy or version.
+        pass  # the policy change is applied in the normalisation below
 
     if op is Operation.DELETE:
         doomed = set(delta.keywords_removed)
@@ -336,6 +348,20 @@ def evolve_index_entries(
             f"the update would leave CID {request.cid!r} with no index entries; "
             f"a record with no entries has no Merkle root (Phase IV Step 4)"
         )
+
+    # Normalise every surviving entry onto (PID_i', VID_i'). Counted as rewritten
+    # only where it actually changed, so the Exp. 5 figure stays a measurement.
+    normalised = []
+    for entry in remaining:
+        updated = (
+            entry
+            if (entry.policy_id == target_policy and entry.vid == target_vid)
+            else entry.with_policy(policy_id=target_policy, vid=target_vid)
+        )
+        if updated is not entry and any(e.token == entry.token for e in entries):
+            rewritten += 1
+        normalised.append(updated)
+    remaining = normalised
 
     return IndexEvolution(
         cid=request.cid,
@@ -730,7 +756,20 @@ def synchronize(
     if aim is not None:
         aim.register_meta(authorization.authority_id, authorization.meta)
     if ledger is not None:
-        anchor_update(ledger, message=message, vid=authorization.new_vid)
+        # BC_i' carries VID_i' — the RECORD's version (Step 7), not the
+        # authority's VID_k'. Keying it by VID_k would collide with the Phase V
+        # Step 3 anchor, which is keyed by VID_i, whenever the two counters
+        # happen to coincide.
+        record_vid = index_evolution.entries[0].vid
+        existing = ledger.keys(
+            NS_VERSION_IDENTIFIERS, prefix=f"{request.cid}#"
+        )
+        key = f"{request.cid}#{record_vid:012d}"
+        if key not in existing:
+            anchor_update(ledger, message=message, vid=record_vid)
+        # A revocation changes no index entry, so Root_i' and Commit_i' equal the
+        # anchored ones and there is nothing new to record on-chain. Re-anchoring
+        # would be a duplicate key on an append-only ledger.
 
     return IASReceipt(
         message=message,
@@ -766,29 +805,11 @@ def _unchanged(authority: Authority) -> AuthorizationEvolution:
 # ===========================================================================
 # Step 7 — Blockchain Anchoring
 # ===========================================================================
-@dataclass(frozen=True)
-class UpdateAnchor(Record):
-    """``BC_i' = (CID_i, Commit_i', Root_i', VID_i', TS_i')`` — Step 7 (`:1127`)."""
-
-    DOMAIN: ClassVar[bytes] = b"update-anchor/v1"
-
-    cid: str
-    commit: bytes
-    root: bytes
-    vid: int
-    timestamp_ns: int
-
-    def __post_init__(self) -> None:
-        if not self.cid:
-            raise ValueError("cid must not be empty")
-        if self.vid < 0:
-            raise ValueError(f"VID must be non-negative, got {self.vid}")
-        for name in ("commit", "root"):
-            if len(getattr(self, name)) != 32:
-                raise ValueError(f"{name} must be a 32-byte digest")
-
-    def _encoded_fields(self):
-        return (self.cid, self.commit, self.root, self.vid, self.timestamp_ns)
+# ``BC_i'`` is ``types.BlockchainAnchor``: Phase V Step 3 anchors a record's
+# initial state and Phase VII Step 7 anchors each update, both publishing the same
+# five-field tuple, and Phase VIII Step 3 verifies against whichever is current.
+# Three phases share it, so it lives in types.py rather than here.
+UpdateAnchor = BlockchainAnchor
 
 
 def anchor_update(
@@ -797,14 +818,14 @@ def anchor_update(
     message: IASMessage,
     vid: int,
     timestamp_ns: Optional[int] = None,
-) -> UpdateAnchor:
+) -> BlockchainAnchor:
     """Step 7: anchor ``BC_i'``, creating "a tamper-evident history".
 
     Keyed by ``CID_i`` and version, so each update is a new append rather than an
     overwrite — the ledger is append-only, and a history that could be rewritten
     would not be tamper-evident.
     """
-    anchor = UpdateAnchor(
+    anchor = BlockchainAnchor(
         cid=message.cid,
         commit=message.commit,
         root=message.root,
@@ -829,6 +850,7 @@ __all__ = [
     "ApplyResult",
     "IASReceipt",
     "UpdateAnchor",
+    "BlockchainAnchor",
     "evolve_authorization_state",
     "evolve_index_entries",
     "evolve_commitment",
