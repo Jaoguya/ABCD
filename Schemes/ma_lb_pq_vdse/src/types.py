@@ -682,6 +682,80 @@ class VersionBoundAuthorizationProfile(Record):
         return len(self.commitments)
 
 
+# ===========================================================================
+# Phase IV — Policy-Bound Dynamic Search Index
+# ===========================================================================
+@dataclass(frozen=True)
+class RecordMetadata(Record):
+    """``Meta_i = (PID_i, VID_i, Dom_i, TS_i)`` — Phase IV Step 1.
+
+    ``policy_id`` is the manuscript's ``PID_i``, the **access-policy
+    identifier** (notation table `:331`, Phase IV Step 1 `:630`). It is *not*
+    the corpus's ``Record.pid``, which ``prepare_dataset.py:346`` fills with a
+    patient pseudonym — see ``index/extract.py`` on why conflating the two would
+    silently create one policy per patient.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"record-metadata/v1"
+
+    policy_id: str
+    vid: int
+    domain: str
+    timestamp: str
+
+    def __post_init__(self) -> None:
+        _check_identifier("policy_id", self.policy_id)
+        _check_vid(self.vid)
+        _check_identifier("domain", self.domain)
+        _check_identifier("timestamp", self.timestamp)
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (self.policy_id, self.vid, self.domain, self.timestamp)
+
+
+@dataclass(frozen=True)
+class IndexEntry(Record):
+    """``I_j = (T_j, CID_i, PID_i, VID_i)`` — Phase IV Step 3.
+
+    The Merkle leaf of Phase IV Step 4 is ``L_j = H(I_j)`` over this record's
+    canonical encoding, so the entry is exactly what the integrity commitment
+    covers: changing any field — including the policy or version carried as
+    payload — changes ``Root_i``.
+    """
+
+    DOMAIN: ClassVar[bytes] = b"index-entry/v1"
+
+    token: bytes
+    cid: str
+    policy_id: str
+    vid: int
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.token, (bytes, bytearray)):
+            raise TypeError("token must be bytes")
+        if not self.token:
+            raise ValueError("token must not be empty")
+        _check_identifier("cid", self.cid)
+        _check_identifier("policy_id", self.policy_id)
+        _check_vid(self.vid)
+
+    def _encoded_fields(self) -> Tuple[Any, ...]:
+        return (self.token, self.cid, self.policy_id, self.vid)
+
+    def with_policy(self, *, policy_id: str, vid: int) -> "IndexEntry":
+        """A copy under a new policy binding, with the token unchanged.
+
+        Phase IV Step 3: entries are "independently updateable, allowing
+        insertions, deletions, and policy modifications without rebuilding the
+        entire searchable index". Under the recommended matching option the
+        token does not encode the policy, so a policy change rewrites payload
+        only — which is what keeps Exp. 5 incremental.
+        """
+        return IndexEntry(
+            token=self.token, cid=self.cid, policy_id=policy_id, vid=vid
+        )
+
+
 def _decode_sealed_share(raw: bytes) -> Tuple[str, str, list, bytes]:
     """Minimal decoder for :meth:`AttributeKeyShare.to_sealed_bytes`.
 
@@ -760,4 +834,6 @@ __all__ = [
     "AttributeKeyShare",
     "EncryptedKeyDelivery",
     "VersionBoundAuthorizationProfile",
+    "RecordMetadata",
+    "IndexEntry",
 ]
