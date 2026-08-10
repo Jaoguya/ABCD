@@ -4,18 +4,51 @@
 
 ---
 
-## Protocol Phases Implemented
+## Protocol Phases
 
-| Phase | Name | Module |
-|-------|------|--------|
-| I | System Initialization | `src/authority/` |
-| II | Multi-Authority Registration & Authorization-State Commitment | `src/authority/` |
-| III | User Registration & Version-Bound Authorization Profile (VAP) | `src/user/` |
-| IV | Policy-Bound Dynamic Search Index (PDSI) Construction | `src/index/` |
-| V | Secure Data Outsourcing | `src/chain/` |
-| VI | Adaptive Authorization-Aware Search Scheduling (AASS) | `src/scheduler/` |
-| VII | Dynamic Index Evolution & Incremental Auth. Synchronization (IAS) | `src/sync/` |
-| VIII | Verifiable Retrieval | `src/verify/` |
+Status as of 2026-08-10. Implementation plans: [PHASE_I_II_PLAN.md](PHASE_I_II_PLAN.md),
+[PHASE_III_PLAN.md](PHASE_III_PLAN.md), [PHASE_IV_PLAN.md](PHASE_IV_PLAN.md).
+
+| Phase | Name | Module | Status |
+|-------|------|--------|--------|
+| I | System Initialization | `src/authority/initializer.py`, `src/fsn/fsn.py` | done (Step 2 needs the pairing backend) |
+| II | Multi-Authority Registration & Authorization-State Commitment | `src/authority/authority.py`, `revocation.py`, `src/aim/aim.py` | done |
+| III | User Registration & Version-Bound Authorization Profile (VAP) | `src/user/registration.py`, `delivery.py`, `profile.py`, `src/authority/keygen.py` | done (Step 2 needs the pairing backend) |
+| IV | Policy-Bound Dynamic Search Index (PDSI) Construction | `src/index/extract.py`, `tokens.py`, `dsi.py`, `commit.py` | done |
+| V | Secure Data Outsourcing | `src/shard/propagation.py` | Steps 4–5 only; Steps 1–3 (IPFS, metadata registration, `BC_i`) not built |
+| VI | Adaptive Authorization-Aware Search Scheduling (AASS) | `src/scheduler/aass.py`, `src/fsn/search.py` | Steps 3–4 only; Steps 1–2 (token assembly, AIM verification) not built |
+| VII | Dynamic Index Evolution & Incremental Auth. Synchronization (IAS) | `src/sync/ias.py` | done |
+| VIII | Verifiable Retrieval | `src/verify/proof.py`, `ledger.py` | Steps 1–3 (the Exp. 4 path); Steps 4–6 excluded from Exp. 4 by the measurement rule |
+
+Shared foundations, used by every phase: `src/types.py` (canonical encodings for
+every published record), `src/config.py` (all five config files),
+`src/chain/ledger.py` (the append-only ledger).
+
+### Blocked on decisions, not on code
+
+| Item | Blocks |
+|------|--------|
+| Type-III pairing backend absent from `Common/crypto/pairing.py` | Phase I Step 2 and Phase III Step 2 arithmetic; reportability of anything cryptographic |
+| Keyed vs unkeyed `H` for index tokens (`TokenScheme` requires an explicit choice) | the Exp. 1 curve — and an unkeyed `H` is invertible over the 2,006-keyword vocabulary |
+| `\|PID\|` and the record→policy mapping (`extract.py` requires an explicit `PolicyAssignment`) | `n_eff` in Exp. 2 |
+| λ₁…λ₅ still `pending_sweep` in `scheduler.yaml` | Exp. 7–8 (the reportable gate raises) |
+| `Dataset/dataset_manifest.json` is the superseded v1 | every corpus-reading experiment |
+
+### Construction issues found in the manuscript
+
+Recorded here because they change what the code can do, not merely how it reads.
+Each is implemented as published where that is possible, and reported otherwise.
+
+| Where | Issue |
+|-------|-------|
+| Phase IV Step 2 vs Phase VI Steps 1/4 | The index token binds `(w, PID, VID, Dom)`, the query token binds `(w, VID_U)`, and the matching relation `T_Q → I_i` is undefined. Resolved as Option D (see [PHASE_IV_PLAN.md](PHASE_IV_PLAN.md) §1) — `T_j = T_Q = H(w)`, with policy and domain enforced by bitmap filtering, which is what §V `:1892` describes. |
+| Throughout | `VID` denotes four different counters — record, authority, user, FSN. `VID_U` and `VID_j` both aggregate as the minimum so `\|VID_U − VID_j\|` subtracts comparable quantities. |
+| Phase III Step 3 (`:547`) | Claims forward secrecy from encapsulation to a **static** user KEM key, which does not provide it. Implemented as published; reported as an observation. |
+| Phase VII Step 5 (`:1092`) | `ΔVID` is integer arithmetic, `ΔC^auth` is a value, and `ΔRoot = Root' − Root` is written as a subtraction of hash digests. Also: `ΔVID` makes synchronisation require gap-free, in-order delivery. |
+| Phase VIII Step 2 (`:1167`) | Recomputes `Commit_i*` with `AuthRoot_U` while Phase IV Step 5 binds `AuthRoot_DO`. As written, verification fails for every user who is not the data owner. |
+| Phase VIII Step 2 (`:1167`) | Requires `VID_i = VID_U`, equating a record's version with a user's profile version — two of the four `VID` namespaces above. |
+| §V vs Ref[41] | Ref[41] is positioned as post-quantum but rests on DBDH. Implemented as published (README §14). |
+| RW15 citation | The multi-authority ABE construction is Rouselakis–Waters **FC 2015**, not CCS 2013; the published `(MSK_i, PK_i)` shape matches FC 2015 exactly. |
 
 ---
 
@@ -57,14 +90,26 @@ Exp. 7 and Exp. 8 measure **different properties of the same runs** — throughp
 
 ## Scheme-Specific Dependencies
 
-| Library | Purpose | Platform |
-|---------|---------|----------|
-| `charm-crypto` | Type-III bilinear groups for MA-CP-ABE | Linux only (use `petrelic` on Windows) |
-| `petrelic` | Alternative pairing library | Cross-platform |
-| Hyperledger Fabric v2.5 | Blockchain ledger | Requires Docker |
-| IPFS daemon | Content-addressed ciphertext storage | Separate install |
+| Library | Purpose | Platform | Status |
+|---------|---------|----------|--------|
+| `liboqs-python` | ML-KEM-768 (Phase III Step 3) | Cross-platform | **live** — liboqs 0.16.0 on both the AWS host and the macOS dev host |
+| `charm-crypto` | Type-III bilinear groups for MA-CP-ABE | Linux only | built on the AWS host, but `pairing.py` exposes **no Type-III backend yet** |
+| `petrelic` | Type-III fallback | Cross-platform in principle | does **not** build; not a usable fallback |
+| Hyperledger Fabric v2.5 | Blockchain ledger | Requires Docker | not built; `chain/ledger.py` is in-process |
+| IPFS daemon | Content-addressed ciphertext storage | Separate install | not built; `CID_i` is a labelled placeholder |
 
-> **Windows note:** `charm-crypto` does not natively support Windows. Use `petrelic` or run under WSL2.
+> **Pairing status.** `crypto.yaml → ma_lb_pq_vdse.pairing` records
+> `backend_implemented: false`. `initializer.resolve_group()` and
+> `keygen.UnavailableABEOperations` both **raise** rather than falling back to the
+> installed SS512 backend — that is Type-I, contradicts the published
+> `e : G₁ × G₂ → G_T`, and sits at ~80-bit security. Group operations are injected
+> at both call sites, so the rest of the scheme is testable; any context built on
+> an unfaithful group reports `reportable = False` and `assert_reportable()`
+> refuses.
+
+> **Windows note:** `charm-crypto` does not support Windows and `petrelic` does not
+> build, so Windows is development-only for this scheme. Reportable runs need the
+> Linux experiment host.
 
 ---
 
@@ -73,16 +118,36 @@ Exp. 7 and Exp. 8 measure **different properties of the same runs** — throughp
 ```
 ma_lb_pq_vdse/
 ├── SCHEME.md                          # This file
+├── PHASE_I_II_PLAN.md · PHASE_III_PLAN.md · PHASE_IV_PLAN.md
 ├── src/
-│   ├── authority/                     # Phase I–II
-│   ├── user/                          # Phase III
-│   ├── index/                         # Phase IV: PDSI
-│   ├── aim/                           # Authorization Index Manager
-│   ├── scheduler/                     # Phase VI: AASS (Alg. 1)
-│   ├── fsn/                           # Fog Search Node
-│   ├── sync/                          # Phase VII: IAS
-│   ├── verify/                        # Phase VIII
-│   └── chain/                         # Fabric + IPFS adapters
+│   ├── types.py                       # canonical encodings for every record
+│   ├── config.py                      # global/index/scheduler/workload + crypto/dataset
+│   ├── authority/
+│   │   ├── initializer.py             # Phase I Steps 1, 3
+│   │   ├── authority.py               # Phase I Step 2, Phase II Steps 1–3
+│   │   ├── revocation.py              # RevRoot_i
+│   │   └── keygen.py                  # Phase III Step 2 (RW15)
+│   ├── user/
+│   │   ├── registration.py            # Phase III Step 1
+│   │   ├── delivery.py                # Phase III Step 3 (ML-KEM + HKDF + AES-GCM)
+│   │   └── profile.py                 # Phase III Step 4 (AuthRoot_U, VAP_U)
+│   ├── index/
+│   │   ├── extract.py                 # Phase IV Step 1
+│   │   ├── tokens.py                  # Phase IV Step 2 (Option D)
+│   │   ├── dsi.py                     # Phase IV Step 3 + bitmaps
+│   │   └── commit.py                  # Phase IV Steps 4–5 (Root_i, Commit_i)
+│   ├── shard/propagation.py           # Phase V Steps 4–5 (Sync_i, Catalog)
+│   ├── aim/aim.py                     # Authorization Index Manager
+│   ├── fsn/
+│   │   ├── fsn.py                     # Phase I Step 4; owns its PDSI shard
+│   │   └── search.py                  # Phase VI Step 4
+│   ├── scheduler/aass.py              # Phase VI Step 3 (Alg. 1) + ablation variants
+│   ├── sync/ias.py                    # Phase VII Steps 2–7
+│   ├── verify/
+│   │   ├── proof.py                   # Phase VIII Steps 1–2
+│   │   └── ledger.py                  # Phase VIII Step 3
+│   ├── chain/ledger.py                # append-only ledger; Fabric behind the interface
+│   └── tests/                         # test_phase1_2 · 3 · 4 · 5 · 6 · 7 · 8
 ├── exp1_trapdoor_generation/
 ├── exp2_search_latency/
 ├── exp3_crossdomain_scalability/
@@ -92,6 +157,26 @@ ma_lb_pq_vdse/
 ├── exp7_search_throughput/
 └── exp8_load_balance/
 ```
+
+`src/shard/` rather than `src/chain/` for Phase V: `chain/` holds the ledger and
+IPFS adapters, and shard distribution is neither. Fabric v2.5 implements
+`chain/ledger.py`'s `Ledger` interface and is required before Exp. 4 produces
+reportable numbers; the in-process adapter is a real append-only hash chain, so
+the Phase VIII Step 3 consistency check does the work Exp. 4 times rather than
+being a no-op that Fabric later makes expensive.
+
+### Tests
+
+Standalone, no framework required; each file also collects under pytest.
+
+```bash
+python3 Schemes/ma_lb_pq_vdse/src/tests/test_phase4.py          # one phase group
+python3 Schemes/ma_lb_pq_vdse/src/tests/test_phase4.py dsi      # one area
+```
+
+Every test targets a defining property of the construction rather than a return
+type, and each module's claims are checked by mutating the source and confirming
+the right tests fail.
 
 ---
 
