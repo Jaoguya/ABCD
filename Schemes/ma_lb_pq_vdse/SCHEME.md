@@ -15,10 +15,15 @@ Status as of 2026-08-10. Implementation plans: [PHASE_I_II_PLAN.md](PHASE_I_II_P
 | II | Multi-Authority Registration & Authorization-State Commitment | `src/authority/authority.py`, `revocation.py`, `src/aim/aim.py` | done |
 | III | User Registration & Version-Bound Authorization Profile (VAP) | `src/user/registration.py`, `delivery.py`, `profile.py`, `src/authority/keygen.py` | done (Step 2 needs the pairing backend) |
 | IV | Policy-Bound Dynamic Search Index (PDSI) Construction | `src/index/extract.py`, `tokens.py`, `dsi.py`, `commit.py` | done |
-| V | Secure Data Outsourcing | `src/shard/propagation.py` | Steps 4–5 only; Steps 1–3 (IPFS, metadata registration, `BC_i`) not built |
-| VI | Adaptive Authorization-Aware Search Scheduling (AASS) | `src/scheduler/aass.py`, `src/fsn/search.py` | Steps 3–4 only; Steps 1–2 (token assembly, AIM verification) not built |
+| V | Secure Data Outsourcing | `src/chain/ipfs.py`, `chain/outsourcing.py`, `src/shard/propagation.py` | done |
+| VI | Adaptive Authorization-Aware Search Scheduling (AASS) | `src/user/token.py`, `src/aim/verification.py`, `src/scheduler/aass.py`, `src/fsn/search.py` | done |
 | VII | Dynamic Index Evolution & Incremental Auth. Synchronization (IAS) | `src/sync/ias.py` | done |
-| VIII | Verifiable Retrieval | `src/verify/proof.py`, `ledger.py` | Steps 1–3 (the Exp. 4 path); Steps 4–6 excluded from Exp. 4 by the measurement rule |
+| VIII | Verifiable Retrieval | `src/verify/proof.py`, `ledger.py` | Steps 1–3 done (the Exp. 4 path); Steps 4–6 lie outside the measurement rule and are not implemented |
+
+**All eight phases are implemented.** `src/tests/test_integration.py` walks a
+record from Phase V outsourcing through Phase VI search to Phase VIII verified
+retrieval with no value hand-constructed along the way. What remains is the
+measurement layer (`src/main.py`, `src/harness/`) and the decisions below.
 
 Shared foundations, used by every phase: `src/types.py` (canonical encodings for
 every published record), `src/config.py` (all five config files),
@@ -47,8 +52,15 @@ Each is implemented as published where that is possible, and reported otherwise.
 | Phase VII Step 5 (`:1092`) | `ΔVID` is integer arithmetic, `ΔC^auth` is a value, and `ΔRoot = Root' − Root` is written as a subtraction of hash digests. Also: `ΔVID` makes synchronisation require gap-free, in-order delivery. |
 | Phase VIII Step 2 (`:1167`) | Recomputes `Commit_i*` with `AuthRoot_U` while Phase IV Step 5 binds `AuthRoot_DO`. As written, verification fails for every user who is not the data owner. |
 | Phase VIII Step 2 (`:1167`) | Requires `VID_i = VID_U`, equating a record's version with a user's profile version — two of the four `VID` namespaces above. |
+| Phase V Step 1 (`:741`) | **Circular.** `CT_i = (C_i, I_i, Commit_i)` and `CID_i = IPFS.Upload(CT_i)`, but every entry of `I_i` contains `CID_i` — content whose hash depends on its own hash. `C_i` is what is uploaded and addressed; `Root_i` and `Commit_i` travel as metadata, which is exactly what Steps 2–3 register and would be redundant if they were already inside the addressed content. |
+| Phases II / IV / V (`:483`, `:621`, `:767`) | **`Meta_i` denotes three different tuples**: `(Dom_i, VID_i, C_i^auth)`, `(PID_i, VID_i, Dom_i, TS_i)`, and `(CID_i, PID_i, VID_i, Root_i, Commit_i)`. Three distinct types here. |
+| Phase V Step 3 vs Phase VII Step 7 | `BC_i` is keyed by the **record's** `VID_i` while Step 7's `BC_i'` was read as the **authority's** `VID_k` — two counters into one key namespace, which collide. Step 7's `VID_i'` is the primed *record* version, matching Step 2's `I_j'`, so the record's version advances on any index-touching update and a revocation anchors nothing. A concrete instance of the `VID` overloading above. |
 | §V vs Ref[41] | Ref[41] is positioned as post-quantum but rests on DBDH. Implemented as published (README §14). |
 | RW15 citation | The multi-authority ABE construction is Rouselakis–Waters **FC 2015**, not CCS 2013; the published `(MSK_i, PK_i)` shape matches FC 2015 exactly. |
+
+Eleven issues. The two that change reported numbers rather than only the text are
+the Phase IV/VI token relation (settled as Option D) and Phase VIII Step 2's
+`AuthRoot_U`, which as written yields a 0% acceptance rate in Exp. 4.
 
 ---
 
@@ -130,14 +142,17 @@ ma_lb_pq_vdse/
 │   ├── user/
 │   │   ├── registration.py            # Phase III Step 1
 │   │   ├── delivery.py                # Phase III Step 3 (ML-KEM + HKDF + AES-GCM)
-│   │   └── profile.py                 # Phase III Step 4 (AuthRoot_U, VAP_U)
+│   │   ├── profile.py                 # Phase III Step 4 (AuthRoot_U, VAP_U)
+│   │   └── token.py                   # Phase VI Step 1 (ST) — the Exp. 1 path
 │   ├── index/
 │   │   ├── extract.py                 # Phase IV Step 1
 │   │   ├── tokens.py                  # Phase IV Step 2 (Option D)
 │   │   ├── dsi.py                     # Phase IV Step 3 + bitmaps
 │   │   └── commit.py                  # Phase IV Steps 4–5 (Root_i, Commit_i)
 │   ├── shard/propagation.py           # Phase V Steps 4–5 (Sync_i, Catalog)
-│   ├── aim/aim.py                     # Authorization Index Manager
+│   ├── aim/
+│   │   ├── aim.py                     # Authorization Index Manager
+│   │   └── verification.py            # Phase VI Step 2 (four checks + nonce)
 │   ├── fsn/
 │   │   ├── fsn.py                     # Phase I Step 4; owns its PDSI shard
 │   │   └── search.py                  # Phase VI Step 4
@@ -146,8 +161,15 @@ ma_lb_pq_vdse/
 │   ├── verify/
 │   │   ├── proof.py                   # Phase VIII Steps 1–2
 │   │   └── ledger.py                  # Phase VIII Step 3
-│   ├── chain/ledger.py                # append-only ledger; Fabric behind the interface
+│   ├── chain/
+│   │   ├── ledger.py                  # append-only ledger; Fabric behind the interface
+│   │   ├── ipfs.py                    # Phase V Step 1 (content-addressed store)
+│   │   └── outsourcing.py             # Phase V Steps 2–3 (Meta_i, BC_i)
+│   ├── harness/                       # the measurement layer (README §7/§9)
+│   │   ├── stats.py · provenance.py · runner.py · experiments.py
+│   ├── main.py                        # CLI entry point
 │   └── tests/                         # test_phase1_2 · 3 · 4 · 5 · 6 · 7 · 8
+│                                      # · test_integration · test_harness
 ├── exp1_trapdoor_generation/
 ├── exp2_search_latency/
 ├── exp3_crossdomain_scalability/
