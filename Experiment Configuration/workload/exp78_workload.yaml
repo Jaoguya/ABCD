@@ -1,0 +1,98 @@
+# =============================================================================
+# workload/exp78_workload.yaml — REPORTED workload trace for Exp. 7 and Exp. 8
+# =============================================================================
+# README §5: "closed-loop generator, fixed concurrency per point, recorded
+# arrival trace so all variants see identical workloads. Utilization sampled
+# every 100 ms." SCHEME.md: "All 4 variants see byte-identical workloads."
+#
+# Exp. 7 (throughput) and Exp. 8 (utilization spread) are DERIVED FROM THE SAME
+# RUNS. This file defines those runs once; both experiments read it.
+#
+# Provenance key: published / derived / benchmark (see crypto.yaml).
+# =============================================================================
+
+meta:
+  version: 1
+  created: 2026-08-08
+  role: reported          # the trace behind the Exp. 7-8 figures
+  # The lambda sweep must NOT use this trace — see exp78_sweep_holdout.yaml.
+
+# -----------------------------------------------------------------------------
+# Generator — closed loop: a fixed population of clients, each issuing the next
+# request only after its previous one completes. Closed loop is what makes
+# `rejected` meaningful and prevents the unbounded queue growth an open-loop
+# generator produces past saturation.
+# -----------------------------------------------------------------------------
+generator:
+  model: closed_loop            # benchmark: README §5 Exp. 7-8 rule
+  concurrency: [100, 500, 1000, 2500, 5000]   # published: §V "100 to 5000"
+  think_time_ms: 0              # benchmark: zero think time, so concurrency is
+                                # the only load control variable
+  ramp_seconds: 30              # benchmark: README §7 "warm after a 30 s ramp";
+                                # ramp samples are excluded from both metrics
+  steady_state_seconds: 60      # benchmark: long enough that a 100 ms
+                                # utilization sample yields 600 points per run
+  repetitions: 30               # published: §V, 30 independent runs
+
+# -----------------------------------------------------------------------------
+# Arrival trace — recorded ONCE and replayed byte-identically to all four
+# scheduler variants. This is what makes Exp. 7-8 an ablation rather than four
+# separate experiments: any difference between variants must come from node
+# selection, not from a different query mix.
+# -----------------------------------------------------------------------------
+trace:
+  record_once: true             # benchmark
+  replay_identical_to_all_variants: true
+  seed: 20260808                # benchmark: fixed seed -> regenerable trace
+  path: Experiment Configuration/workload/traces/exp78_reported.jsonl
+  # Verified before each variant runs: a mismatch means the variants were not
+  # compared on the same workload and the ablation is void.
+  verify_sha256: true
+
+# -----------------------------------------------------------------------------
+# Query mix — drawn from the FROZEN corpus (README §4), never synthesised.
+# Keyword co-occurrence is the property Exp. 2's n_eff and the scheduler's
+# candidate-set estimate both depend on; a fitted Zipf law cannot reproduce it.
+# -----------------------------------------------------------------------------
+query_mix:
+  source: synthea               # benchmark: reportable corpus only
+  keywords_per_query: 5         # published: §V "each query contains five keywords"
+  keyword_selection: corpus_frequency   # benchmark: sample keywords by their
+                                # measured corpus frequency (Zipf exponent
+                                # 2.7078), so the trace exercises the same hot
+                                # and cold posting lists a real query stream
+                                # would
+  domains:
+    distribution: uniform       # benchmark: the frozen corpus is exactly
+                                # 285,268 records per domain, so a uniform
+                                # domain draw keeps shard load balanced by
+                                # construction. Any utilization spread Exp. 8
+                                # measures is then attributable to the
+                                # scheduler, not to the workload.
+  # Fraction of requests whose VAP version lags the authorities' current VID.
+  # This is the only source of a non-zero C_j^sync term; with no version skew,
+  # lambda_4 is unobservable and the AASS freshness claim is untestable.
+  version_skew:
+    enabled: true               # benchmark
+    fraction_stale: 0.10        # benchmark: 10% of requests arrive at a VID
+                                # behind the latest
+    max_vid_lag: 3              # benchmark
+  # Fraction of requests that must be rejected at the AIM (Phase VI Step 2,
+  # "rejected without traversing the encrypted index"). Kept small and non-zero
+  # so the rejection path is exercised and counted, not dead code.
+  unauthorized_fraction: 0.05   # benchmark
+
+# -----------------------------------------------------------------------------
+# Metrics — Exp. 7 and Exp. 8 both emitted from every run (README §5).
+# -----------------------------------------------------------------------------
+metrics:
+  exp7:
+    primary: throughput_queries_per_second
+    secondary: [latency_p50_ms, latency_p95_ms, rejected_count]
+  exp8:
+    primary: fsn_utilization_stddev
+    secondary: [max_node_utilization, cross_node_forwards]
+  utilization:
+    sample_interval_ms: 100     # published: README §5 / SCHEME.md Exp. 7-8 rule
+    definition: busy_time_fraction_per_interval   # benchmark
+    exclude_ramp: true

@@ -52,6 +52,66 @@ kem:
   shared_secret_bytes: 32
 
 # -----------------------------------------------------------------------------
+# ma_lb_pq_vdse — the PROPOSED scheme.
+#
+# Added 2026-08-08. Purely ADDITIVE: no existing value in this file changed, so
+# no existing baseline result is affected (and the proposed scheme has produced
+# no results yet).
+#
+# Phase I Step 1 specifies an ASYMMETRIC (Type-III) pairing
+#   e : G_1 x G_2 -> G_T
+# over prime-order groups with generators g_1 in G_1, g_2 in G_2
+# (Overleaf/PQ-AVDSE-OJCOMS:362ff), consistent with README §1 "Type-III for our
+# MA-CP-ABE". This is the OPPOSITE setting to Ref[41] above, which publishes a
+# Type-I symmetric map — the two must not share a backend.
+# -----------------------------------------------------------------------------
+ma_lb_pq_vdse:
+  pairing:
+    type: type-3                      # published: e : G_1 x G_2 -> G_T
+    backend: charm_type3              # benchmark: charm-crypto is already built
+                                      # and verified on the experiment host
+                                      # (debug_history 2026-08-04), so this adds
+                                      # no new dependency.
+    curve: BN254                      # benchmark: the paper specifies a Type-III
+                                      # pairing but no curve. BN254 is chosen for
+                                      # security parity with the rest of the
+                                      # scheme; charm's Type-III MNT curves
+                                      # (MNT159 ~80-bit) would sit far below
+                                      # ML-KEM-768 and AES-256.
+    curve_fallback: MNT224            # benchmark: ONLY if the host charm build
+                                      # ships no BN254 parameters. Must be
+                                      # confirmed on the host and recorded
+                                      # before any reportable run — not
+                                      # selected silently.
+    # A Type-I backend must NEVER be substituted here: it would change group
+    # element sizes and pairing cost, and it contradicts the published map.
+    allow_symmetric_backend: false
+    # Common/crypto/pairing.py currently exposes CharmSS512Backend (Type-I) and
+    # PetrelicBN254Backend (Type-III, does not build). A Type-III charm backend
+    # still has to be ADDED there, and verified on the host.
+    backend_implemented: false
+
+  # MA-CP-ABE master keys — Phase I Step 2:
+  #   MSK_i = (alpha_i, beta_i),  alpha_i, beta_i <-$ Z_p
+  #   PK_i  = ( g_1, g_2, e(g_1,g_2)^{alpha_i}, g_1^{beta_i} )
+  abe:
+    master_key_components: [alpha, beta]   # published: Phase I Step 2
+    public_key_components: [g1, g2, "e(g1,g2)^alpha", "g1^beta"]  # published
+    # e(g_1,g_2) is computed once at global initialisation and reused by every
+    # authority, so N_AA authorities cost N_AA exponentiations and ONE pairing.
+    precompute_pairing_generator: true     # benchmark
+
+  # Hash H used for the authorization-state commitment C_i^auth (Phase II
+  # Step 3), the policy-bound keyword token T_j (Phase IV Step 2), and
+  # AuthRoot_U (Phase III Step 4). §V: "SHA-256 for hashing and Merkle-tree
+  # construction".
+  hash_output_bits: 256                    # published: §V
+  # Every || in the published equations is realised as a length-prefixed join
+  # (Common/crypto/hashes.py::_join), so H(a||b) cannot collide with H(a'||b')
+  # under a different field split. No measurable cost; removes a real ambiguity.
+  length_prefixed_concatenation: true      # benchmark
+
+# -----------------------------------------------------------------------------
 # Ref[35] — Guo et al., IEEE TDSC 2024
 # Source: References/Ref[35].txt:1756-1766
 #   "we implemented the hash functions and PRFs with SHA256 and HMAC based on

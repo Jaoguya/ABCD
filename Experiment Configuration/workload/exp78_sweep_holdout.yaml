@@ -1,0 +1,67 @@
+# =============================================================================
+# workload/exp78_sweep_holdout.yaml — HELD-OUT workload for the lambda sweep
+# =============================================================================
+# README §6 requires the AASS weights L1..L5 to be chosen "once by a documented
+# procedure (e.g. a sweep on a held-out workload)". This is that held-out
+# workload. It exists so the weights are NOT fitted on the same trace that
+# produces the reported Exp. 7-8 figures.
+#
+# It differs from exp78_workload.yaml in its SEED and in nothing else that
+# would change the workload's character: same generator model, same query mix
+# rule, same concurrency points. Only the random draw differs. A structurally
+# different held-out workload would tune the weights for a distribution the
+# reported runs never see, which is the opposite of what holding out is for.
+#
+# Runs against this file are NON-REPORTABLE by construction — no results.csv
+# from this trace may appear in a figure.
+# =============================================================================
+
+meta:
+  version: 1
+  created: 2026-08-08
+  role: sweep_holdout
+  reportable: false             # enforced by the runner, not just documented
+  inherits: exp78_workload.yaml # every key not overridden below is taken from
+                                # the reported workload
+
+# -----------------------------------------------------------------------------
+# The only substantive difference: an independent seed, hence an independent
+# arrival trace and query draw.
+# -----------------------------------------------------------------------------
+trace:
+  seed: 19260808                # benchmark: distinct from the reported 20260808
+  path: Experiment Configuration/workload/traces/exp78_holdout.jsonl
+  record_once: true
+  replay_identical_to_all_variants: true
+  verify_sha256: true
+
+# -----------------------------------------------------------------------------
+# Sweep economics: 1001 weight vectors x 5 concurrency points x 30 runs is not
+# affordable, and it is not needed — the sweep selects a weight vector, it does
+# not report a mean with a confidence interval.
+#
+# The reported runs keep the full n=30 (README §7). These reduced counts apply
+# ONLY to the sweep.
+# -----------------------------------------------------------------------------
+generator:
+  concurrency: [1000, 5000]     # benchmark: mid-sweep and the saturation point,
+                                # where the scheduler choice actually matters
+  repetitions: 3                # benchmark: sweep only; NOT the reported n=30
+  ramp_seconds: 30
+  steady_state_seconds: 20      # benchmark: shortened for sweep tractability
+
+# -----------------------------------------------------------------------------
+# Selection rule — restated from scheduler.yaml so the held-out run and the
+# selection criterion cannot drift apart.
+# -----------------------------------------------------------------------------
+selection:
+  objective_primary: throughput_queries_per_second
+  objective_constraint: fsn_utilization_stddev
+  rule: "maximize primary subject to constraint <= median across the grid"
+  tie_break: prefer_uniform
+  # On completion: write the chosen vector into scheduler.yaml, set
+  # weights.status to `fixed`, record `determined_on` and the sweep commit in
+  # `determined_by`, and commit the full sweep CSV alongside it so the choice
+  # is auditable rather than asserted.
+  commit_full_grid: true
+  output: Schemes/ma_lb_pq_vdse/exp7_search_throughput/lambda_sweep.csv

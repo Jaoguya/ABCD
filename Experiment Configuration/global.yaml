@@ -1,0 +1,163 @@
+# =============================================================================
+# global.yaml — Benchmark-wide defaults for ALL schemes
+# =============================================================================
+# The single source of truth for README §6 "Default Parameters" and §7
+# "Measurement Methodology". Every scheme reads these; NO scheme may override
+# them (AGENT_RULES "Bias Detection": "No per-scheme parameter tuning — all
+# schemes use identical global.yaml defaults").
+#
+# Provenance key for every entry below:
+#   published  — stated in the proposed paper's §V (cite the line)
+#   fips       — fixed by a standard
+#   benchmark  — a benchmark choice; NOT specified in any paper (README §6)
+#
+# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING and invalidates every existing
+# results.csv. Record any change in the README §16 Change Log.
+# =============================================================================
+
+meta:
+  version: 1
+  created: 2026-08-08
+  # Hash of this file is recorded in every run_meta.json (README §7).
+
+# -----------------------------------------------------------------------------
+# Experiment defaults — README §6. Each experiment varies ONE of these and
+# holds the rest at the values below (README §5).
+# -----------------------------------------------------------------------------
+defaults:
+  keywords_per_query: 5         # published: §V "each query contains five keywords"
+  domains: 4                    # published: §V "four administrative healthcare domains"
+  fog_search_nodes: 4           # published: §V "Four Fog Search Nodes and one cloud server"
+  index_size: 100000            # benchmark: 10^5, mid-point of the Exp. 2 sweep 10^4-10^6
+  returned_results: 100         # benchmark: mid-point of the Exp. 4 sweep 10-1000
+
+# -----------------------------------------------------------------------------
+# Measurement methodology — README §7.
+# -----------------------------------------------------------------------------
+measurement:
+  repetitions: 30               # published: §V "the average of 30 independent runs"
+  confidence_interval: 0.95     # published: §V "95% confidence intervals"
+  warmup_runs: 5                # benchmark: discarded, not counted in the 30
+  clock:
+    latency: perf_counter_ns    # benchmark: monotonic, ns resolution (README §7)
+    throughput: wall_clock      # benchmark: throughput needs elapsed real time
+  latency_unit: ms              # README §9
+  size_unit: KB                 # README §9
+  throughput_unit: queries_per_second  # README §9
+  # README §7: keep outliers. A failed run is recorded status=failed and RE-RUN
+  # to restore n=30; it is never dropped to make the sample look cleaner.
+  drop_outliers: false
+  cache_state: warm             # benchmark: Exp. 1-6 warm; Exp. 7-8 see workload/
+
+# -----------------------------------------------------------------------------
+# Experiment sweeps — the ranges of README §5. The variable column of each
+# experiment; every other parameter stays at `defaults` above.
+# -----------------------------------------------------------------------------
+experiments:
+  exp1_trapdoor_generation:
+    variable: keywords_per_query
+    values: [1, 5, 10, 15, 20]                    # published: §V "1 to 20"
+    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, thingom_pq_abse, zhuang_lattice_mabse]
+  exp2_search_latency:
+    variable: index_size
+    values: [10000, 50000, 100000, 500000, 1000000]   # published: §V "10^4-10^6"
+    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, thingom_pq_abse, zhuang_lattice_mabse]
+  exp3_crossdomain_scalability:
+    variable: domains
+    values: [2, 4, 6, 8, 10]                      # published: §V "2 to 10"
+    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, thingom_pq_abse, zhuang_lattice_mabse]
+  exp4_verification_overhead:
+    variable: returned_results
+    values: [10, 50, 100, 500, 1000]              # published: §V "10 to 1000"
+    schemes: [ma_lb_pq_vdse, guo_vdsse]
+  exp5_keyword_update:
+    variable: keyword_document_pairs
+    values: [100, 1000, 10000, 100000]            # published: §V "10^2-10^5"
+    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, zhuang_lattice_mabse]
+  exp6_authorization_sync:
+    variable: authorization_updates
+    values: [100, 1000, 10000, 100000]            # published: §V "10^2-10^5"
+    schemes: [ma_lb_pq_vdse, zhuang_lattice_mabse]
+  exp7_search_throughput:
+    variable: concurrency
+    values: [100, 500, 1000, 2500, 5000]          # published: §V "100 to 5000"
+    schemes: [ma_lb_pq_vdse]                      # scheduler ablation, see scheduler.yaml
+  exp8_load_balance:
+    variable: concurrency
+    values: [100, 500, 1000, 2500, 5000]          # published: same runs as Exp. 7
+    schemes: [ma_lb_pq_vdse]
+    # README §5: Exp. 7 and Exp. 8 are DERIVED FROM THE SAME RUNS. Run the
+    # trace once per variant and emit both metric sets.
+    shares_runs_with: exp7_search_throughput
+
+# -----------------------------------------------------------------------------
+# Topology — README §1. Four FSNs + one cloud server, one VPC/AZ.
+# Each FSN is an INDEPENDENT PROCESS holding its own index shard, VID_j, and
+# request queue. No runtime state is shared between FSNs (README §13).
+# -----------------------------------------------------------------------------
+topology:
+  fog_search_nodes: 4           # published: §V; must equal defaults.fog_search_nodes
+  cloud_servers: 1              # published: §V "one cloud server"
+  independent_processes: true   # benchmark: README §1 requires process isolation
+  # Phases I-II create FSNs as in-process objects (untimed setup). The process
+  # split lands with Phase VI, before any Exp. 2/7/8 measurement.
+  utilization_sample_interval_ms: 100   # benchmark: README §5 Exp. 7-8 rule
+
+# -----------------------------------------------------------------------------
+# Multi-authority topology — proposed scheme only.
+# NOT IN THE PAPER: §V fixes d=4 domains, m=4 FSNs and q=5 but never states
+# N_AA or |A_i|. Fixed here by team decision on 2026-08-08 so that Phase I/II
+# is reproducible; both values are `benchmark`, not `published`.
+# -----------------------------------------------------------------------------
+authorities:
+  count: 4                      # benchmark: one AA per administrative domain (§V's d=4)
+  attributes_per_authority: 10  # benchmark: NOT from our paper. Matches the only
+                                # attribute count present in the configs
+                                # (Ref[52] published l=10, crypto.yaml), so the
+                                # proposed scheme is not given a smaller
+                                # attribute universe than the baseline it is
+                                # compared against.
+  authority_to_domain: one_to_one  # benchmark: AA_i manages domain Dom_i
+  disjoint_attribute_universes: true  # published: Phase II Step 2 requires it
+  initial_vid: 0                # benchmark: paper defines VID' = VID + 1
+                                # (Phase VII Step 3) but not the initial value.
+
+# -----------------------------------------------------------------------------
+# Environment — README §1. Recorded into run_meta.json and asserted where the
+# assertion is cheap, so a run on the wrong host is visible in provenance.
+# -----------------------------------------------------------------------------
+environment:
+  instance_type: m6i.xlarge     # benchmark: README §1 (paper §V now matches)
+  vcpus: 4
+  memory_gb: 16
+  os: ubuntu-22.04
+  python: "3.11"
+  # README §7: numpy claims all cores by default, which would make Ref[52]'s
+  # latency depend on core count. provision.sh exports these.
+  blas_threads: 1
+  thread_env_vars:
+    - OMP_NUM_THREADS
+    - OPENBLAS_NUM_THREADS
+    - MKL_NUM_THREADS
+    - NUMEXPR_NUM_THREADS
+    - VECLIB_MAXIMUM_THREADS
+
+# -----------------------------------------------------------------------------
+# Paths — load-bearing for Plots/generate_plots.py (README §13). Relative to
+# the repository root.
+# -----------------------------------------------------------------------------
+paths:
+  dataset: Dataset/derived
+  schemes: Schemes
+  plots_output: Plots/output
+  config_dir: "Experiment Configuration"
+
+# -----------------------------------------------------------------------------
+# Corpus — only `synthea` is reportable (README §4). `synthetic` is a fitted
+# Zipf law with no clinical structure and is development-only.
+# The SHA-256 pin itself lives in dataset.yaml and is verified at startup.
+# -----------------------------------------------------------------------------
+corpus:
+  type: synthea
+  reportable_types: [synthea]
+  verify_sha256_on_load: true
