@@ -65,8 +65,26 @@ class PairingBackend(ABC):
     def hash_to_zr(self, data: bytes) -> Any: ...
 
     @abstractmethod
+    def order(self) -> int:
+        """Group order ``w`` as a Python int.
+
+        LSSS share generation and reconstruction (Ref[41] §II-A) are linear
+        algebra over the field ``F_w``. Doing that arithmetic on plain ints
+        mod ``order()`` keeps it identical across backends; only the final
+        exponentiation touches backend element types.
+        """
+
+    @abstractmethod
+    def zr_from_int(self, value: int) -> Any:
+        """Coerce an int in ``[0, order)`` to a backend exponent element."""
+
+    @abstractmethod
+    def serialize(self, element: Any) -> bytes:
+        """Canonical byte encoding of a group element."""
+
     def element_size_bytes(self, element: Any) -> int:
         """Serialised size — trapdoor/ciphertext size metrics depend on this."""
+        return len(self.serialize(element))
 
     @property
     def is_symmetric(self) -> bool:
@@ -130,8 +148,16 @@ class CharmSS512Backend(PairingBackend):
 
         return self._group.hash(data, ZR)
 
-    def element_size_bytes(self, element) -> int:
-        return len(self._group.serialize(element))
+    def order(self) -> int:
+        return int(self._group.order())
+
+    def zr_from_int(self, value: int):
+        from charm.toolbox.pairinggroup import ZR
+
+        return self._group.init(ZR, value % self.order())
+
+    def serialize(self, element) -> bytes:
+        return self._group.serialize(element)
 
 
 class PetrelicBN254Backend(PairingBackend):
@@ -174,10 +200,22 @@ class PetrelicBN254Backend(PairingBackend):
         from .hashes import sha256
 
         digest = int.from_bytes(sha256(data, domain=b"pairing/zr"), "big")
-        return digest % int(self._G1.order())
+        return self.zr_from_int(digest)
 
-    def element_size_bytes(self, element) -> int:
-        return len(element.to_binary())
+    def order(self) -> int:
+        return int(self._G1.order())
+
+    def zr_from_int(self, value: int):
+        from petrelic.bn import Bn
+
+        return Bn.from_decimal(str(value % self.order()))
+
+    def serialize(self, element) -> bytes:
+        to_binary = getattr(element, "to_binary", None)
+        if to_binary is not None:
+            return to_binary()
+        # Bn (exponent) elements expose binary() rather than to_binary().
+        return element.binary()
 
 
 _BACKENDS = {

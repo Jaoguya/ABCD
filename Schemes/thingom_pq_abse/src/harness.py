@@ -1,0 +1,316 @@
+"""Measurement, aggregation and output, per README §7 and §9.
+
+Timing uses ``time.perf_counter_ns()`` (README §7). Warm-ups are discarded
+before the retained runs begin. Failed runs are recorded with
+``status=failed`` and are NOT dropped — README §7 is explicit that a failure
+is re-run to restore n=30 rather than deleted, so the row has to survive to
+be visible.
+"""
+
+from __future__ import annotations
+
+import json
+import statistics
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Sequence
+
+# Two-sided 95% Student-t quantiles by degrees of freedom. Tabulated rather
+# than pulled from scipy because scipy is optional in requirements.txt and a
+# missing dependency must not silently switch the CI to a normal
+# approximation — that would narrow every interval in the paper.
+_T_95: Dict[int, float] = {
+    1: 12.706, 2: 4.303, 3: 3.182, 4: 2.776, 5: 2.571,
+    6: 2.447, 7: 2.365, 8: 2.306, 9: 2.262, 10: 2.228,
+    11: 2.201, 12: 2.179, 13: 2.160, 14: 2.145, 15: 2.131,
+    16: 2.120, 17: 2.110, 18: 2.101, 19: 2.093, 20: 2.086,
+    21: 2.080, 22: 2.074, 23: 2.069, 24: 2.064, 25: 2.060,
+    26: 2.056, 27: 2.052, 28: 2.048, 29: 2.045, 30: 2.042,
+    31: 2.040, 32: 2.037, 33: 2.035, 34: 2.032, 35: 2.030,
+    36: 2.028, 37: 2.026, 38: 2.024, 39: 2.023, 40: 2.021,
+    60: 2.000, 120: 1.980,
+}
+
+
+def t_quantile_95(degrees_of_freedom: int) -> float:
+    """Two-sided 95% t quantile, rounded conservatively between anchors.
+
+    t decreases as df grows, so the conservative (wider-interval) choice
+    between two tabulated anchors is the one for the LOWER df. Taking the
+    higher anchor would report an interval narrower than the data supports,
+    which is the direction a reviewer checks first.
+    """
+    if degrees_of_freedom <= 0:
+        raise ValueError("need at least 2 runs to form a confidence interval")
+    if degrees_of_freedom in _T_95:
+        return _T_95[degrees_of_freedom]
+    if degrees_of_freedom > 120:
+        return 1.960
+    below = [anchor for anchor in _T_95 if anchor < degrees_of_freedom]
+    return _T_95[max(below)] if below else 12.706
+
+
+def mean_ci95(values: Sequence[float]) -> tuple[float, float]:
+    """Return ``(mean, half-width of the 95% CI)``.
+
+    Half-width is ``t * s / sqrt(n)`` with the SAMPLE standard deviation
+    (n-1 denominator). A single value has no interval; that returns 0.0 and
+    the caller is responsible for not reporting it as if it were measured
+    spread.
+    """
+    count = len(values)
+    if count == 0:
+        raise ValueError("no values to aggregate")
+    average = statistics.fmean(values)
+    if count == 1:
+        return average, 0.0
+    deviation = statistics.stdev(values)
+    return average, t_quantile_95(count - 1) * deviation / (count**0.5)
+
+
+@dataclass
+class Run:
+    """One retained repetition."""
+
+    variable_value: Any
+    run_id: int
+    primary: float
+    secondary_1: Optional[float] = None
+    secondary_2: Optional[float] = None
+    status: str = "ok"
+
+
+@dataclass
+class Measurement:
+    """What a single timed repetition produced."""
+
+    primary: float
+    secondary_1: Optional[float] = None
+    secondary_2: Optional[float] = None
+
+
+@dataclass
+class ExperimentResult:
+    scheme: str
+    experiment: str
+    runs: List[Run] = field(default_factory=list)
+    columns: Dict[str, str] = field(default_factory=dict)
+
+
+def measure_point(
+    operation: Callable[[], Measurement],
+    *,
+    variable_value: Any,
+    repetitions: int,
+    warmups: int,
+) -> List[Run]:
+    """Run ``operation`` ``warmups + repetitions`` times, keeping the latter.
+
+    ``operation`` returns its own primary metric because only it knows which
+    span to time — Exp. 1 times trapdoor generation alone, Exp. 2 the full
+    online search path. Timing here instead would sweep setup into the number.
+    """
+    for _ in range(warmups):
+        try:
+            operation()
+        except Exception:
+            # A failing warm-up is not recorded; the retained runs below will
+            # capture the failure with a status the reviewer can see.
+            pass
+
+    runs: List[Run] = []
+    for run_id in range(1, repetitions + 1):
+        try:
+            measurement = operation()
+            runs.append(
+                Run(
+                    variable_value=variable_value,
+                    run_id=run_id,
+                    primary=measurement.primary,
+                    secondary_1=measurement.secondary_1,
+                    secondary_2=measurement.secondary_2,
+                    status="ok",
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
+            runs.append(
+                Run(
+                    variable_value=variable_value,
+                    run_id=run_id,
+                    primary=float("nan"),
+                    status=f"failed:{type(exc).__name__}",
+                )
+            )
+    return runs
+
+
+class Timer:
+    """``perf_counter_ns`` span, reported in milliseconds (README §9 units)."""
+
+    __slots__ = ("_start", "elapsed_ms")
+
+    def __enter__(self) -> "Timer":
+        self._start = time.perf_counter_ns()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        self.elapsed_ms = (time.perf_counter_ns() - self._start) / 1e6
+
+
+# ---------------------------------------------------------------------------
+# Output — README §9
+# ---------------------------------------------------------------------------
+def _format(value: Optional[float]) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float) and value != value:  # NaN
+        return ""
+    return f"{value:.6g}"
+
+
+def write_raw_runs(path: Path, result: ExperimentResult) -> None:
+    """``raw_runs.csv`` — one row per run, never aggregated (README §9)."""
+    lines = [
+        "scheme,experiment,variable_value,run_id,primary_metric,"
+        "secondary_metric_1,secondary_metric_2,status"
+    ]
+    for run in result.runs:
+        lines.append(
+            ",".join(
+                [
+                    result.scheme,
+                    result.experiment,
+                    str(run.variable_value),
+                    str(run.run_id),
+                    _format(run.primary),
+                    _format(run.secondary_1),
+                    _format(run.secondary_2),
+                    run.status,
+                ]
+            )
+        )
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_results(path: Path, result: ExperimentResult) -> None:
+    """``results.csv`` — aggregated means with 95% CI (README §9).
+
+    Only ``status=ok`` runs are aggregated. ``n_runs`` reports how many that
+    was, so a point that lost runs to failures is visible as n < 30 rather
+    than silently averaged over fewer samples.
+    """
+    header = (
+        "variable_value,primary_mean,primary_ci95,"
+        "secondary_1_mean,secondary_1_ci95,"
+        "secondary_2_mean,secondary_2_ci95,n_runs"
+    )
+    lines = [header]
+
+    ordered: List[Any] = []
+    grouped: Dict[Any, List[Run]] = {}
+    for run in result.runs:
+        if run.variable_value not in grouped:
+            grouped[run.variable_value] = []
+            ordered.append(run.variable_value)
+        grouped[run.variable_value].append(run)
+
+    for variable_value in ordered:
+        ok = [run for run in grouped[variable_value] if run.status == "ok"]
+        if not ok:
+            lines.append(f"{variable_value},,,,,,,0")
+            continue
+
+        primary_mean, primary_ci = mean_ci95([run.primary for run in ok])
+        cells = [str(variable_value), _format(primary_mean), _format(primary_ci)]
+
+        for attribute in ("secondary_1", "secondary_2"):
+            values = [
+                getattr(run, attribute)
+                for run in ok
+                if getattr(run, attribute) is not None
+            ]
+            if values:
+                mean, ci = mean_ci95(values)
+                cells.extend([_format(mean), _format(ci)])
+            else:
+                cells.extend(["", ""])
+
+        cells.append(str(len(ok)))
+        lines.append(",".join(cells))
+
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def write_run_meta(
+    path: Path,
+    *,
+    scheme: str,
+    experiment: str,
+    started_utc: str,
+    dataset_manifest: Optional[Dict[str, Any]],
+    parameters: Dict[str, Any],
+    reportable: bool,
+    reportable_blockers: Sequence[str],
+) -> None:
+    """``run_meta.json`` — provenance (README §7).
+
+    ``reportable`` and ``reportable_blockers`` are the important fields. A run
+    produced with a development-only pairing backend, or against a sample
+    corpus, must never be mistaken for one that can go in the paper, so the
+    reason it cannot is recorded in the artefact itself rather than only in a
+    console message that scrolls away.
+    """
+    from Common.crypto import environment_report
+    from Common.crypto.config import config_hashes
+    from Dataset.corpus import git_commit
+
+    meta: Dict[str, Any] = {
+        "scheme": scheme,
+        "experiment": experiment,
+        "started_utc": started_utc,
+        "git_commit": git_commit(),
+        "reportable": reportable,
+        "reportable_blockers": list(reportable_blockers),
+        "parameters": parameters,
+        "config_hashes": config_hashes(),
+        "environment": environment_report(),
+    }
+
+    if dataset_manifest:
+        meta["dataset"] = {
+            "corpus_type": dataset_manifest.get("corpus_type"),
+            "corpus_sha256": dataset_manifest.get("corpus_sha256"),
+            "records": dataset_manifest.get("records"),
+            "keyword_universe_size": dataset_manifest.get("keyword_universe_size"),
+            "domains": dataset_manifest.get("domains"),
+        }
+    else:
+        meta["dataset"] = None
+
+    path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
+
+
+def write_all(
+    output_dir: Path,
+    result: ExperimentResult,
+    *,
+    started_utc: str,
+    dataset_manifest: Optional[Dict[str, Any]],
+    parameters: Dict[str, Any],
+    reportable: bool,
+    reportable_blockers: Sequence[str],
+) -> None:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    write_raw_runs(output_dir / "raw_runs.csv", result)
+    write_results(output_dir / "results.csv", result)
+    write_run_meta(
+        output_dir / "run_meta.json",
+        scheme=result.scheme,
+        experiment=result.experiment,
+        started_utc=started_utc,
+        dataset_manifest=dataset_manifest,
+        parameters=parameters,
+        reportable=reportable,
+        reportable_blockers=reportable_blockers,
+    )

@@ -159,10 +159,37 @@ thingom_pq_abse:
     curve: SS512
     # Dev-only fallback for machines without charm-crypto. NOT reportable:
     # it is a Type-III curve and changes group-element sizes and pairing cost.
+    #
+    # UNUSABLE FOR THIS SCHEME IN PRACTICE. Ref[41] pairs two elements of the
+    # same group everywhere (e(i,i) in setup, e(CS_3j, L_1z) in search); a
+    # Type-III backend has no such operation, so the first pairing raises.
+    # main.py refuses it with that explanation rather than letting it fail
+    # inside the library. Ref[41] needs charm-crypto to run AT ALL, not only
+    # to run reportably. Kept here so get_backend()'s refusal path stays
+    # exercised by test_primitives.py.
     dev_fallback_backend: petrelic_bn254
     allow_dev_fallback_in_reportable_runs: false
   hash_output_bits: 256               # benchmark: paper requires equal-length
                                       # hash outputs, exact length unspecified
+  attributes:
+    # benchmark: NOT published for this evaluation. Ref[41] fixes u=30 only
+    # for its own figure captions (Ref[41].md:472, "we fix the number of
+    # attributes (l = 30)"), and the manuscript's §V never sets one despite
+    # declaring u, l and e in its cost-notation table.
+    #
+    # 10 matches zhuang_lattice_mabse.attributes.l below, which IS published,
+    # so the two attribute-based baselines are compared at the same policy
+    # size. Ref[41]'s trapdoor is 2u exponentiations and its search is 2u+1
+    # pairings per candidate, so this value places the baseline on Exp. 1 and
+    # Exp. 2 — changing it is results-affecting.
+    u: 10                             # number of user attributes
+  multi_keyword:
+    # benchmark: Ref[41] is single-keyword. Its trapdoor carries exactly one
+    # O_3(w_w) (Ref[41].md:328) and its search tests one keyword (:344); no
+    # conjunctive form exists in the paper. A q-keyword query therefore runs
+    # as q independent trapdoors and q independent searches with client-side
+    # intersection — the same native-mode rule README §3 applies to Exp. 3.
+    mode: independent_trapdoors
 
 # -----------------------------------------------------------------------------
 # Ref[52] — Zhuang et al., IEEE DSC
