@@ -136,6 +136,11 @@ guo_vdsse:
     domain_bits: 128                  # benchmark: GGM tree depth = |X| in bits
     output_bits: 192                  # published: matches hash_output_bits
   symmetric_encryption: aes-256-gcm   # benchmark: paper says "SE", unspecified
+  verification_tag_bits: 256           # benchmark: F2/F3 output = full HMAC-SHA256
+                                       # F2 feeds domain encoding + forward-index mask;
+                                       # F3 feeds XOR-accumulated verification tags.
+                                       # Both use the global PRF (HMAC-SHA256 → 256 bits).
+
 
 # -----------------------------------------------------------------------------
 # Ref[41] — Thingom et al., IEEE TCE 2026
@@ -192,3 +197,5 @@ zhuang_lattice_mabse:
 # -----------------------------------------------------------------------------
 xb_muse:
   status: blocked_corrupted_reference
+
+

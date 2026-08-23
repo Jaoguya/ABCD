@@ -98,3 +98,17 @@ Each entry is marked *not fixed* until resolved, then updated to *fixed*.
 - **Why it changed:** The Windows development machine has no Python interpreter (only the Microsoft Store stub) and no WSL distribution installed, so nothing written on 2026-08-03 has been executed.
 - **How it will improve:** All code targets Python 3.11 on Ubuntu, which is the stated experiment environment. Until it runs there, every module written so far is **unexecuted** and should be treated as such.
 - **What changed:** Nothing yet. First action on the experiment host: `pip install -r requirements.txt`, then `python3 -c "from Common.crypto import environment_report; print(environment_report())"`, then a synthetic corpus generation as the first end-to-end smoke test.
+
+### HKDF output limit exceeded by PuncturedKey serialization in Guo forward index
+- **Date:** 2026-08-05
+- **Status:** *fixed*
+- **Why it changed:** `_expand_mask()` in `scheme.py` used `hkdf_sha256()` to expand the F2(id) seed into a one-time pad for XOR-masking the serialized PuncturedKey in Tf. With `domain_bits=128` and 5 keywords, the serialized PuncturedKey is ~13K-22K bytes, exceeding HKDF's RFC 5869 limit of `255 × 32 = 8,160` bytes.
+- **How it will improve:** Replaced HKDF with HMAC-SHA256 in counter mode (`block_i = HMAC(seed, "guo/fwd/" || i)`), which has no output length limit while preserving PRF security.
+- **What changed:** `Schemes/guo_vdsse/src/scheme.py` — `_expand_mask()` rewritten; removed unused `hkdf_sha256` import. All 15 unit tests pass after the fix.
+
+### Exp. 4 builds redundant per-r EDB instances
+- **Date:** 2026-08-05
+- **Status:** *not fixed* — performance concern only, correctness unaffected
+- **Why it changed:** `exp4_verify.py` creates a separate (state, edb) pair for each target `r` value to avoid v_w side effects from repeated searches. With 7 r-values and 500 records each, this means 7 full EDB constructions (~3,500 updates × 7 = 24,500 update calls) before any timing begins.
+- **How it will improve:** Could share a single EDB and use `copy.deepcopy()` per r-value, or reset v_w counters after each search. Would cut setup time by ~6×.
+- **What changed:** Nothing yet — flagging for optimization if the full corpus run is too slow.
