@@ -1,0 +1,45 @@
+{
+  "scheme": "guo_vdsse",
+  "experiment": "exp3",
+  "git_commit": "3d5c012c713cd6337e3016533a66c5fec8141209",
+  "python_version": "3.11.5",
+  "dataset_sha256": "ca1568367edc5f738f0ab6368d724652dc8fd778b88d0f8dbb2e83d099e746dd",
+  "corpus_type": "synthetic",
+  "config_hashes": {
+    "crypto.yaml": "23b8dbc6ea3b18581141809fcad9b42802b7aead4646480f8757362a602be89f",
+    "dataset.yaml": "260d3685c5432d5f6ff9668c400ec641db81cbc45c38893b972bba8e529b5ae6"
+  },
+  "utc_start_time": "2026-08-05T09:25:02+00:00",
+  "environment": {
+    "python_version": "3.11.5",
+    "python_implementation": "CPython",
+    "platform": "macOS-26.5.2-arm64-arm-64bit",
+    "cpu_count": 8,
+    "blas_thread_env": {
+      "OMP_NUM_THREADS": "UNSET",
+      "OPENBLAS_NUM_THREADS": "UNSET",
+      "MKL_NUM_THREADS": "UNSET",
+      "NUMEXPR_NUM_THREADS": "UNSET"
+    },
+    "libraries": {
+      "cryptography": "46.0.7",
+      "numpy": "2.4.4",
+      "scipy": "1.17.1",
+      "mmh3": "unknown",
+      "yaml": "6.0.3"
+    },
+    "pairing_backends_available": {
+      "charm_ss512": false,
+      "petrelic_bn254": false
+    },
+    "kem_backends_available": {
+      "cryptography": false,
+      "liboqs": false,
+      "kyber_py": false
+    },
+    "config_hashes": {
+      "crypto.yaml": "23b8dbc6ea3b18581141809fcad9b42802b7aead4646480f8757362a602be89f",
+      "dataset.yaml": "260d3685c5432d5f6ff9668c400ec641db81cbc45c38893b972bba8e529b5ae6"
+    }
+  }
+}

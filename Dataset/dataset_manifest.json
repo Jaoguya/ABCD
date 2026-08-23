@@ -1,326 +1,259 @@
 {
   "corpus_version": 1,
-  "corpus_type": "synthea",
+  "corpus_type": "synthetic",
   "corpus_filename": "corpus.jsonl",
-  "corpus_sha256": "d991c695fe9a9feaeb9cfd31044322aee5a560d32ff9ed0647d695da29a91909",
-  "records": 1206159,
+  "corpus_sha256": "ca1568367edc5f738f0ab6368d724652dc8fd778b88d0f8dbb2e83d099e746dd",
+  "records": 10000,
   "domains": 4,
   "per_domain_counts": {
-    "0": 248091,
-    "1": 411768,
-    "2": 275180,
-    "3": 271120
+    "0": 2429,
+    "1": 2507,
+    "2": 2550,
+    "3": 2514
   },
-  "keyword_universe_size": 2102,
-  "keyword_document_pairs": 18785334,
+  "keyword_universe_size": 9651,
+  "keyword_document_pairs": 112011,
   "keywords_per_record": {
-    "mean": 15.57450883341251,
-    "min": 1,
-    "max": 64,
-    "p50": 4,
-    "p95": 64
+    "mean": 11.2011,
+    "min": 2,
+    "max": 32,
+    "p50": 10,
+    "p95": 22
   },
   "frequency_profile": {
     "distribution": "zipf",
-    "fitted_exponent": 2.387,
-    "distinct_keywords": 2102,
-    "max_frequency": 203190,
-    "min_frequency": 5,
+    "fitted_exponent": 1.0712,
+    "distinct_keywords": 9651,
+    "max_frequency": 8939,
+    "min_frequency": 1,
     "top_keywords": [
       {
-        "keyword": "proc:265764009",
-        "count": 203190
+        "keyword": "cond:000000",
+        "count": 8939
       },
       {
-        "keyword": "obs:72166-2",
-        "count": 190045
+        "keyword": "cond:000001",
+        "count": 6903
       },
       {
-        "keyword": "obs:32624-9",
-        "count": 188006
+        "keyword": "cond:000002",
+        "count": 5174
       },
       {
-        "keyword": "obs:54899-0",
-        "count": 183746
+        "keyword": "cond:000003",
+        "count": 4120
       },
       {
-        "keyword": "obs:56051-6",
-        "count": 179206
+        "keyword": "cond:000004",
+        "count": 3434
       },
       {
-        "keyword": "obs:56799-0",
-        "count": 174477
+        "keyword": "cond:000005",
+        "count": 2909
       },
       {
-        "keyword": "proc:171207006",
-        "count": 169825
+        "keyword": "cond:000006",
+        "count": 2432
       },
       {
-        "keyword": "obs:67875-5",
-        "count": 169723
+        "keyword": "cond:000007",
+        "count": 2154
       },
       {
-        "keyword": "med:205923",
-        "count": 167464
+        "keyword": "cond:000008",
+        "count": 1948
       },
       {
-        "keyword": "obs:76437-3",
-        "count": 165163
+        "keyword": "cond:000009",
+        "count": 1694
       },
       {
-        "keyword": "imm:140",
-        "count": 163753
+        "keyword": "cond:000010",
+        "count": 1463
       },
       {
-        "keyword": "obs:76501-6",
-        "count": 160536
+        "keyword": "cond:000011",
+        "count": 1393
       },
       {
-        "keyword": "obs:82589-3",
-        "count": 156425
+        "keyword": "cond:000012",
+        "count": 1276
       },
       {
-        "keyword": "obs:93026-3",
-        "count": 152786
+        "keyword": "cond:000014",
+        "count": 1167
       },
       {
-        "keyword": "obs:93027-1",
-        "count": 149699
+        "keyword": "cond:000013",
+        "count": 1147
       },
       {
-        "keyword": "obs:93028-9",
-        "count": 147137
+        "keyword": "cond:000015",
+        "count": 1040
       },
       {
-        "keyword": "obs:93029-7",
-        "count": 144881
+        "keyword": "cond:000016",
+        "count": 957
       },
       {
-        "keyword": "cond:314529007",
-        "count": 143513
+        "keyword": "cond:000017",
+        "count": 894
       },
       {
-        "keyword": "obs:93030-5",
-        "count": 142845
+        "keyword": "cond:000018",
+        "count": 828
       },
       {
-        "keyword": "obs:93031-3",
-        "count": 140923
+        "keyword": "cond:000019",
+        "count": 825
       },
       {
-        "keyword": "obs:93033-9",
-        "count": 138966
+        "keyword": "cond:000020",
+        "count": 732
       },
       {
-        "keyword": "proc:430193006",
-        "count": 137474
+        "keyword": "cond:000021",
+        "count": 691
       },
       {
-        "keyword": "obs:93034-7",
-        "count": 136873
+        "keyword": "cond:000022",
+        "count": 671
       },
       {
-        "keyword": "obs:2514-8",
-        "count": 134631
+        "keyword": "cond:000023",
+        "count": 621
       },
       {
-        "keyword": "obs:93035-4",
-        "count": 134560
+        "keyword": "cond:000024",
+        "count": 585
       },
       {
-        "keyword": "obs:5794-3",
-        "count": 134022
+        "keyword": "cond:000025",
+        "count": 580
       },
       {
-        "keyword": "obs:20454-5",
-        "count": 133410
+        "keyword": "cond:000026",
+        "count": 556
       },
       {
-        "keyword": "obs:25428-4",
-        "count": 133305
+        "keyword": "cond:000027",
+        "count": 547
       },
       {
-        "keyword": "obs:32167-9",
-        "count": 133171
+        "keyword": "cond:000028",
+        "count": 536
       },
       {
-        "keyword": "obs:5799-2",
-        "count": 133117
+        "keyword": "cond:000030",
+        "count": 517
       },
       {
-        "keyword": "obs:5767-9",
-        "count": 132985
+        "keyword": "cond:000029",
+        "count": 481
       },
       {
-        "keyword": "obs:5770-3",
-        "count": 132766
+        "keyword": "cond:000031",
+        "count": 468
       },
       {
-        "keyword": "obs:34533-0",
-        "count": 132621
+        "keyword": "cond:000032",
+        "count": 444
       },
       {
-        "keyword": "proc:428211000124100",
-        "count": 132433
+        "keyword": "cond:000035",
+        "count": 434
       },
       {
-        "keyword": "obs:5778-6",
-        "count": 132428
+        "keyword": "cond:000033",
+        "count": 411
       },
       {
-        "keyword": "obs:93038-8",
-        "count": 132166
+        "keyword": "cond:000037",
+        "count": 397
       },
       {
-        "keyword": "obs:5802-4",
-        "count": 131802
+        "keyword": "cond:000036",
+        "count": 387
       },
       {
-        "keyword": "obs:5811-5:b2",
-        "count": 130834
+        "keyword": "cond:000034",
+        "count": 374
       },
       {
-        "keyword": "proc:710824005",
-        "count": 130160
+        "keyword": "cond:000038",
+        "count": 360
       },
       {
-        "keyword": "obs:71802-3",
-        "count": 128154
+        "keyword": "cond:000040",
+        "count": 356
       },
       {
-        "keyword": "proc:103697008",
-        "count": 121071
+        "keyword": "cond:000041",
+        "count": 354
       },
       {
-        "keyword": "obs:72514-3:b2",
-        "count": 119648
+        "keyword": "cond:000039",
+        "count": 346
       },
       {
-        "keyword": "proc:34043003",
-        "count": 117517
+        "keyword": "cond:000043",
+        "count": 330
       },
       {
-        "keyword": "proc:243085009",
-        "count": 114027
+        "keyword": "cond:000042",
+        "count": 312
       },
       {
-        "keyword": "proc:1260009003",
-        "count": 113329
+        "keyword": "cond:000046",
+        "count": 303
       },
       {
-        "keyword": "proc:1260010008",
-        "count": 113329
+        "keyword": "cond:000044",
+        "count": 288
       },
       {
-        "keyword": "proc:225362009",
-        "count": 113329
+        "keyword": "cond:000047",
+        "count": 288
       },
       {
-        "keyword": "proc:274788003",
-        "count": 113329
+        "keyword": "cond:000054",
+        "count": 278
       },
       {
-        "keyword": "proc:710841007",
-        "count": 109788
+        "keyword": "cond:000051",
+        "count": 277
       },
       {
-        "keyword": "obs:72514-3:b0",
-        "count": 101281
+        "keyword": "cond:000045",
+        "count": 276
       }
     ]
   },
-  "generated_utc": "2026-08-04T15:03:40+00:00",
-  "git_commit": "unknown",
+  "generated_utc": "2026-08-05T08:52:25+00:00",
+  "git_commit": "3d5c012c713cd6337e3016533a66c5fec8141209",
   "params": {
-    "source": "synthea",
-    "synthea_version": "7e08387",
-    "export_format": "csv",
-    "record_unit": "encounter",
-    "domain_assignment": "hash_of_organization",
+    "records": 10000,
     "domains": 4,
-    "limit": null,
-    "keyword_filter": {
-      "min_document_frequency": 5,
-      "max_document_frequency_ratio": 0.5,
-      "max_keywords_per_record": 64,
-      "normalize": "lowercase_strip"
-    },
-    "keyword_sources": [
-      {
-        "table": "conditions",
-        "field": "CODE",
-        "prefix": "cond:",
-        "enabled": true
-      },
-      {
-        "table": "medications",
-        "field": "CODE",
-        "prefix": "med:",
-        "enabled": true
-      },
-      {
-        "table": "procedures",
-        "field": "CODE",
-        "prefix": "proc:",
-        "enabled": true
-      },
-      {
-        "table": "observations",
-        "field": "CODE",
-        "prefix": "obs:",
-        "enabled": true,
-        "value_binning": {
-          "enabled": true,
-          "value_field": "VALUE",
-          "bins": 5
-        }
-      },
-      {
-        "table": "immunizations",
-        "field": "CODE",
-        "prefix": "imm:",
-        "enabled": true
-      },
-      {
-        "table": "allergies",
-        "field": "CODE",
-        "prefix": "alg:",
-        "enabled": true
-      },
-      {
-        "table": "devices",
-        "field": "CODE",
-        "prefix": "dev:",
-        "enabled": true
-      },
-      {
-        "table": "careplans",
-        "field": "CODE",
-        "prefix": "plan:",
-        "enabled": true
-      },
-      {
-        "table": "imaging_studies",
-        "field": "BODYSITE_CODE",
-        "prefix": "img:",
-        "enabled": true
+    "seed": 20260803,
+    "records_per_patient": 2.5,
+    "profile": {
+      "source": "dataset.yaml placeholders",
+      "zipf_exponent": 1.2,
+      "keyword_universe_size": 20000,
+      "keywords_per_record": {
+        "distribution": "lognormal",
+        "mean": 12.0,
+        "sigma": 0.5,
+        "min": 1,
+        "max": 32
       }
-    ],
-    "value_binning_note": "Observation value bands are percentile ranks computed within each code, per 1M-row chunk, not globally.",
-    "extraction_stats": {
-      "keywords_before_filter": 2276,
-      "keywords_after_filter": 2102,
-      "dropped_rare": 174,
-      "dropped_common": 0,
-      "records_truncated_at_cap": 83127,
-      "records_with_no_keywords": 38
     },
-    "generator": "prepare_dataset.py"
+    "generator": "synthetic_generator.py"
   },
   "config_hashes": {
     "crypto.yaml": "23b8dbc6ea3b18581141809fcad9b42802b7aead4646480f8757362a602be89f",
-    "dataset.yaml": "206a9dc3c1fe916a2c5fed72a545c38882ef7b4d351e20882329e0a575d34eef"
+    "dataset.yaml": "260d3685c5432d5f6ff9668c400ec641db81cbc45c38893b972bba8e529b5ae6"
   },
-  "reportable": true,
-  "citation": "Walonoski et al., Synthea: An approach, method, and software mechanism for generating synthetic patients and the synthetic electronic health care record, JAMIA 25(3), 2018. doi:10.1093/jamia/ocx079"
+  "reportable": false,
+  "warning": "DEVELOPMENT ONLY. README \u00a74: results produced from the synthetic corpus must not be reported in the paper. For a reportable corpus, use Synthea via prepare_dataset.py."
 }
