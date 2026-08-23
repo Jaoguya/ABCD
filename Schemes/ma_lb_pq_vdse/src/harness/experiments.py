@@ -93,8 +93,13 @@ class SyntheticRecordSource:
         assignment = extract_mod.BucketedPolicyAssignment(
             policies_per_domain=2, domains=max(domain_count, 1)
         )
-        names = self.domains[:domain_count] or (f"dom{i}" for i in range(domain_count))
-        names = tuple(names) if isinstance(names, tuple) else tuple(names)
+        # Slicing past the end truncates silently, and a short-but-non-empty
+        # slice is still truthy — so an `or` fallback never fires and Exp. 3
+        # raised ExtractionError at d=6,8,10 against the 4 default names.
+        # Generate names whenever the configured list cannot cover domain_count.
+        names = tuple(self.domains[:domain_count])
+        if len(names) < domain_count:
+            names = tuple(f"dom{i}" for i in range(domain_count))
         for rid in range(count):
             dom_index = rid % domain_count
             record = _SyntheticRecord(

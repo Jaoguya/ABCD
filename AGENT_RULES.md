@@ -161,7 +161,6 @@ Recommended order for running experiments:
 2. **Proposed scheme first** (`ma_lb_pq_vdse`) — all 8 experiments
 3. **Baselines** in order:
    - `guo_vdsse` — Exp. 1, 2, 3, 4, 5
-   - `xb_muse` — Exp. 1, 2, 3, 5 (⚠️ requires clean Ref[36] PDF first)
    - `thingom_pq_abse` — Exp. 1, 2, 3
    - `zhuang_lattice_mabse` — Exp. 1, 2, 3, 5, 6
 4. **Plotting** — `python Plots/generate_plots.py`

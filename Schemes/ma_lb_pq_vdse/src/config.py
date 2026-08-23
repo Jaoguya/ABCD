@@ -859,7 +859,10 @@ def config_hashes() -> Dict[str, str]:
     if WORKLOAD_DIR.is_dir():
         paths.extend(sorted(WORKLOAD_DIR.glob("*.yaml")))
     for path in paths:
-        key = str(path.relative_to(CONFIG_DIR))
+        # as_posix(): the key is provenance, and str() would emit
+        # "workload\x.yaml" on Windows and "workload/x.yaml" on Linux —
+        # the same file under two keys, so run_meta records would not compare.
+        key = path.relative_to(CONFIG_DIR).as_posix()
         hashes[key] = hashlib.sha256(path.read_bytes()).hexdigest()
     return hashes
 

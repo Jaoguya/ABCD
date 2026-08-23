@@ -135,9 +135,18 @@ def test_roundtrip():
 
     all_pass = (recovered == 1) and result.matched and not result_diff.matched
     print(f"\n  Overall: {'ALL PASS' if all_pass else 'SOME FAILED'}")
-    return all_pass
+    # assert, not return: pytest counts a returned value as a pass regardless of
+    # its truthiness (PytestReturnNotNoneWarning), so `return all_pass` made this
+    # test structurally incapable of failing.
+    assert recovered == 1, f"decrypt recovered {recovered}, expected 1"
+    assert result.matched, "matching keyword search did not match"
+    assert not result_diff.matched, "non-matching keyword search matched"
 
 
 if __name__ == "__main__":
-    ok = test_roundtrip()
-    sys.exit(0 if ok else 1)
+    try:
+        test_roundtrip()
+    except AssertionError as exc:
+        print(f"FAILED: {exc}")
+        sys.exit(1)
+    sys.exit(0)

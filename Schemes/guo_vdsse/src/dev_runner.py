@@ -77,5 +77,22 @@ def main():
     print("\nDone.")
 
 
+def _force_utf8_stdout() -> None:
+    """Make console output encoding-independent.
+
+    The runners print check marks, box-drawing characters and Greek letters.
+    On Linux stdout is UTF-8 and these are fine; a Windows console defaults to
+    cp1252 and the first such character raises UnicodeEncodeError mid-run —
+    which killed a guo run after Exp. 1 had already completed and written its
+    results. Reconfiguring leaves Linux output byte-identical.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass  # already-wrapped or non-reconfigurable stream
+
+
 if __name__ == "__main__":
+    _force_utf8_stdout()
     main()

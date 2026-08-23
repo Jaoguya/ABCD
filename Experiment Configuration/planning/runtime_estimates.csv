@@ -1,0 +1,58 @@
+scheme,experiment,sweep_value,per_run_s,reps,warmups,runs,point_total_s,point_total_h,basis,confidence,notes
+thingom_pq_abse,exp2,10000,1575.0,30,5,35,55125.0,15.31,estimated,low,1.5ms/pairing midpoint of 1-3ms range
+thingom_pq_abse,exp2,50000,7875.0,30,5,35,275625.0,76.56,estimated,low,1.5ms/pairing midpoint of 1-3ms range
+thingom_pq_abse,exp2,100000,15750.0,10,1,11,173250.0,48.12,estimated,low,1.5ms/pairing midpoint of 1-3ms range
+thingom_pq_abse,exp2,500000,78750.0,0,0,0,0.0,0.0,estimated,low,EXCLUDED by cap decision 2026-08-23
+thingom_pq_abse,exp2,1000000,157500.0,0,0,0,0.0,0.0,estimated,low,EXCLUDED by cap decision 2026-08-23
+thingom_pq_abse,exp3,2,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
+thingom_pq_abse,exp3,4,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
+thingom_pq_abse,exp3,6,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
+thingom_pq_abse,exp3,8,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
+thingom_pq_abse,exp3,10,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
+thingom_pq_abse,exp1,1-20,0.5,30,5,35,17.5,0.0,estimated,low,trapdoor only; negligible
+zhuang_lattice_mabse,exp2,10000,1.8,30,5,35,63.0,0.02,paper Table VI,medium,search 0.18ms/record; build amortised separately
+zhuang_lattice_mabse,exp2,50000,9.0,30,5,35,315.0,0.09,paper Table VI,medium,search 0.18ms/record; build amortised separately
+zhuang_lattice_mabse,exp2,100000,18.0,30,5,35,630.0,0.17,paper Table VI,medium,search 0.18ms/record; build amortised separately
+zhuang_lattice_mabse,exp2,500000,90.0,30,5,35,3150.0,0.88,paper Table VI,medium,search 0.18ms/record; build amortised separately
+zhuang_lattice_mabse,exp2,1000000,180.0,30,5,35,6300.0,1.75,paper Table VI,medium,search 0.18ms/record; build amortised separately
+zhuang_lattice_mabse,build_exp2,1000000,4741000.0,1,0,1,4741000.0,1316.94,paper Table VI,low,ONE nested build serves all Exp2 points; vectorise Encrypt
+zhuang_lattice_mabse,exp3,2,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
+zhuang_lattice_mabse,exp3,4,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
+zhuang_lattice_mabse,exp3,6,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
+zhuang_lattice_mabse,exp3,8,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
+zhuang_lattice_mabse,exp3,10,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
+guo_vdsse,exp5,100,0.089,30,5,35,3.1,0.0,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
+guo_vdsse,exp5,1000,0.891,30,5,35,31.2,0.01,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
+guo_vdsse,exp5,10000,8.958,30,5,35,313.5,0.09,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
+guo_vdsse,exp5,100000,92.889,30,5,35,3251.1,0.9,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
+guo_vdsse,exp2,10000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
+guo_vdsse,exp2,50000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
+guo_vdsse,exp2,100000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
+guo_vdsse,exp2,500000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
+guo_vdsse,exp2,1000000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
+guo_vdsse,build_exp2,1000000,26992.117,1,0,1,26992.1,7.5,MEASURED,medium,nested build; 0.851ms/kw-doc pair
+guo_vdsse,exp4,10,0.001,30,5,35,0.1,0.0,MEASURED,high,
+guo_vdsse,exp4,50,0.001,30,5,35,0.1,0.0,MEASURED,high,
+guo_vdsse,exp4,100,0.001,30,5,35,0.1,0.0,MEASURED,high,
+guo_vdsse,exp4,500,0.001,30,5,35,0.1,0.0,MEASURED,high,
+guo_vdsse,exp4,1000,0.001,30,5,35,0.1,0.0,MEASURED,high,
+ma_lb_pq_vdse,exp7_8,100/aass,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,100/rr,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,100/lru,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,100/random,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,500/aass,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,500/rr,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,500/lru,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,500/random,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,1000/aass,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,1000/rr,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,1000/lru,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,1000/random,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,2500/aass,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,2500/rr,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,2500/lru,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,2500/random,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,5000/aass,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,5000/rr,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,5000/lru,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+ma_lb_pq_vdse,exp7_8,5000/random,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs

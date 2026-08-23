@@ -217,12 +217,18 @@ zhuang_lattice_mabse:
     num_hashes: 3                     # published: "Total number of hash functions 3"
 
 # -----------------------------------------------------------------------------
-# Ref[36] — XB-Muse. BLOCKED.
-# References/Ref[36].pdf is corrupted; its construction cannot be recovered
-# (README §3, Schemes/xb_muse/SCHEME.md). Parameters intentionally absent —
-# do NOT populate this section from the abstract or the comparison table.
+# Ref[36] — XB-Muse. DROPPED 2026-08-23 (team decision; README §14 item 8,
+# option (c)). Not a corpus or tooling limit: the construction runs part of its
+# algorithm inside an Intel SGX enclave (Ref[36].md:341,359) and m6i.xlarge
+# exposes no SGX, so it could only be run either simulated — which omits
+# enclave-transition and EPC-paging cost and would flatter the baseline — or on
+# a different instance, breaking the §1 parity rule that every scheme is
+# measured on identical hardware.
+#
+# Removed from every sweep in global.yaml (was Exp. 1, 2, 3, 5). Parameters
+# intentionally absent and NOT to be populated. §V must state the omission.
 # -----------------------------------------------------------------------------
 xb_muse:
-  status: blocked_corrupted_reference
+  status: dropped_no_sgx_on_benchmark_host
 
 

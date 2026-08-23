@@ -418,7 +418,21 @@ def load_verified_corpus(
     manifest = verify_corpus(
         corpus_path, manifest_path, require_reportable=require_reportable
     )
-    verify_against_pin(manifest, freeze_cfg.get("expected_corpus_sha256"))
+    # The freeze pin is what makes a run reportable, so it is checked unless the
+    # caller has ALREADY opted out of reportability. Without this, setting a pin
+    # made development runs impossible: --no-require-reportable relaxed the
+    # corpus *type* but the pin still refused any corpus but the frozen one, and
+    # the only escape was editing dataset.yaml — results-affecting config.
+    if require_reportable:
+        verify_against_pin(manifest, freeze_cfg.get("expected_corpus_sha256"))
+    else:
+        pinned = freeze_cfg.get("expected_corpus_sha256")
+        actual = manifest.get("corpus_sha256")
+        if pinned and actual != pinned:
+            print(
+                f"  NOT REPORTABLE: corpus {str(actual)[:12]}... is not the frozen "
+                f"pin {str(pinned)[:12]}... (development run)"
+            )
     return list(read_corpus(corpus_path)), manifest
 
 

@@ -1,5 +1,13 @@
 # XB-Muse — Scheme Experiment Guide (Ref[36])
 
+> **DROPPED — 2026-08-23. Do not implement.**
+> This scheme is no longer part of the benchmark. It requires an Intel SGX enclave
+> (`References/Ref[36]/Ref[36].md:341,359`) and the `m6i.xlarge` benchmark host exposes none,
+> so it could only be run simulated (which flatters it) or on non-parity hardware.
+> Removed from every sweep in `global.yaml`. See README §14 item 8 and §16.
+> The rest of this file is retained for the record only.
+
+
 **Back to main README:** [README.md](../../README.md)
 
 ---

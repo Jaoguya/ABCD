@@ -57,15 +57,15 @@ experiments:
   exp1_trapdoor_generation:
     variable: keywords_per_query
     values: [1, 5, 10, 15, 20]                    # published: §V "1 to 20"
-    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, thingom_pq_abse, zhuang_lattice_mabse]
+    schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, zhuang_lattice_mabse]
   exp2_search_latency:
     variable: index_size
     values: [10000, 50000, 100000, 500000, 1000000]   # published: §V "10^4-10^6"
-    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, thingom_pq_abse, zhuang_lattice_mabse]
+    schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, zhuang_lattice_mabse]
   exp3_crossdomain_scalability:
     variable: domains
     values: [2, 4, 6, 8, 10]                      # published: §V "2 to 10"
-    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, thingom_pq_abse, zhuang_lattice_mabse]
+    schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, zhuang_lattice_mabse]
   exp4_verification_overhead:
     variable: returned_results
     values: [10, 50, 100, 500, 1000]              # published: §V "10 to 1000"
@@ -73,7 +73,7 @@ experiments:
   exp5_keyword_update:
     variable: keyword_document_pairs
     values: [100, 1000, 10000, 100000]            # published: §V "10^2-10^5"
-    schemes: [ma_lb_pq_vdse, guo_vdsse, xb_muse, zhuang_lattice_mabse]
+    schemes: [ma_lb_pq_vdse, guo_vdsse, zhuang_lattice_mabse]
   exp6_authorization_sync:
     variable: authorization_updates
     values: [100, 1000, 10000, 100000]            # published: §V "10^2-10^5"

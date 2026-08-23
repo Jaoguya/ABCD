@@ -96,7 +96,13 @@ log "Pinning BLAS threads"
 # numpy's BLAS claims every core by default, so Ref[52]'s lattice latency would
 # silently depend on core count and could not be reproduced even on identical
 # hardware. Pin to the instance's vCPU count and record it in run_meta.json.
-THREADS="$(nproc)"
+# global.yaml is the single source of truth: environment.blas_threads is 1, so
+# that Ref[52]'s lattice latency does NOT depend on the host's core count.
+# This previously used $(nproc), which both reintroduced that dependency and
+# made verify_thread_pinning(require=True) fail on a correctly provisioned
+# host — global.yaml expected 1, provision exported 4.
+THREADS="$(grep -E '^[[:space:]]*blas_threads:' "${REPO}/Experiment Configuration/global.yaml" | head -1 | sed 's/.*://; s/#.*//; s/[[:space:]]//g')"
+THREADS="${THREADS:-1}"
 cat <<EOF | sudo tee /etc/profile.d/malbpq-threads.sh > /dev/null
 export OMP_NUM_THREADS=${THREADS}
 export OPENBLAS_NUM_THREADS=${THREADS}

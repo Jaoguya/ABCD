@@ -69,7 +69,7 @@ The three novelty claims — PDSI, AASS, IAS — are measured by Exp. 2, Exp. 7�
 |--------|-----|-------|-----------|
 | `ma_lb_pq_vdse/` | ours | This work | Proposed framework |
 | `guo_vdsse/` | Ref[35] | Guo *et al.*, IEEE TDSC 2024 | Verifiable dynamic SSE |
-| `xb_muse/` | Ref[36] | Jiang *et al.*, IEEE IoT-J 2025 | State-of-the-art dynamic SSE |
+| `xb_muse/` | Ref[36] | Jiang *et al.*, IEEE IoT-J 2025 | ~~State-of-the-art dynamic SSE~~ — **DROPPED 2026-08-23**, no SGX on the benchmark host (§14 item 8) |
 | `thingom_pq_abse/` | Ref[41] | Thingom *et al.*, IEEE TCE 2026 | Multi-authority ABSE |
 | `zhuang_lattice_mabse/` | Ref[52] | Zhuang *et al.*, IEEE DSC | Lattice-based post-quantum SE |
 
@@ -152,7 +152,7 @@ Each experiment varies one variable and holds the rest at §6 defaults.
 | 2 | Search Latency | index size `N` | 10⁴ → 10⁶ | latency (ms) | `n_eff`, entries traversed, prune ratio | All 5 |
 | 3 | Cross-Domain Scalability | domains `d` | 2 → 10 | latency (ms) | trapdoors issued, cross-node msgs | All 5 |
 | 4 | Verification Overhead | records `r` | 10 → 1000 | latency (ms) | proof size (KB), path length | Ours, Ref[35] |
-| 5 | Dynamic Keyword Update | (keyword, doc) pairs `k` | 10² → 10⁵ | latency (ms) | Merkle nodes recomputed, entries rewritten | Ours, Ref[35], Ref[36], Ref[52] |
+| 5 | Dynamic Keyword Update | (keyword, doc) pairs `k` | 10² → 10⁵ | latency (ms) | Merkle nodes recomputed, entries rewritten | Ours, Ref[35], Ref[52] |
 | 6 | Authorization Sync | updates `δ` | 10² → 10⁵ | latency (ms) | IAS message size (KB), FSNs touched | Ours, Ref[52] |
 | 7 | Search Throughput | concurrency | 100 → 5000 | throughput (q/s) | p50/p95 latency, rejected | Ours — ablation |
 | 8 | Load Balancing | concurrency | 100 → 5000 | std dev of FSN utilization | max-node util, cross-node forwards | Ours — ablation |
@@ -244,7 +244,7 @@ BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores 
 
 **`Common/` scope.** Primitives a paper *cites* (SHA-256, HMAC, AES-GCM, Merkle, Bloom, Gaussians, pairings, ML-KEM) live here so every scheme measures the same cost. Anything a paper *contributes* (Guo's forward index, Zhuang's key derivation, Thingom's LSSS encoding, our PDSI/AASS/IAS) stays in its own `src/`. If two schemes seem to need the same construction, one of them is probably being implemented unfaithfully.
 
-Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · XB-Muse 1,2,3,5 · Thingom 1,2,3 · Zhuang 1,2,3,5,6.
+Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · Thingom 1,2,3 · Zhuang 1,2,3,5,6. XB-Muse (Ref[36]) was **dropped on 2026-08-23** — see §14 item 8.
 
 ---
 
@@ -361,7 +361,7 @@ Decisions still needed, roughly in order of impact.
 | 5 | **λ₁…λ₅ undetermined.** Blocks Exp. 7–8. | One-time sweep on a held-out workload, committed |
 | 6 | **`charm-crypto` not installed.** Blocks Ref[41]. | Source build; may fail |
 | 7 | **Primitive tests never run.** The crypto layer is unverified. | `python Common/crypto/tests/test_primitives.py` |
-| 8 | **Ref[36] requires Intel SGX** — key provisioning and part of the algorithm run in an enclave with SGX attestation. `m6i.xlarge` does not expose SGX (AWS provides Nitro Enclaves, a different trust and attestation model). | (a) Simulate the enclave as a process boundary and disclose — the cryptographic work is identical, only hardware isolation is absent, and omitting SGX's enclave-transition and EPC-paging overhead makes the baseline look *faster* than reality, which is the conservative direction; (b) run Ref[36] on an SGX-capable instance, breaking §1 parity; (c) drop it and say so in §V |
+| 8 | **Ref[36] requires Intel SGX** — key provisioning and part of the algorithm run in an enclave with SGX attestation. `m6i.xlarge` does not expose SGX (AWS provides Nitro Enclaves, a different trust and attestation model). | (a) Simulate the enclave as a process boundary and disclose — the cryptographic work is identical, only hardware isolation is absent, and omitting SGX's enclave-transition and EPC-paging overhead makes the baseline look *faster* than reality, which is the conservative direction; (b) run Ref[36] on an SGX-capable instance, breaking §1 parity; (c) drop it and say so in §V **RESOLVED 2026-08-23: option (c).** Ref[36] is dropped from all experiments; §V must state the omission and that the reason is hardware parity, not an unfavourable result. |
 | 9 | `load_verified_corpus()` materialises 1.2M records (~1–2 GB per process). | Add a streaming variant |
 
 ---
@@ -376,8 +376,8 @@ Decisions still needed, roughly in order of impact.
 - [ ] Every numeric claim in §V traces to a `results.csv` cell
 - [ ] §V updated: Synthea (not MIMIC-IV), `m6i.xlarge`, domain distribution as measured
 - [ ] Duplicate `\bibitem{ref55}` resolved
-- [x] Ref[36] obtained (2026-08-05) — `xb_muse/` still to be verified against the construction
-- [ ] SGX approach for Ref[36] decided and stated in §V
+- [x] Ref[36] obtained (2026-08-05); **scheme dropped 2026-08-23** — no SGX on the benchmark host (§14 item 8, option (c))
+- [ ] §V updated to state the Ref[36] omission and its reason
 
 ---
 
@@ -399,5 +399,6 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 | 2026-08-04 | Corrected stale README content against measurements: `-p 400000` → `-p 18000` (measured 62 encounters/patient, not 2–3); pairing description (charm provides the Type-I curve Ref[41] needs); Exp. 5 `k` as (keyword, document) pairs; implementation status. |
 | 2026-08-04 | Rewrote for brevity — condensed the constraint sections into §13 Ground Rules and moved actionable items into §14 Open Issues. Confirmed from [`:1902`](Overleaf/PQ-AVDSE-OJCOMS#L1902) that `q=5` **is** stated in §V ("each query contains five keywords"); an earlier note claiming otherwise was wrong. |
 | 2026-08-04 | **Corpus v1 superseded and v2 frozen.** v1 had median \|W_i\|=4 against `q=5`, leaving 55% of records unmatchable by a conjunctive query, and uneven domains against §V's "uniformly distributed". Added `min_keywords_per_record: 5` (from the published `q`) and `balance_domains()` (whole organizations packed largest-first). Regenerated at 38,000 patients → **1,141,072 records, min \|W_i\|=5, domains 285,268 × 4 exactly**, 36.2M pairs, 2,006 keywords, SHA-256 `fd4b7654…` pinned. v1 archived, never used for results. **[results-affecting]** |
+| 2026-08-23 | **Ref[36] (XB-Muse) dropped.** §14 item 8 resolved as option (c): the construction runs inside an Intel SGX enclave and `m6i.xlarge` exposes none, so it could only run simulated (omitting enclave-transition and EPC-paging cost, flattering the baseline) or on non-parity hardware. Removed from the Exp. 1/2/3/5 sweeps in `global.yaml`; `crypto.yaml` status is now `dropped_no_sgx_on_benchmark_host`. No results existed for it, so no `results.csv` is invalidated. §V must state the omission. |
 | 2026-08-05 | **Ref[36] recovered.** Clean copy from IEEE Xplore extracted cleanly (108,474 bytes, 1,030 lines) where the corrupted original yielded 0; originals archived under `References/corrupted_archive/`. Construction identified: SRE from a multi-puncturable PRF + Bloom filter of revoked tags — both already covered by `Common/crypto/prf.py` and `bloom.py`. **New finding: the scheme requires Intel SGX** (`Ref[36].txt:341,359`), which `m6i.xlarge` does not expose. Options recorded in §14. |
 | 2026-08-04 | **Environment complete and crypto layer verified.** liboqs 0.16.0 supplies ML-KEM-768 (`cryptography` 50.0.0 does not expose it, contrary to the requirements.txt comment). `charm-crypto` built after fixing `configure.sh`'s `which python3-config` probe — only `python3.11-config` exists under deadsnakes — with PBC 0.5.14 built from source first; SS512 bilinearity verified. **65 primitive tests: 64 passed, 1 skipped, 0 failed** on first execution. Noted that SS512 provides ~80-bit security (charm DeprecationWarning); Ref[41] specifies Type-I but no curve, so this is a decision to make before reportable runs. |
