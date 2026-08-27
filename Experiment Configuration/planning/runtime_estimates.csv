@@ -15,17 +15,7 @@ thingom_pq_abse,exp3,9,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HEL
 thingom_pq_abse,exp3,10,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
 thingom_pq_abse,exp1,1-20,0.5,30,5,35,17.5,0.0,estimated,low,trapdoor only; negligible
 thingom_pq_abse,TOTAL,,,,,,,20.10,MEASURED,high,exp1(~0)+exp2(7.18h @N=10000 only)+exp3(9x1.44h @total=2000) — fits the 24h-per-track budget with ~3.9h margin; see debug_history.md 2026-08-27 entry
-zhuang_lattice_mabse,exp2,10000,1.8,30,5,35,63.0,0.02,paper Table VI,medium,search 0.18ms/record; build amortised separately
-zhuang_lattice_mabse,exp2,50000,9.0,30,5,35,315.0,0.09,paper Table VI,medium,search 0.18ms/record; build amortised separately
-zhuang_lattice_mabse,exp2,100000,18.0,30,5,35,630.0,0.17,paper Table VI,medium,search 0.18ms/record; build amortised separately
-zhuang_lattice_mabse,exp2,500000,90.0,30,5,35,3150.0,0.88,paper Table VI,medium,search 0.18ms/record; build amortised separately
-zhuang_lattice_mabse,exp2,1000000,180.0,30,5,35,6300.0,1.75,paper Table VI,medium,search 0.18ms/record; build amortised separately
-zhuang_lattice_mabse,build_exp2,1000000,4741000.0,1,0,1,4741000.0,1316.94,paper Table VI,low,ONE nested build serves all Exp2 points; vectorise Encrypt
-zhuang_lattice_mabse,exp3,2,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
-zhuang_lattice_mabse,exp3,4,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
-zhuang_lattice_mabse,exp3,6,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
-zhuang_lattice_mabse,exp3,8,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
-zhuang_lattice_mabse,exp3,10,18.0,30,5,35,630.0,0.17,paper Table VI,medium,total index held at 1e5
+perera_lv_pqabse,exp2,,,,,,,,not_started,,DROPPED zhuang_lattice_mabse rows here 2026-08-27 (scheme removed, see crypto.yaml/debug_history.md); replacement scheme not yet implemented -- no estimate possible until Schemes/perera_lv_pqabse/ exists
 guo_vdsse,exp5,100,0.089,30,5,35,3.1,0.0,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
 guo_vdsse,exp5,1000,0.891,30,5,35,31.2,0.01,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
 guo_vdsse,exp5,10000,8.958,30,5,35,313.5,0.09,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i

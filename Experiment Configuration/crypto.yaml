@@ -192,43 +192,61 @@ thingom_pq_abse:
     mode: independent_trapdoors
 
 # -----------------------------------------------------------------------------
-# Ref[52] — Zhuang et al., IEEE DSC
-# Source: References/Ref[52].txt:722-735 (TABLE III: Comparison Parameters)
+# Ref[52] — Zhuang et al. DROPPED 2026-08-27 (team decision). Not implemented as
+# an active baseline; see debug_history.md for the full reasoning. Its Exp. 2
+# runner never materialized a real N-record index (approximated an N-record
+# scan by replaying one real entry N times), which the team judged not
+# comparable on the same "build once, measure real thing" methodology every
+# other scheme (including this repo's own) uses -- rather than disclose the
+# approximation, the scheme was replaced with Ref[54] (see below), which is
+# genuinely lattice-based/postquantum and does not have that gap. Kept as a
+# related-work citation in the manuscript; removed as an empirical comparator.
+# Parameters intentionally absent and NOT to be populated.
 # -----------------------------------------------------------------------------
 zhuang_lattice_mabse:
-  lattice:
-    n: 284                            # published: security parameter
-    m: 13812                          # published: basis dimension
-    log_q: 24                         # published: q = 2^24
-    # Consistency note: with k = log_q = 24, the gadget block is n*k = 6816 and
-    # the random block is m - n*k = 6996 >= n*log(q), which is exactly the
-    # Micciancio-Peikert (MP12) gadget-trapdoor decomposition. The published
-    # m therefore matches an MP12 instantiation of TrapGen. See
-    # Common/crypto/lattice.py for the full argument.
-    gaussian_sigma: 4.0               # benchmark: sigma stated only as
-                                      # "sigma > 0" in Ref[52].txt:106
-  attributes:
-    l: 10                             # published: size of attribute set U_C
-    l_prime: 10                       # published: SPE subset bits
-  users_total: 50                     # published: u
-  keywords_per_ciphertext: 5          # published: w
-  bloom_filter:
-    array_bits: 32                    # published: "Length of bloom filter array 32"
-    num_hashes: 3                     # published: "Total number of hash functions 3"
+  status: dropped_replaced_by_ref54
 
 # -----------------------------------------------------------------------------
-# Ref[36] — XB-Muse. DROPPED 2026-08-23 (team decision; README §14 item 8,
-# option (c)). Not a corpus or tooling limit: the construction runs part of its
-# algorithm inside an Intel SGX enclave (Ref[36].md:341,359) and m6i.xlarge
-# exposes no SGX, so it could only be run either simulated — which omits
-# enclave-transition and EPC-paging cost and would flatter the baseline — or on
-# a different instance, breaking the §1 parity rule that every scheme is
-# measured on identical hardware.
+# Ref[54] — Perera and Fugkeaw, "LV-PQ-ABSE", IEEE IoT-J, doi:
+# 10.1109/JIOT.2026.3695855. Added 2026-08-27 to replace Ref[52] (zhuang,
+# dropped above). Genuinely lattice-based throughout (LWE-hardness CP-ABE +
+# Kyber768 KEM + Dilithium3 signatures, NIST Category 3 / lambda=192) -- no
+# pairings, no DBDH, anywhere in the construction. See
+# References/Ref[54]/Ref[54].md for the full extraction and a legitimacy
+# assessment (no self-contradiction found, unlike Ref[41]).
 #
-# Removed from every sweep in global.yaml (was Exp. 1, 2, 3, 5). Parameters
-# intentionally absent and NOT to be populated. §V must state the omission.
-# -----------------------------------------------------------------------------
-xb_muse:
-  status: dropped_no_sgx_on_benchmark_host
+# NOT YET IMPLEMENTED. Schemes/perera_lv_pqabse/ does not exist yet -- this
+# block only records what the paper does and does not publish, so the gaps
+# are visible before implementation starts (same rigor as
+# thingom_pq_abse.attributes.u below).
+perera_lv_pqabse:
+  lattice:
+    # NOT PUBLISHED. The paper states only "parameters (n,q,sigma) ... follow
+    # established configurations consistent with Kyber768 and Dilithium3"
+    # (Ref[54].md, Sec. IV.C "Lattice Parameterization and Security
+    # Justification") -- no concrete (n,q,sigma) triple is given anywhere in
+    # the text. This is the same class of gap as thingom_pq_abse's u: a
+    # benchmark decision is required before implementation, not a default to
+    # silently pick. Candidate anchor: Kyber768's own ring-LWE parameters
+    # (n=256, k=3, q=3329) are the most defensible citable choice given the
+    # paper's own "consistent with Kyber768" framing, but this must be a
+    # deliberate decision recorded here with a date, not assumed.
+    n: null
+    q: null
+    gaussian_sigma: null
+  security_parameter_lambda: 192      # published: "lambda = 192 (NIST Category 3)"
+  attributes:
+    # NOT PUBLISHED. No attribute universe size |U| is given anywhere in the
+    # paper (unlike zhuang's published l=10). Needs a benchmark decision --
+    # consider matching thingom_pq_abse.attributes.u (10) for cross-baseline
+    # comparability, per the precedent already used between thingom and zhuang.
+    universe_size: null
+  kem: kyber768                       # published
+  signature: dilithium3               # published
+  hash: sha3-256                      # published (H1,H2,H3 domain-separated; HKDF-SHA3-256)
+  symmetric: aes-256-gcm              # published
+  # keywords_per_query, range/fuzzy query parameters: not numerically fixed
+  # by the paper either -- same "benchmark decision needed" status.
+
 
 

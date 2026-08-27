@@ -162,6 +162,6 @@ Recommended order for running experiments:
 3. **Baselines** in order:
    - `guo_vdsse` — Exp. 1, 2, 3, 4, 5
    - `thingom_pq_abse` — Exp. 1, 2, 3
-   - `zhuang_lattice_mabse` — Exp. 1, 2, 3, 5, 6
+   - `perera_lv_pqabse` (Ref[54]) — Exp. 1, 2, 3 — **not yet implemented**, see `Schemes/perera_lv_pqabse/SCHEME.md`
 4. **Plotting** — `python Plots/generate_plots.py`
 5. **Full validation loop** — recheck all outputs and reviewer checks

@@ -207,7 +207,7 @@ Chen \textit{et al.}~\cite{ref53}
 & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ & $\times$ \\
 
 Perera and Fugkeaw~\cite{ref54}
-& $\times$ & $\checkmark$ & $\times$ & $\times$ & $\times$ & $\times$ & $\checkmark$ \\
+& $\times$ & $\checkmark$ & $\times$ & $\checkmark$ & $\checkmark$ & $\times$ & $\checkmark$ \\
 \hline
 \textbf{Proposed}
 & $\checkmark$
@@ -1737,8 +1737,8 @@ are selected as baselines. Specifically, Guo
 searchable encryption, XB-Muse~\cite{ref36} represents
 state-of-the-art dynamic searchable encryption, Thingom
 \textit{et al}.~\cite{ref41} represents multi-authority
-attribute-based searchable encryption, and Zhuang
-\textit{et al}.~\cite{ref52} represents lattice-based
+attribute-based searchable encryption, and Perera and
+Fugkeaw~\cite{ref54} represent lattice-based
 post-quantum searchable encryption. Together, these baselines
 cover the major research directions in searchable encryption,
 including dynamic index maintenance, verifiable retrieval,
@@ -1856,17 +1856,17 @@ N/A
 N/A
 \\
 
-Zhuang \textit{et al}.~\cite{ref52}
+Perera and Fugkeaw~\cite{ref54}
 &
-$O(dl)T_S$
+$O(q)T_{\mathrm{PRF}}$
 &
-\makecell{$O(dl)$\\$(T_S+T_H)$}
-&
-$O(1)(T_S+T_D)$
+\makecell{$O(n_{\mathrm{eff}})$\\$(T_{\mathrm{BF}}+T_H)$}
 &
 N/A
 &
-$O(1)(T_S+T_D)$
+\makecell{$O(\log N)$\\$(T_{\mathrm{MT}}+T_{\mathrm{Sig}})$}
+&
+N/A
 \\
 
 \textbf{Proposed}
@@ -1901,7 +1901,7 @@ The framework employs ML-KEM-768 for post-quantum secure key establishment, AES-
 \textcolor{red}{
 Experiments were conducted using the Synthea synthetic patient generator~\cite{ref56}, from which encrypted searchable indexes containing $10^4$--$10^6$ electronic health records were generated and uniformly distributed across four administrative healthcare domains. Unless otherwise specified, each query contains five keywords, and every experiment reports the average of 30 independent runs with 95\% confidence intervals.
 }
-The proposed framework was compared with four representative searchable encryption schemes: Guo \textit{et al}.~\cite{ref35} (verifiable dynamic searchable encryption), XB-Muse~\cite{ref36} (dynamic searchable encryption), Thingom \textit{et al}.~\cite{ref41} (multi-authority searchable encryption), and Zhuang \textit{et al}.~\cite{ref52} (lattice-based post-quantum searchable encryption). The evaluation focuses on trapdoor generation, encrypted search efficiency, cross-domain search scalability, keyword update performance, retrieval verification, authorization synchronization, and authorization-aware load balancing under increasing workloads.
+The proposed framework was compared with four representative searchable encryption schemes: Guo \textit{et al}.~\cite{ref35} (verifiable dynamic searchable encryption), XB-Muse~\cite{ref36} (dynamic searchable encryption), Thingom \textit{et al}.~\cite{ref41} (multi-authority searchable encryption), and Perera and Fugkeaw~\cite{ref54} (lattice-based post-quantum searchable encryption). The evaluation focuses on trapdoor generation, encrypted search efficiency, cross-domain search scalability, keyword update performance, retrieval verification, authorization synchronization, and authorization-aware load balancing under increasing workloads.
 
 
 \subsubsection*{\textbf{Experiment 1: Trapdoor Generation Latency}}
@@ -1911,7 +1911,7 @@ This experiment evaluates the trapdoor generation latency as the
 number of queried keywords increases from 1 to 20. The proposed
 framework is compared with Guo \textit{et al}.~\cite{ref35},
 XB-Muse~\cite{ref36}, Thingom \textit{et al}.~\cite{ref41}, and
-Zhuang \textit{et al}.~\cite{ref52}. Since ML-KEM is executed only
+Perera and Fugkeaw~\cite{ref54}. Since ML-KEM is executed only
 during session establishment, only online trapdoor generation is
 measured.
 
@@ -2002,8 +2002,11 @@ maintaining complete search-result integrity.
 
 This experiment measures keyword update latency as the number of
 updated keywords increases from $10^2$ to $10^5$. The proposed
-framework is compared with Guo \textit{et al}.~\cite{ref35},
-XB-Muse~\cite{ref36}, and Zhuang \textit{et al}.~\cite{ref52}.
+framework is compared with Guo \textit{et al}.~\cite{ref35}. XB-Muse~\cite{ref36}
+was dropped from every sweep (no SGX on the benchmark host; see
+Section~\ref{sec:evaluation}); Perera and Fugkeaw~\cite{ref54} define no
+incremental-update primitive (indexes are rebuilt at their Phase~3, not
+updated), so it is not included here.
 
 \begin{figure}[!t]
     \centering
@@ -2023,8 +2026,12 @@ search indexes.
 
 This experiment evaluates authorization synchronization latency
 under increasing numbers of authorization updates ranging from
-$10^2$ to $10^5$. Zhuang \textit{et al}.~\cite{ref52} is used as
-the representative baseline supporting dynamic membership updates.
+$10^2$ to $10^5$. No baseline is included: Guo \textit{et al}.~\cite{ref35}
+and Thingom \textit{et al}.~\cite{ref41} define no authorization-sync
+primitive, and Perera and Fugkeaw~\cite{ref54} self-disclose that they
+support only coarse, whole-epoch key evolution rather than per-update
+synchronization. This experiment is therefore an internal ablation of
+the proposed IAS mechanism, consistent with Experiments~7--8.
 
 \begin{figure}[!t]
     \centering

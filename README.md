@@ -71,7 +71,7 @@ The three novelty claims — PDSI, AASS, IAS — are measured by Exp. 2, Exp. 7�
 | `guo_vdsse/` | Ref[35] | Guo *et al.*, IEEE TDSC 2024 | Verifiable dynamic SSE |
 | `xb_muse/` | Ref[36] | Jiang *et al.*, IEEE IoT-J 2025 | ~~State-of-the-art dynamic SSE~~ — **DROPPED 2026-08-23**, no SGX on the benchmark host (§14 item 8) |
 | `thingom_pq_abse/` | Ref[41] | Thingom *et al.*, IEEE TCE 2026 | Multi-authority ABSE |
-| `zhuang_lattice_mabse/` | Ref[52] | Zhuang *et al.*, IEEE DSC | Lattice-based post-quantum SE |
+| `perera_lv_pqabse/` | Ref[54] | Perera and Fugkeaw, IEEE IoT-J 2026 | Lattice-based post-quantum ABSE — **not yet implemented**, replaced Ref[52] on 2026-08-27 |
 
 Per-scheme experiment lists and run commands are in each `SCHEME.md`. Reference PDFs in [References/](References/).
 
@@ -79,7 +79,7 @@ Per-scheme experiment lists and run commands are in each `SCHEME.md`. Reference 
 
 - **Ref[35]** — SHA-256 hashes, HMAC-SHA256 PRFs, t-Pun-PRF from two HMACs (SHA256 + Blake2b), λ=128, 192-bit hash output. Note the VBTree `L=32` in that paper belongs to a *compared* scheme (Wu et al.), not Guo's own.
 - **Ref[41]** — Type-I symmetric pairing `e : I₁×I₁→I₂` under DBDH. The paper calls itself post-quantum while resting on DBDH, which Shor breaks; it also states elsewhere that pairings aren't post-quantum. Implement as published and report the observation.
-- **Ref[52]** — n=284, m=13812, q=2²⁴, Bloom BF(32,3), 10 attributes, 50 users, 5 keywords per ciphertext. The published `m` matches an MP12 gadget-trapdoor decomposition exactly (6816 gadget + 6996 uniform columns).
+- **Ref[54]** — λ=192 (NIST Category 3), Kyber768 KEM, Dilithium3 signatures, SHA3-256/HKDF, AES-256-GCM — all published. Lattice CP-ABE parameters `(n,q,σ)` are **not published**, stated only as "consistent with Kyber768 and Dilithium3" (`Ref[54].md` §IV.C); attribute universe size is also unpublished. Both need a benchmark decision before implementation — see `Experiment Configuration/crypto.yaml`'s `perera_lv_pqabse` block.
 - **Ref[36]** — clean copy obtained 2026-08-05 (the original was corrupted; archived under `References/corrupted_archive/`). Construction: **SRE (Symmetric Revocable Encryption)** built from a **multi-puncturable PRF** and a **Bloom filter** of revoked tags, plus keyed PRFs `F`/`G` for address derivation and on-chain revocation status. Our existing `prf.py` (puncturable PRF, punctures at a set of points) and `bloom.py` cover the SRE building blocks. **Requires Intel SGX** — key provisioning and part of the algorithm run inside an enclave with SGX attestation (`Ref[36].txt:341,359`). See §14.
 
 In Exp. 3 the baselines run in native mode: `d` independent trapdoors and `d` searches with client-side aggregation. That's what Table VI assumes.
@@ -152,8 +152,8 @@ Each experiment varies one variable and holds the rest at §6 defaults.
 | 2 | Search Latency | index size `N` | 10⁴ → 10⁶ | latency (ms) | `n_eff`, entries traversed, prune ratio | All 5 |
 | 3 | Cross-Domain Scalability | domains `d` | 2 → 10 | latency (ms) | trapdoors issued, cross-node msgs | All 5 |
 | 4 | Verification Overhead | records `r` | 10 → 1000 | latency (ms) | proof size (KB), path length | Ours, Ref[35] |
-| 5 | Dynamic Keyword Update | (keyword, doc) pairs `k` | 10² → 10⁵ | latency (ms) | Merkle nodes recomputed, entries rewritten | Ours, Ref[35], Ref[52] |
-| 6 | Authorization Sync | updates `δ` | 10² → 10⁵ | latency (ms) | IAS message size (KB), FSNs touched | Ours, Ref[52] |
+| 5 | Dynamic Keyword Update | (keyword, doc) pairs `k` | 10² → 10⁵ | latency (ms) | Merkle nodes recomputed, entries rewritten | Ours, Ref[35] |
+| 6 | Authorization Sync | updates `δ` | 10² → 10⁵ | latency (ms) | IAS message size (KB), FSNs touched | Ours |
 | 7 | Search Throughput | concurrency | 100 → 5000 | throughput (q/s) | p50/p95 latency, rejected | Ours — ablation |
 | 8 | Load Balancing | concurrency | 100 → 5000 | std dev of FSN utilization | max-node util, cross-node forwards | Ours — ablation |
 
@@ -214,7 +214,7 @@ The λ weights are load-bearing — they define the AASS selection rule and a re
 - **Outliers.** Keep them. If a run fails, record `status=failed` in `raw_runs.csv` and re-run to restore n=30 rather than dropping it.
 - **Provenance.** Each `results.csv` gets a `run_meta.json`: git commit, instance type, Python and library versions, dataset SHA-256, corpus type, config hashes, UTC start time.
 
-BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores by default, which would make Ref[52]'s latency depend on core count. `provision.sh` sets this; `environment_report()` records what was in force.
+BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores by default, which would make a lattice-heavy scheme's latency depend on core count (was Ref[52]'s concern; applies equally to Ref[54]'s lattice CP-ABE once implemented). `provision.sh` sets this; `environment_report()` records what was in force.
 
 ---
 
@@ -242,9 +242,9 @@ BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores 
 ├── Overleaf/ · References/
 ```
 
-**`Common/` scope.** Primitives a paper *cites* (SHA-256, HMAC, AES-GCM, Merkle, Bloom, Gaussians, pairings, ML-KEM) live here so every scheme measures the same cost. Anything a paper *contributes* (Guo's forward index, Zhuang's key derivation, Thingom's LSSS encoding, our PDSI/AASS/IAS) stays in its own `src/`. If two schemes seem to need the same construction, one of them is probably being implemented unfaithfully.
+**`Common/` scope.** Primitives a paper *cites* (SHA-256, HMAC, AES-GCM, Merkle, Bloom, Gaussians, pairings, ML-KEM) live here so every scheme measures the same cost. Anything a paper *contributes* (Guo's forward index, Perera & Fugkeaw's hybrid index, Thingom's LSSS encoding, our PDSI/AASS/IAS) stays in its own `src/`. If two schemes seem to need the same construction, one of them is probably being implemented unfaithfully.
 
-Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · Thingom 1,2,3 · Zhuang 1,2,3,5,6. XB-Muse (Ref[36]) was **dropped on 2026-08-23** — see §14 item 8.
+Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · Thingom 1,2,3 · Perera & Fugkeaw (Ref[54]) 1,2,3 — **not yet implemented**, see `Schemes/perera_lv_pqabse/SCHEME.md`. Ref[54] does not cover Exp. 5/6 (no incremental-update primitive; self-disclosed no fine-grained revocation, only coarse epoch-based key evolution) — narrower than Zhuang's old slot, deliberately, not copied over. XB-Muse (Ref[36]) was **dropped on 2026-08-23** — see §14 item 8. Zhuang (Ref[52]) was **dropped and replaced by Ref[54] on 2026-08-27** — see §16.
 
 ---
 
@@ -403,6 +403,7 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 | 2026-08-05 | **Ref[36] recovered.** Clean copy from IEEE Xplore extracted cleanly (108,474 bytes, 1,030 lines) where the corrupted original yielded 0; originals archived under `References/corrupted_archive/`. Construction identified: SRE from a multi-puncturable PRF + Bloom filter of revoked tags — both already covered by `Common/crypto/prf.py` and `bloom.py`. **New finding: the scheme requires Intel SGX** (`Ref[36].txt:341,359`), which `m6i.xlarge` does not expose. Options recorded in §14. |
 | 2026-08-04 | **Environment complete and crypto layer verified.** liboqs 0.16.0 supplies ML-KEM-768 (`cryptography` 50.0.0 does not expose it, contrary to the requirements.txt comment). `charm-crypto` built after fixing `configure.sh`'s `which python3-config` probe — only `python3.11-config` exists under deadsnakes — with PBC 0.5.14 built from source first; SS512 bilinearity verified. **65 primitive tests: 64 passed, 1 skipped, 0 failed** on first execution. Noted that SS512 provides ~80-bit security (charm DeprecationWarning); Ref[41] specifies Type-I but no curve, so this is a decision to make before reportable runs. |
 | 2026-08-27 | **Old experiment host terminated; new one provisioned with two provision.sh bugs fixed; frozen corpus lost and regenerated non-identically.** See §17 for full state and open questions — this entry is the pointer. **[results-affecting: corpus]** |
+| 2026-08-27 | **Ref[52] (Zhuang) dropped and replaced by Ref[54] (Perera and Fugkeaw, "LV-PQ-ABSE").** Team decision: Zhuang's Exp. 2 runner never built a real N-record index (approximated the scan by replaying one real entry N times), which doesn't match the "build once, measure the real thing" methodology every other scheme here uses — rather than disclose the approximation, the scheme was replaced. Ref[54] is already cited in the manuscript's related work; it is genuinely lattice-based (LWE CP-ABE + Kyber768 + Dilithium3, no pairings anywhere) and self-discloses its own limitations rather than self-contradicting, unlike Ref[41]. `Schemes/zhuang_lattice_mabse/` removed entirely; `Schemes/perera_lv_pqabse/` **not yet implemented** — only `crypto.yaml`'s config block and `Ref[54].md`'s extraction exist so far. Two parameters the paper never publishes (lattice `(n,q,σ)`, attribute universe size) are flagged there as benchmark decisions still needed, same treatment as `thingom_pq_abse.attributes.u`. `References/Ref[52].pdf/.md` removed; `References/Ref[35]/` reorganized into the same subfolder convention as Ref[36]/Ref[41]/Ref[54]. **[results-affecting: baseline scheme roster]** |
 | 2026-08-27 | **charm-crypto built on the new host; Ref[41] sweep capped to a 24h-per-track budget; a real methodology bug fixed in Exp. 3.** Built PBC 0.5.14 + charm-crypto on `98.91.21.219` (same fix as 2026-08-04, now scripted into `provision.sh`) — **64 passed, 1 skipped, 0 failed** on `test_primitives.py`, resolving §14 items 6–7. Measured Ref[41]'s real pairing cost at **0.703 ms/pairing** (vs. an earlier 1.5 ms/pairing guess) — 2.1× better, but the published `N=10⁴–10⁶` / `d=2–10` sweep still costs ~178h even at the real rate, so Exp. 2 is capped to `N=10⁴` only and Exp. 3's held-constant total index is capped `1e5 → 2,000` (`Schemes/thingom_pq_abse/src/main.py`; ~20.1h combined, disclosed in `SCHEME.md`). While sizing that cap, found and fixed a real bug in `experiment_3`: `shard_size` was a fixed constant (`DEFAULT_INDEX_SIZE // DEFAULT_DOMAINS`) instead of dividing the swept `d` into the held-constant total, so total work scaled linearly with `d` instead of staying flat as the measurement boundary requires — verified fixed (latency flat within noise across `d=2/5/10`). Audited all four schemes' Exp. 2 methodology against the "build once, then measure" standard `ma_lb_pq_vdse`'s own harness uses: `guo_vdsse` and `thingom_pq_abse` already matched it; `zhuang_lattice_mabse` does not (approximates an N-record scan by replaying one real entry N times rather than building a real N-record index) — still open, decision pending. Confirmed `ma_lb_pq_vdse`'s own full campaign (previously unmeasured) is dominated by Exp. 7–8's ramp+steady windows at ~17.6h, plausibly fitting the 24h budget without cuts. **[results-affecting: thingom_pq_abse exp2/exp3 sweep range]** |
 
 ---
