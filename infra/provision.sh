@@ -44,7 +44,7 @@ sudo add-apt-repository -y ppa:deadsnakes/ppa
 sudo apt-get update -qq
 sudo apt-get install -y -qq \
     "${PYTHON}" "${PYTHON}-venv" "${PYTHON}-dev" \
-    build-essential git curl pkg-config \
+    build-essential git curl pkg-config cmake \
     libgmp-dev libssl-dev flex bison \
     m4 automake libtool
 

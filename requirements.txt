@@ -64,8 +64,19 @@ psutil>=5.9.0                   # System/process monitoring (FSN utilization sam
 #                               # Required for reportable Ref[41] runs.
 #                               # Not on PyPI as a wheel; install separately:
 #                               #   pip install charm-crypto
-petrelic>=0.1.5                 # Type-III only. Cross-platform. DEVELOPMENT
+# petrelic>=0.1.5                # Type-III only. Cross-platform. DEVELOPMENT
                                 # fallback for Ref[41] — NOT reportable.
+                                # Not resolvable via PyPI as of 2026-08-23
+                                # ("No matching distribution found for
+                                # petrelic") — pinning it here made a hard
+                                # requirements.txt install abort provision.sh
+                                # before it ever reached charm-crypto, even
+                                # though provision.sh's own "Pairing backends"
+                                # step already installs it best-effort with a
+                                # `|| echo ... (dev fallback only)` guard.
+                                # Left commented rather than deleted so the
+                                # intent (Type-III dev fallback) stays
+                                # documented; that step is the sole installer.
 
 
 # ===========================================================================
