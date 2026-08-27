@@ -80,12 +80,30 @@ pip install --quiet petrelic || echo "petrelic failed (dev fallback only)"
 if ! pip install --quiet charm-crypto; then
     log "charm-crypto pip install failed — building from source"
     tmp=$(mktemp -d)
+
+    # PBC is charm's pairing backend and isn't packaged for apt on 22.04/24.04.
+    curl -sLO --output-dir "$tmp" https://crypto.stanford.edu/pbc/files/pbc-0.5.14.tar.gz
+    (
+        cd "$tmp"
+        tar xzf pbc-0.5.14.tar.gz
+        cd pbc-0.5.14
+        ./configure --prefix=/usr/local
+        make -j"$(nproc)"
+        sudo make install
+        sudo ldconfig
+    )
+
+    # charm's configure.sh probes `which python3-config`, which deadsnakes never
+    # installs (only the versioned python3.11-config exists) — it fails with
+    # "requires the python development environment" without this symlink.
+    sudo ln -sf "$(command -v "${PYTHON}-config")" /usr/local/bin/python3-config
+
     git clone --depth 1 https://github.com/JHUISI/charm.git "$tmp/charm"
     (
         cd "$tmp/charm"
-        ./configure.sh
+        ./configure.sh --python="${VENV}/bin/python3"
         make
-        sudo make install
+        sudo env PATH="$PATH" make install
         sudo ldconfig
     ) || echo "WARNING: charm-crypto build FAILED — Ref[41] cannot produce reportable results"
 fi
