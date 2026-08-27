@@ -7,7 +7,10 @@ A run is REPORTABLE only when every one of these holds:
 
   * the pairing backend is the published Type-I curve (charm SS512), and
   * the corpus verifies against its frozen manifest AND the dataset.yaml pin,
-    with ``corpus_type: synthea``.
+    with ``corpus_type: synthea``, and
+  * this process is actually running on the pinned AWS experiment host
+    (``global.yaml``'s ``environment.instance_type``), not a development
+    laptop or any other machine (README §1).
 
 Anything else still runs — development on Windows is expected (README §1) —
 but ``run_meta.json`` records ``reportable: false`` together with the reasons,
@@ -24,7 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from Common.crypto import pairing
-from Common.crypto.config import REPO_ROOT, ConfigError, get
+from Common.crypto.config import REPO_ROOT, ConfigError, get, verify_experiment_host
 
 from . import experiments
 from .harness import write_all
@@ -242,7 +245,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if not keywords:
         raise SystemExit("keyword universe is empty; cannot build a workload")
 
-    blockers = backend_blockers + corpus_blockers
+    host = verify_experiment_host()
+    host_blockers: List[str] = []
+    if not host["is_pinned_experiment_host"]:
+        host_blockers.append(
+            f"not running on the pinned AWS experiment host: expected "
+            f"{host['expected_instance_type']!r}, detected "
+            f"{host['detected_instance_type'] or 'not EC2'!r} on "
+            f"{host['platform']!r} (README §1)"
+        )
+
+    blockers = backend_blockers + corpus_blockers + host_blockers
     if args.dev:
         blockers.append("--dev was passed; verification gates were relaxed")
     reportable = not blockers
