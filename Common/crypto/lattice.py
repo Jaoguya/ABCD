@@ -102,8 +102,18 @@ class LatticeParams:
             )
 
     @classmethod
-    def from_config(cls, scheme: str = "zhuang_lattice_mabse") -> "LatticeParams":
-        """Build from ``Experiment Configuration/crypto.yaml``."""
+    def from_config(cls, scheme: str) -> "LatticeParams":
+        """Build from ``Experiment Configuration/crypto.yaml``.
+
+        ``scheme`` has no default on purpose. It used to default to
+        ``"zhuang_lattice_mabse"``, but that scheme was dropped 2026-08-27
+        (see debug_history.md) and its crypto.yaml block no longer has a
+        ``lattice`` sub-block — a silent default here would have read from
+        wherever the dropped scheme's config used to point, or raised a
+        confusing error far from the actual cause. No caller currently
+        invokes this method (checked at the time of the fix); when
+        `perera_lv_pqabse` is implemented, pass its scheme name explicitly.
+        """
         from .config import get
 
         block = get(scheme, "lattice")
