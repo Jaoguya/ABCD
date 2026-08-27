@@ -11,6 +11,15 @@ Nothing measured on this Mac is reportable. README §1 pins the experiment host,
 §V will claim all schemes were measured on identical hardware — a figure produced
 here would make that false. Develop here, measure there.
 
+This is checked, not just asserted: `Common/crypto/config.verify_experiment_host()`
+queries the live EC2 metadata service and compares it against `global.yaml`'s
+`environment.instance_type`, so `run_meta.json`'s `environment.experiment_host`
+records what host actually produced the numbers — this Mac, another machine, or the
+pinned AWS instance — rather than echoing a value nobody verified. `ma_lb_pq_vdse`
+and `thingom_pq_abse` already fail their `reportable` gate off this host; the other
+schemes still carry the field for the record even though it isn't wired into their
+gate yet.
+
 ---
 
 ## 1. Prerequisites
