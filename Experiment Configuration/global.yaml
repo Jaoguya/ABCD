@@ -57,14 +57,19 @@ experiments:
   exp1_trapdoor_generation:
     variable: keywords_per_query
     values: [1, 5, 10, 15, 20]                    # published: §V "1 to 20"
-    schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse]
+    schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, feng_bl_abse]
   exp2_search_latency:
     variable: index_size
     values: [10000, 50000, 100000, 500000, 1000000]   # published: §V "10^4-10^6"
-    schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse]
+    schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, feng_bl_abse]
   exp3_crossdomain_scalability:
     variable: domains
     values: [2, 4, 6, 8, 10]                      # published: §V "2 to 10"
+    # feng_bl_abse (Ref[57]) DEFERRED, not excluded: its system model has no
+    # notion of a domain at all, so participation requires the same native-mode
+    # reading used for guo/thingom (d independent searches + client-side
+    # aggregation). That is a benchmark decision, not a published behaviour --
+    # see Schemes/feng_bl_abse/SCHEME.md decision #1. Add it here once decided.
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse]
   exp4_verification_overhead:
     variable: returned_results
@@ -87,7 +92,16 @@ experiments:
     # sync) -- using it here would claim a capability it doesn't have, the
     # same mistake already caught and fixed for Ref[41]'s PQ claim. Was
     # zhuang's slot; not carried over, see debug_history.md.
-    schemes: [ma_lb_pq_vdse]
+    #
+    # feng_bl_abse (Ref[57]) ADDED 2026-08-28 and is the reason this
+    # experiment now has a baseline at all. Instant on-chain revocation is
+    # that paper's headline contribution: proven O(1) in system size
+    # (Theorem 9), measured flat ~2s from N=100 to N=50,000 while
+    # reissue-based competitors blow up to ~28 min. NOTE its ~2s is dominated
+    # by PBFT block confirmation, not cryptography -- measuring it faithfully
+    # needs the real Fabric deployment (infra/fabric/), not a stubbed
+    # constant. See Schemes/feng_bl_abse/SCHEME.md decision #2.
+    schemes: [ma_lb_pq_vdse, feng_bl_abse]
   exp7_search_throughput:
     variable: concurrency
     values: [100, 500, 1000, 2500, 5000]          # published: §V "100 to 5000"
