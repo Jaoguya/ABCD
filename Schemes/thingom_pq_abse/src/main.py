@@ -44,17 +44,27 @@ DEFAULT_SEED = 20260804
 
 EXP1_Q_VALUES = list(range(1, 21))
 
-# Capped 2026-08-27 to fit a 24h-per-track wall-clock budget on the pinned
-# AWS host (README §1). Ref[41] has no index structure or early termination
-# — every candidate costs a real 2u+1 pairings (measured: 0.703ms/pairing on
-# m6i.xlarge with charm-crypto/SS512, see debug_history.md) — so the
-# published 10^4-10^6 sweep at reps=30 is ~178h even with that measured
-# number, not the ~380h a 1.5ms/pairing guess implied. This is a genuine
-# baseline limitation, not a build-vs-run measurement artifact: disclose the
-# reduced range in §V rather than silently reporting a partial sweep.
-EXP2_INDEX_SIZES = [10**4]
+# Capped 2026-08-27, raised 2026-08-28, to fit a 24h-per-track wall-clock
+# budget on the pinned AWS host (README §1). Ref[41] has no index structure
+# or early termination — every candidate costs a real 2u+1 pairings — so the
+# published 10^4-10^6 sweep is far out of budget even measured (not
+# guessed). 2026-08-28: search parallelized across 2 forked processes
+# (hardware-utilization detail, not an algorithmic change — see
+# experiments.py's _parallel_search and SCHEME.md's Feasibility section for
+# the disclosure). Measured 1.94-1.95x speedup in isolation, verified correct
+# (identical pairing counts and match sets vs. single-threaded) on both
+# Exp.2's and Exp.3's actual call shapes.
+#
+# Sizing uses the WORST end-to-end rate observed through the real
+# experiment_2/experiment_3 code paths (0.389 ms/pairing, from Exp.3 at d=3
+# where pool churn is highest), not the 0.361 ms/pairing best case measured
+# in isolation — a hard 24h cap should be sized against the worst case.
+# At these values: Exp.2 ~7.94h + Exp.3 ~12.51h = ~20.45h, ~3.55h margin.
+# EXP3_TOTAL_INDEX_SIZE=4_000 was considered and rejected: it lands at
+# ~22.2h, only ~1.8h of margin.
+EXP2_INDEX_SIZES = [20_000]  # was 10_000 before the 2026-08-28 speedup
 EXP3_DOMAIN_COUNTS = list(range(2, 11))
-EXP3_TOTAL_INDEX_SIZE = 2_000  # held constant across the d sweep; see experiment_3()
+EXP3_TOTAL_INDEX_SIZE = 3_500  # was 2_000 before the 2026-08-28 speedup; held constant across the d sweep; see experiment_3()
 
 OUTPUT_DIRS = {
     "1": "exp1_trapdoor_generation",

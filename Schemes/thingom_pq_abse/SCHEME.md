@@ -58,15 +58,51 @@ Measured 0.703 ms/pairing on the pinned `m6i.xlarge` host with charm-crypto/SS51
 (2.1× faster than an earlier 1.5 ms/pairing guess, but the published `10⁴–10⁶`
 sweep at `reps=30` still costs ~178h even at the real rate). Both sweeps are
 now capped and must be disclosed as a stated limitation in §V, not silently
-reported as a partial version of the published range:
+reported as a partial version of the published range.
 
-- **Exp. 2**: `N = 10⁴` only (`50k`/`100k`/`500k`/`1M` excluded — `main.py`'s
-  `EXP2_INDEX_SIZES`). ~7.2h at `reps=30`.
-- **Exp. 3**: total index held at `2,000` across the full `d = 2..10` sweep
-  (down from `1e5`) — `main.py`'s `EXP3_TOTAL_INDEX_SIZE`. ~1.44h per `d`
-  point × 9 points ≈ 12.9h at `reps=30`.
-- Combined ≈ 20.1h, leaving ~3.9h of margin. `Experiment Configuration/planning/runtime_estimates.csv`
-  carries the measured per-point costs.
+**UPDATED 2026-08-28 — search parallelized, caps raised accordingly.**
+
+- **Exp. 2**: `N = 2×10⁴` only (`50k`/`100k`/`500k`/`1M` excluded — `main.py`'s
+  `EXP2_INDEX_SIZES`). ~7.94h at `reps=30`. *(Was `10⁴`/~7.2h pre-speedup.)*
+- **Exp. 3**: total index held at `3,500` across the full `d = 2..10` sweep
+  (down from the published `1e5`) — `main.py`'s `EXP3_TOTAL_INDEX_SIZE`.
+  ~1.39h per `d` point × 9 points ≈ 12.51h at `reps=30`. *(Was `2,000`/~12.9h
+  pre-speedup.)*
+- Combined ≈ 20.45h, leaving ~3.55h of margin.
+  `Experiment Configuration/planning/runtime_estimates.csv` carries the
+  measured per-point costs.
+
+### Parallel search — a disclosed hardware-utilization choice
+
+`experiments.py::_parallel_search` distributes the per-entry
+`search_with_plan()` calls across **2 forked worker processes** instead of
+running them in one. This is **not** an algorithmic change: no filtering, no
+index, no early termination, no batching — the same `q · N · (2u+1)` pairings
+are computed, and correctness was verified against a single-threaded reference
+(identical pairing counts *and* identical match sets, on both Exp. 2's and
+Exp. 3's real call shapes).
+
+**It is still a judgment call worth stating plainly, and it is stated here
+rather than applied silently.** It changes Ref[41]'s implicit deployment model
+from "one thread serves one query" to "one query gets ~2 cores" on the pinned
+host — a systems-architecture assumption the published paper does not itself
+describe. Two things make it defensible: README §1 requires only that a latency
+difference come from *the construction, not the hardware*, and every scheme
+here runs on that same pinned hardware. No other scheme currently parallelizes
+its measured path, but none needs to — their per-operation costs are sub-ms to
+tens of ms, nowhere near the constraint this addresses. **§V should state that
+Ref[41]'s search was executed across 2 processes**, so the reported latency is
+not mistaken for a single-core figure.
+
+Measured: **1.94–1.95× speedup** in isolation (0.703 → ~0.361 ms/pairing);
+**0.371–0.389 ms/pairing** end-to-end through the real experiment code paths,
+the spread reflecting pool-creation churn (Exp. 3 recreates a pool per
+`(domain, token)` pair — up to 50 per rep at `d=10` — because charm's
+`Element`/`Pairing` objects are unpicklable and must be inherited through
+`fork()`'s copy-on-write rather than passed as arguments). Sizing above uses
+the worst observed rate, not the best. 4 processes measured *slower* than 2
+(1.90×): `m6i.xlarge`'s "4 vCPU" is 2 physical cores plus hyperthreading, and
+this is compute-bound work.
 
 **Bug fixed same date:** `experiment_3` previously received a shard size
 pre-multiplied by a *fixed* domain constant (`DEFAULT_INDEX_SIZE //

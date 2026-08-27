@@ -38,6 +38,7 @@ analytical shortcut that README §13 forbids.
 
 from __future__ import annotations
 
+import multiprocessing as mp
 import random
 from dataclasses import dataclass
 from typing import Any, List, Optional, Sequence, Tuple
@@ -49,6 +50,67 @@ from .harness import ExperimentResult, Measurement, Run, Timer, measure_point
 from .lsss import and_gate_policy
 
 SCHEME_NAME = "thingom_pq_abse"
+
+
+# ---------------------------------------------------------------------------
+# Parallel search — hardware-utilization detail, NOT an algorithmic change.
+# ---------------------------------------------------------------------------
+# Computes the exact same per-entry search_with_plan() calls a single-
+# threaded loop would (same pairing count, same match set) across
+# _SEARCH_PROCESSES forked workers instead of one. Disclosed in SCHEME.md's
+# Feasibility section: this changes Thingom's implicit deployment model from
+# "one thread serves one query" to "one query gets ~2 cores" on the pinned
+# host, which the published construction does not itself describe — that is
+# a genuine judgment call, not something to apply silently.
+#
+# charm's Element/Pairing objects are not picklable, so they cannot cross
+# Pool.map() as arguments. Only Linux's default fork() start method lets a
+# worker *inherit* them via copy-on-write, snapshotted at Pool() creation —
+# these globals must be set immediately before each Pool is created; already-
+# forked workers do not see later changes to them.
+_MP_PARAMS: Any = None
+_MP_INDEX: Any = None
+_MP_TOKEN: Any = None
+_MP_PLAN: Any = None
+
+# Measured 2026-08-28 on the pinned m6i.xlarge host (2 physical cores + SMT):
+# 2-process 1.94-1.95x real speedup (verified against a single-threaded
+# reference, exact pairing counts and match sets identical) vs. 4-process
+# 1.90x -- *worse* than 2-process, because this is compute-bound work and the
+# extra hyperthreads add pool overhead without adding real compute capacity.
+_SEARCH_PROCESSES = 2
+
+
+def _mp_search_worker(position: int) -> Tuple[bool, int]:
+    """Runs in a forked worker process. Only a plain (bool, int) crosses back
+    over IPC — no charm object is ever pickled."""
+    outcome = scheme.search_with_plan(_MP_PARAMS, _MP_INDEX[position], _MP_TOKEN, _MP_PLAN)
+    return (outcome.matched, outcome.pairings)
+
+
+def _parallel_search(
+    params: scheme.PublicParameters,
+    index: List["scheme.KeywordIndex"],
+    token: "scheme.Trapdoor",
+    plan: Any,
+) -> Tuple[set, int]:
+    """Search every entry in ``index`` for ``token`` across a forked process
+    pool. Returns (matched_positions, total_pairings) -- identical in content
+    to what a single-threaded loop over search_with_plan() would return."""
+    global _MP_PARAMS, _MP_INDEX, _MP_TOKEN, _MP_PLAN
+    _MP_PARAMS, _MP_INDEX, _MP_TOKEN, _MP_PLAN = params, index, token, plan
+    with mp.Pool(processes=_SEARCH_PROCESSES) as pool:
+        results = pool.map(
+            _mp_search_worker, range(len(index)),
+            chunksize=max(1, len(index) // 8),
+        )
+    hits: set = set()
+    pairings = 0
+    for position, (matched, entry_pairings) in enumerate(results):
+        pairings += entry_pairings
+        if matched:
+            hits.add(position)
+    return hits, pairings
 
 
 @dataclass
@@ -230,14 +292,10 @@ def experiment_2(
                     plan = scheme.prepare_query(
                         workload.params, index[0].structure, token
                     )
-                    hits = set()
-                    for position, entry in enumerate(index):
-                        outcome = scheme.search_with_plan(
-                            workload.params, entry, token, plan
-                        )
-                        pairings += outcome.pairings
-                        if outcome.matched:
-                            hits.add(position)
+                    hits, token_pairings = _parallel_search(
+                        workload.params, index, token, plan
+                    )
+                    pairings += token_pairings
                     matches = hits if matches is None else (matches & hits)
             return Measurement(
                 primary=timer.elapsed_ms,
@@ -331,12 +389,11 @@ def experiment_3(
                         plan = scheme.prepare_query(
                             workload.params, shard[0].structure, token
                         )
-                        for position, entry in enumerate(shard):
-                            outcome = scheme.search_with_plan(
-                                workload.params, entry, token, plan
-                            )
-                            if outcome.matched:
-                                aggregated.add((domain, position))
+                        hits, _pairings = _parallel_search(
+                            workload.params, shard, token, plan
+                        )
+                        for position in hits:
+                            aggregated.add((domain, position))
             return Measurement(
                 primary=timer.elapsed_ms,
                 secondary_1=float(domains * q),
