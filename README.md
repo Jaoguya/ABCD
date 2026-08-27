@@ -402,3 +402,124 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 | 2026-08-23 | **Ref[36] (XB-Muse) dropped.** §14 item 8 resolved as option (c): the construction runs inside an Intel SGX enclave and `m6i.xlarge` exposes none, so it could only run simulated (omitting enclave-transition and EPC-paging cost, flattering the baseline) or on non-parity hardware. Removed from the Exp. 1/2/3/5 sweeps in `global.yaml`; `crypto.yaml` status is now `dropped_no_sgx_on_benchmark_host`. No results existed for it, so no `results.csv` is invalidated. §V must state the omission. |
 | 2026-08-05 | **Ref[36] recovered.** Clean copy from IEEE Xplore extracted cleanly (108,474 bytes, 1,030 lines) where the corrupted original yielded 0; originals archived under `References/corrupted_archive/`. Construction identified: SRE from a multi-puncturable PRF + Bloom filter of revoked tags — both already covered by `Common/crypto/prf.py` and `bloom.py`. **New finding: the scheme requires Intel SGX** (`Ref[36].txt:341,359`), which `m6i.xlarge` does not expose. Options recorded in §14. |
 | 2026-08-04 | **Environment complete and crypto layer verified.** liboqs 0.16.0 supplies ML-KEM-768 (`cryptography` 50.0.0 does not expose it, contrary to the requirements.txt comment). `charm-crypto` built after fixing `configure.sh`'s `which python3-config` probe — only `python3.11-config` exists under deadsnakes — with PBC 0.5.14 built from source first; SS512 bilinearity verified. **65 primitive tests: 64 passed, 1 skipped, 0 failed** on first execution. Noted that SS512 provides ~80-bit security (charm DeprecationWarning); Ref[41] specifies Type-I but no curve, so this is a decision to make before reportable runs. |
+| 2026-08-27 | **Old experiment host terminated; new one provisioned with two provision.sh bugs fixed; frozen corpus lost and regenerated non-identically.** See §17 for full state and open questions — this entry is the pointer. **[results-affecting: corpus]** |
+
+---
+
+## 17. Session Handoff — 2026-08-27
+
+Left mid-provisioning. Read this before doing anything else with AWS; it replaces
+guessing with what's actually true right now.
+
+### Instances
+
+- **Old host `3.236.231.174`** (key `~/.ssh/ABCDE_key.pem`): **terminated by the
+  user.** It also turned out to be a bad AMI pick — it was running an unrelated
+  `sqlservr` process, almost certainly from selecting "Ubuntu Server 22.04 LTS
+  **with SQL Server** 2022 Standard" instead of a plain Ubuntu image. When
+  launching AWS consoles again: plain Ubuntu 22.04 no longer appears in Quick
+  Start's abbreviated list (only the SQL Server bundle does) — use "Browse more
+  AMIs" for a real search, or fall back to plain **Ubuntu 24.04 LTS** as this
+  session did. Also confirm instance type is `m6i.xlarge` (never `t3`/`t4g` —
+  CPU credits make latency non-reproducible) and launch **one** instance first,
+  never all 9 — `provision.sh` is a build-once-then-snapshot workflow, not
+  nine independent provisions.
+- **Current host `44.222.205.213`** (key `~/.ssh/ojcoms.pem`, Ubuntu 24.04.4
+  LTS, `m6i.xlarge`, 30 GiB gp3): `~/abcd` is a real git clone (`origin` set to
+  `https://github.com/Jaoguya/ABCD.git`), `pytest` is installed, and
+  `infra/provision.sh` has passed its primitive-tests gate: **61 passed, 4
+  skipped, 0 failed**. The 4 skips are the pairing tests — `charm-crypto`
+  failed to build from source on this box (see below). **Not yet snapshotted
+  as an AMI**, and the other 8 fleet instances (4 FSN, 1 cloud+Fabric+IPFS, 1
+  client, 3 baseline runners — §1) have not been launched.
+
+### Local fixes — now committed (were scp'd to `44.222.205.213` but had no git
+history anywhere until this session; still need pulling onto that host)
+
+Committed as six separate commits (one logical change each, per §12), not
+squashed:
+
+- `fix(infra)`: `requirements.txt` `petrelic>=0.1.5` doesn't resolve on PyPI at
+  all and was aborting `provision.sh` before it reached anything else —
+  commented out (it's already a best-effort install inside `provision.sh`'s
+  "Pairing backends" step, which has its own failure guard). Also adds `cmake`
+  to the apt package list — `liboqs-python`'s auto-build needs it and nothing
+  installed it, so every run died at the "Environment report" step with
+  `RuntimeError: No oqs shared libraries found`.
+- `feat(crypto)`: `Common/crypto/config.py`, `Common/crypto/__init__.py` — new
+  `verify_experiment_host()` — queries the live EC2 metadata service and
+  compares it against `global.yaml`'s pinned instance type, so
+  `run_meta.json`'s `environment.experiment_host` records what host actually
+  produced a number instead of echoing the declared config value unverified.
+- `feat(ma_lb_pq_vdse)` / `feat(thingom_pq_abse)`: wired that check into each
+  scheme's `reportable` gate — a run off the pinned AWS host now fails
+  reportability with a stated reason.
+- `feat(zhuang_lattice_mabse)`: added the `environment_report()` call it was
+  missing, so it carries the same field (not yet wired into a `reportable`
+  gate for this scheme — it doesn't have one to wire into yet).
+- `docs(macos)`: `MacOS/SETUP.md` documents the above.
+- `chore(xb_muse)`: `Schemes/xb_muse/SCHEME.md` deleted — Ref[36] is fully
+  dropped (§14 item 8, option (c)); the file was a "retained for the record"
+  stub with nothing else linking to it.
+
+Still `git pull` these onto `44.222.205.213` before trusting `git log` there —
+the host has the file contents (scp'd) but not this commit history.
+
+### Corpus — needs a decision before anything is reportable again
+
+The frozen corpus (`fd4b7654e4c20186163f0b8c390c2c50b4bc4f908bdfbca585779b8d0792dc47`,
+§4) lived **only** on the terminated old instance and is gone. It was
+regenerated on the new instance using the exact documented recipe — Synthea
+commit `7e08387`, `-p 38000 -s 20260804 -cs 20260804`, same export flags — but
+**did not come out byte-identical**:
+
+|                    | Old (lost)      | Regenerated      |
+|--------------------|-----------------|------------------|
+| SHA-256            | `fd4b7654…`     | `7a4e6835…`      |
+| Records            | 1,141,072       | 1,143,792        |
+| Keywords           | 2,006           | 2,023            |
+| Per-domain split   | 285,268 × 4     | 285,948 × 4      |
+| Zipf exponent      | 2.7078          | 2.741            |
+
+Likely cause: Synthea parallelizes patient generation across threads, so a
+fixed seed pins the random *stream* but not which patient consumes which draw
+from it — thread-interleaving order isn't guaranteed deterministic run to run.
+
+No `results.csv`/`run_meta.json` exists anywhere for the old corpus (checked
+both instances) — nothing is invalidated by accepting a new one. The raw
+Synthea CSVs are at `~/synthea/output_full/csv` and the extracted (not yet
+frozen) corpus at `~/abcd/Dataset/derived/corpus.jsonl` on `44.222.205.213`.
+
+**Ask the user**: accept the regenerated corpus as the new freeze (update
+`dataset.yaml`'s `freeze.expected_corpus_sha256` to `7a4e6835…` and today's
+date, and update the record/keyword/SHA numbers cited in §4 to match), or
+attempt a single-threaded regeneration first for an exact-match retry against
+`fd4b7654…` (another ~49-minute run, `-p 38000` alone took 44m35s here, with
+no guarantee it resolves the non-determinism)?
+
+### Still open, not yet started
+
+- **`charm-crypto` build failure on `44.222.205.213`.** Failed both via pip
+  and from-source. 2026-08-04's changelog entry above describes fixing this
+  exact class of problem before (`configure.sh`'s `python3-config` probe only
+  finds `python3.11-config` under deadsnakes) — that fix was never folded back
+  into `provision.sh`, so it had to be rediscovered. Worth scripting this time
+  so it survives the next AMI rebuild.
+- **`zhuang_lattice_mabse`'s Exp. 2 corpus-build cost.**
+  `Experiment Configuration/planning/runtime_estimates.csv` estimates ~55 days
+  for one `build_exp2` step. Root cause found:
+  `Schemes/zhuang_lattice_mabse/src/construction/p6_encrypt.py:130-186` runs
+  ~1,000 unbatched Python-loop iterations per `encrypt()` call (one matvec +
+  one Gaussian-noise sample per (user, attribute) pair, up to `l·u = 500`
+  pairs, twice). Fix not implemented — an early attempt to fully stack all 500
+  lattice matrices into one array to benchmark a fix OOM-crashed the *old*
+  instance (~15.7 GB array on a 16 GiB box), which is part of why that
+  instance ended up terminated. Any retry must chunk the batch (a few dozen
+  pairs at a time, not all 500) and must not cast the int64 matvec to float64
+  — the accumulated sum can exceed float64's 2^53 exact-integer range at
+  published parameters (`n=284`, `q=2^24`), which would silently corrupt
+  results rather than just being slow.
+- Full `pytest -q` has not been run on `44.222.205.213` yet — only the
+  primitive-test gate inside `provision.sh` has (61/4/0). Run it before
+  trusting this box for anything beyond the gate.
+- AMI snapshot and the remaining 8-instance fleet launch have not happened.
