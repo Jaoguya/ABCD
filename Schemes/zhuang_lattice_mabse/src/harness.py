@@ -227,6 +227,14 @@ def write_run_meta(path: Path, experiment: str, extra: Optional[Dict] = None) ->
     except Exception:
         cfg_hashes = {}
 
+    # Environment, including experiment-host verification (README §1) —
+    # best-effort like the fields above, since this must not block a dev run.
+    from Common.crypto import environment_report
+    try:
+        environment = environment_report()
+    except Exception:
+        environment = {}
+
     meta = {
         "scheme": SCHEME_NAME,
         "experiment": experiment,
@@ -235,6 +243,7 @@ def write_run_meta(path: Path, experiment: str, extra: Optional[Dict] = None) ->
         "platform": sys.platform,
         "dataset_sha256": dataset_sha,
         "config_hashes": cfg_hashes,
+        "environment": environment,
         "utc_start_time": datetime.now(timezone.utc).isoformat(),
     }
     if extra:
