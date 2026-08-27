@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from Common.crypto import environment_report  # noqa: E402
-from Common.crypto.config import REPO_ROOT  # noqa: E402
+from Common.crypto.config import REPO_ROOT, verify_experiment_host  # noqa: E402
 
 from .. import config as scheme_config  # noqa: E402
 
@@ -131,6 +131,15 @@ def reportability(
     reasons land in ``run_meta.json`` where a reader can see them.
     """
     reasons: List[str] = []
+
+    host = verify_experiment_host()
+    if not host["is_pinned_experiment_host"]:
+        reasons.append(
+            f"not running on the pinned AWS experiment host: expected "
+            f"{host['expected_instance_type']!r}, detected "
+            f"{host['detected_instance_type'] or 'not EC2'!r} on "
+            f"{host['platform']!r} (README §1)"
+        )
 
     if corpus_type not in config.corpus["reportable_types"]:
         reasons.append(
