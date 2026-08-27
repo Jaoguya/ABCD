@@ -104,4 +104,5 @@ def environment_report() -> dict:
         "pairing_backends_available": pairing.available_backends(),
         "kem_backends_available": kem.available_backends(),
         "config_hashes": config.config_hashes(),
+        "experiment_host": config.verify_experiment_host(),
     }

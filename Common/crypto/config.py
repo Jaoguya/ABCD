@@ -10,9 +10,12 @@ that record.
 from __future__ import annotations
 
 import hashlib
+import platform
 import threading
+import urllib.error
+import urllib.request
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import yaml
 
@@ -21,6 +24,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "Experiment Configuration"
 CRYPTO_CONFIG_PATH = CONFIG_DIR / "crypto.yaml"
 DATASET_CONFIG_PATH = CONFIG_DIR / "dataset.yaml"
+GLOBAL_CONFIG_PATH = CONFIG_DIR / "global.yaml"
 
 _cache: Dict[Path, Dict[str, Any]] = {}
 _cache_lock = threading.Lock()
@@ -86,6 +90,69 @@ def scheme_params(scheme: str) -> Dict[str, Any]:
     ``scheme`` is the folder name under ``Schemes/`` — e.g. ``guo_vdsse``.
     """
     return get(scheme)
+
+
+def _detect_aws_instance_type(timeout: float = 0.3) -> Optional[str]:
+    """Best-effort EC2 instance type of the host actually running this process.
+
+    Reads the IMDSv2 metadata service (token-gated, so IMDSv1-disabled hosts
+    still answer). Returns ``None`` off EC2 — a Mac, a personal PC, any
+    non-AWS box — never raises: this sits behind ``environment_report()``,
+    which every run_meta.json gets, reportable or not, so a 0.3s stall or a
+    dev laptop with no route to 169.254.169.254 must not block a run.
+    """
+    try:
+        token_request = urllib.request.Request(
+            "http://169.254.169.254/latest/api/token",
+            method="PUT",
+            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+        )
+        with urllib.request.urlopen(token_request, timeout=timeout) as resp:
+            token = resp.read().decode("utf-8")
+        type_request = urllib.request.Request(
+            "http://169.254.169.254/latest/meta-data/instance-type",
+            headers={"X-aws-ec2-metadata-token": token},
+        )
+        with urllib.request.urlopen(type_request, timeout=timeout) as resp:
+            return resp.read().decode("utf-8").strip()
+    except (urllib.error.URLError, OSError, TimeoutError):
+        return None
+
+
+def verify_experiment_host(*, require: bool = False) -> Dict[str, Any]:
+    """Confirm this run is on the pinned AWS experiment host (README §1).
+
+    README §1 pins one experiment host and §V claims all schemes were
+    measured on identical hardware; a figure produced anywhere else — this
+    laptop, a personal PC, any other AWS box — would make that false (see
+    ``MacOS/SETUP.md``). This checks the live EC2 metadata service against
+    ``global.yaml``'s ``environment.instance_type`` rather than trusting a
+    caller-supplied value, the same reasoning ``provenance.git_commit()``
+    uses for the commit hash.
+
+    ``require=True`` raises when the host does not match, for entry points
+    that must refuse to proceed at all. The default ``require=False`` just
+    returns the finding, so it is recorded in every run_meta.json — including
+    non-reportable dev runs, where seeing *why* a run does not count matters
+    as much as the reportable ones.
+    """
+    expected = str(get("environment", "instance_type", path=GLOBAL_CONFIG_PATH))
+    detected = _detect_aws_instance_type()
+    is_pinned_host = detected == expected
+    report: Dict[str, Any] = {
+        "expected_instance_type": expected,
+        "detected_instance_type": detected,
+        "platform": platform.platform(),
+        "is_pinned_experiment_host": is_pinned_host,
+    }
+    if require and not is_pinned_host:
+        raise ConfigError(
+            f"not running on the pinned experiment host: expected AWS "
+            f"{expected!r}, detected {detected or 'no EC2 metadata service reachable'!r} "
+            f"on {report['platform']!r}. README §1: only the pinned AWS host "
+            f"produces reportable results."
+        )
+    return report
 
 
 def config_hashes() -> Dict[str, str]:
