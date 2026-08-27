@@ -263,7 +263,7 @@ def experiment_3(
     workload: Workload,
     *,
     domain_counts: Sequence[int],
-    shard_size: int,
+    total_index_size: int,
     q: int,
     repetitions: int,
     warmups: int,
@@ -275,6 +275,15 @@ def experiment_3(
     independent trapdoors and d independent searches, with client-side result
     aggregation." Ref[41] has no notion of a domain, so each domain is an
     independent shard searched with its own freshly generated trapdoor.
+
+    ``total_index_size`` is held constant across the whole ``domain_counts``
+    sweep and divided evenly across domains (``shard_size = total /
+    domains``), so total pairings per run — and therefore latency — stays
+    flat in d; only the number of independent trapdoor/search round-trips
+    changes. This is the whole point of the experiment (README §5: "count
+    trapdoors issued so the mechanism is visible"). An earlier version passed
+    a pre-multiplied, domain-count-independent shard size, which made total
+    work scale linearly with d instead of staying flat — fixed 2026-08-27.
 
     primary      end-to-end cross-domain latency, ms
     secondary_1  trapdoors issued (d x q)
@@ -293,6 +302,7 @@ def experiment_3(
 
     keyword = workload.keywords[0]
     for domains in domain_counts:
+        shard_size = max(1, total_index_size // domains)
         estimate = _estimated_seconds(workload, shard_size * domains, q)
         if estimate > max_seconds_per_run:
             result.runs.extend(

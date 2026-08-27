@@ -40,13 +40,12 @@ from .harness import write_all
 DEFAULT_REPETITIONS = 30
 DEFAULT_WARMUPS = 5
 DEFAULT_Q = 5
-DEFAULT_INDEX_SIZE = 10**5
-DEFAULT_DOMAINS = 4
 DEFAULT_SEED = 20260804
 
 EXP1_Q_VALUES = list(range(1, 21))
 EXP2_INDEX_SIZES = [10**4, 10**5, 10**6]
 EXP3_DOMAIN_COUNTS = list(range(2, 11))
+EXP3_TOTAL_INDEX_SIZE = 10**5  # held constant across the d sweep; see experiment_3()
 
 OUTPUT_DIRS = {
     "1": "exp1_trapdoor_generation",
@@ -328,7 +327,7 @@ def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespa
     return experiments.experiment_3(
         workload,
         domain_counts=EXP3_DOMAIN_COUNTS,
-        shard_size=DEFAULT_INDEX_SIZE // DEFAULT_DOMAINS,
+        total_index_size=EXP3_TOTAL_INDEX_SIZE,
         q=DEFAULT_Q,
         repetitions=args.runs,
         warmups=args.warmups,
