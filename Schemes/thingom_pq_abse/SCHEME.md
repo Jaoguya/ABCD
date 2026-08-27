@@ -53,7 +53,30 @@ Search is a linear scan at `2u+1` pairings per entry with no filtering. At the E
 
 `--max-seconds-per-run` (default 1800 s) bounds each point. Over-budget points are written as `status=failed` with the estimate and budget in the status string, so the gap is visible in `raw_runs.csv`. The estimate decides only whether to *attempt* a point — any point attempted is measured end to end, never derived (README §13).
 
-**Open:** cap Ref[41]'s Exp. 2 sweep and state the cap in §V, drop Ref[41] from Exp. 2, or accept a very long run.
+**RESOLVED 2026-08-27 — sweep capped for a 24h-per-track wall-clock budget.**
+Measured 0.703 ms/pairing on the pinned `m6i.xlarge` host with charm-crypto/SS512
+(2.1× faster than an earlier 1.5 ms/pairing guess, but the published `10⁴–10⁶`
+sweep at `reps=30` still costs ~178h even at the real rate). Both sweeps are
+now capped and must be disclosed as a stated limitation in §V, not silently
+reported as a partial version of the published range:
+
+- **Exp. 2**: `N = 10⁴` only (`50k`/`100k`/`500k`/`1M` excluded — `main.py`'s
+  `EXP2_INDEX_SIZES`). ~7.2h at `reps=30`.
+- **Exp. 3**: total index held at `2,000` across the full `d = 2..10` sweep
+  (down from `1e5`) — `main.py`'s `EXP3_TOTAL_INDEX_SIZE`. ~1.44h per `d`
+  point × 9 points ≈ 12.9h at `reps=30`.
+- Combined ≈ 20.1h, leaving ~3.9h of margin. `Experiment Configuration/planning/runtime_estimates.csv`
+  carries the measured per-point costs.
+
+**Bug fixed same date:** `experiment_3` previously received a shard size
+pre-multiplied by a *fixed* domain constant (`DEFAULT_INDEX_SIZE //
+DEFAULT_DOMAINS`, always 25,000) instead of dividing the swept `domains`
+value into the held-constant total. Total work scaled linearly with `d`
+instead of staying flat — a `d=10` point cost ~5× a `d=2` point. Fixed by
+computing `shard_size = total_index_size // domains` inside the sweep loop
+(`experiments.py::experiment_3`). Verified post-fix: latency stays within
+noise across `d=2/5/10` at a small `N` (930/1000/1094 ms), not scaling with
+`d`.
 
 ---
 

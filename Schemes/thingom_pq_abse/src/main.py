@@ -43,9 +43,18 @@ DEFAULT_Q = 5
 DEFAULT_SEED = 20260804
 
 EXP1_Q_VALUES = list(range(1, 21))
-EXP2_INDEX_SIZES = [10**4, 10**5, 10**6]
+
+# Capped 2026-08-27 to fit a 24h-per-track wall-clock budget on the pinned
+# AWS host (README §1). Ref[41] has no index structure or early termination
+# — every candidate costs a real 2u+1 pairings (measured: 0.703ms/pairing on
+# m6i.xlarge with charm-crypto/SS512, see debug_history.md) — so the
+# published 10^4-10^6 sweep at reps=30 is ~178h even with that measured
+# number, not the ~380h a 1.5ms/pairing guess implied. This is a genuine
+# baseline limitation, not a build-vs-run measurement artifact: disclose the
+# reduced range in §V rather than silently reporting a partial sweep.
+EXP2_INDEX_SIZES = [10**4]
 EXP3_DOMAIN_COUNTS = list(range(2, 11))
-EXP3_TOTAL_INDEX_SIZE = 10**5  # held constant across the d sweep; see experiment_3()
+EXP3_TOTAL_INDEX_SIZE = 2_000  # held constant across the d sweep; see experiment_3()
 
 OUTPUT_DIRS = {
     "1": "exp1_trapdoor_generation",

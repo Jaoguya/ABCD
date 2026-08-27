@@ -1,15 +1,20 @@
 scheme,experiment,sweep_value,per_run_s,reps,warmups,runs,point_total_s,point_total_h,basis,confidence,notes
-thingom_pq_abse,exp2,10000,1575.0,30,5,35,55125.0,15.31,estimated,low,1.5ms/pairing midpoint of 1-3ms range
-thingom_pq_abse,exp2,50000,7875.0,30,5,35,275625.0,76.56,estimated,low,1.5ms/pairing midpoint of 1-3ms range
-thingom_pq_abse,exp2,100000,15750.0,10,1,11,173250.0,48.12,estimated,low,1.5ms/pairing midpoint of 1-3ms range
-thingom_pq_abse,exp2,500000,78750.0,0,0,0,0.0,0.0,estimated,low,EXCLUDED by cap decision 2026-08-23
-thingom_pq_abse,exp2,1000000,157500.0,0,0,0,0.0,0.0,estimated,low,EXCLUDED by cap decision 2026-08-23
-thingom_pq_abse,exp3,2,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
-thingom_pq_abse,exp3,4,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
-thingom_pq_abse,exp3,6,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
-thingom_pq_abse,exp3,8,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
-thingom_pq_abse,exp3,10,15750.0,10,1,11,173250.0,48.12,estimated,low,total index HELD at 1e5; cost flat in d
+thingom_pq_abse,exp2,10000,738.15,30,5,35,25835.25,7.18,MEASURED,high,0.703ms/pairing measured 2026-08-27 on m6i.xlarge (charm SS512) — 2.1x faster than the prior 1.5ms/pairing guess
+thingom_pq_abse,exp2,50000,3690.75,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED by 24h-budget cap decision 2026-08-27 (was 76.56h at the old guess; ~35.9h at the real rate — still too expensive)
+thingom_pq_abse,exp2,100000,7381.5,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED by 24h-budget cap decision 2026-08-27 (was 48.12h at the old guess; ~22.6h at the real rate — still too expensive alongside exp3)
+thingom_pq_abse,exp2,500000,36907.5,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED by cap decision 2026-08-23, reaffirmed 2026-08-27
+thingom_pq_abse,exp2,1000000,73815.0,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED by cap decision 2026-08-23, reaffirmed 2026-08-27
+thingom_pq_abse,exp3,2,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (capped 2026-08-27, was 1e5); shard_size bug fixed same date — previously scaled with d instead of staying flat (see debug_history.md)
+thingom_pq_abse,exp3,3,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
+thingom_pq_abse,exp3,4,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
+thingom_pq_abse,exp3,5,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
+thingom_pq_abse,exp3,6,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
+thingom_pq_abse,exp3,7,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
+thingom_pq_abse,exp3,8,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
+thingom_pq_abse,exp3,9,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
+thingom_pq_abse,exp3,10,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000; flat in d (post-fix)
 thingom_pq_abse,exp1,1-20,0.5,30,5,35,17.5,0.0,estimated,low,trapdoor only; negligible
+thingom_pq_abse,TOTAL,,,,,,,20.10,MEASURED,high,exp1(~0)+exp2(7.18h @N=10000 only)+exp3(9x1.44h @total=2000) — fits the 24h-per-track budget with ~3.9h margin; see debug_history.md 2026-08-27 entry
 zhuang_lattice_mabse,exp2,10000,1.8,30,5,35,63.0,0.02,paper Table VI,medium,search 0.18ms/record; build amortised separately
 zhuang_lattice_mabse,exp2,50000,9.0,30,5,35,315.0,0.09,paper Table VI,medium,search 0.18ms/record; build amortised separately
 zhuang_lattice_mabse,exp2,100000,18.0,30,5,35,630.0,0.17,paper Table VI,medium,search 0.18ms/record; build amortised separately
