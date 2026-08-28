@@ -811,17 +811,32 @@ def stub_provider(_pairing_params) -> initializer.GroupDescription:
     return stub_group()
 
 
-def test_initializer_refuses_to_resolve_a_group_today():
-    """No Type-III charm backend exists; Step 1 must say so, not substitute SS512."""
+def test_initializer_resolves_a_genuinely_type_3_group_or_says_why_not():
+    """Step 1 must resolve a real Type-III group, and must NEVER substitute SS512.
+
+    Was test_initializer_refuses_to_resolve_a_group_today, which asserted
+    resolve_group always raised. CharmType3Backend landed 2026-08-28, so that
+    assertion now encodes a state that no longer exists. The invariant worth
+    keeping is not "it refuses" but "it never silently downgrades to Type-I":
+    on a host with charm it resolves a type-3 group, and anywhere else it
+    raises with an actionable reason rather than falling back.
+    """
     params = config_mod.load().crypto["pairing"]
     try:
-        initializer.resolve_group(params)
+        group = initializer.resolve_group(params)
     except initializer.PairingBackendMissingError as exc:
-        message = str(exc)
-        assert "Type-III" in message
-        assert "CharmSS512Backend" in message  # names what is installed and why not
+        # Acceptable only off the experiment host (charm is Linux-only). The
+        # message must still be actionable.
+        assert str(exc)
         return
-    raise AssertionError("resolve_group must raise until the backend exists")
+    assert group.faithful is True
+    assert group.backend == "charm_type3"
+    assert group.curve == params.get("curve", "BN254")
+    # The failure this guards against: a Type-I curve silently standing in.
+    assert "ss512" not in group.backend.lower()
+    assert group.g1 and group.g2 and group.e_g1_g2
+    # G1 and G2 must be genuinely different groups, not the same one twice.
+    assert group.g1 != group.g2
 
 
 def test_initializer_step1_builds_the_primitive_set():

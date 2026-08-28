@@ -131,6 +131,20 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                 "corpus could not be loaded")
             return 2
 
+    # Determined from what the host can ACTUALLY build, not hardcoded. This was
+    # pinned to False while no Type-III backend existed; leaving it hardcoded
+    # after adding CharmType3Backend would have kept the scheme permanently
+    # non-reportable for a reason that was no longer true.
+    try:
+        from Common.crypto import pairing as _pm
+
+        _b = _pm.get_backend("ma_lb_pq_vdse", reportable=True)
+        group_faithful = _b.pairing_type == "type-3"
+        log(f"pairing: {_b.name} ({_b.pairing_type}, {_b.curve}) faithful={group_faithful}")
+    except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        group_faithful = False
+        log(f"pairing: no faithful Type-III backend ({type(exc).__name__}: {exc})")
+
     runs = args.runs if args.runs is not None else config.measurement.repetitions
     warmups = (
         args.warmups if args.warmups is not None else config.measurement.warmup_runs
@@ -146,7 +160,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             experiment=experiment.name,
             corpus_type=source.corpus_type,
             corpus_sha256=source.corpus_sha256,
-            group_faithful=False,
+            group_faithful=group_faithful,
             token_scheme_keyed=True,
             runs=runs,
             warmups=warmups,

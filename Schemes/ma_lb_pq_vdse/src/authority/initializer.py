@@ -125,10 +125,45 @@ def resolve_group(pairing_params: Mapping[str, Any]) -> GroupDescription:
             f"not, and recording which was used — then set "
             f"backend_implemented: true."
         )
-    raise PairingBackendMissingError(
-        f"crypto.yaml declares backend={backend!r} implemented, but "
-        f"initializer.resolve_group has no construction for it. Wire it to the "
-        f"Common/crypto/pairing.py backend before use."
+    # Wired 2026-08-28, when CharmType3Backend was added to
+    # Common/crypto/pairing.py. Still refuses anything that is not genuinely
+    # Type-III: the fallback this must never take is the installed SS512
+    # curve, which is Type-I.
+    try:
+        from Common.crypto import pairing as pairing_mod
+    except ImportError as exc:  # pragma: no cover - platform dependent
+        raise PairingBackendMissingError(
+            f"crypto.yaml declares backend={backend!r} implemented, but "
+            f"Common.crypto.pairing could not be imported: {exc}"
+        ) from exc
+
+    try:
+        resolved = pairing_mod.get_backend("ma_lb_pq_vdse", reportable=True)
+    except Exception as exc:  # noqa: BLE001 - re-raised with the actionable reason
+        raise PairingBackendMissingError(
+            f"crypto.yaml declares backend={backend!r} curve={curve!r} "
+            f"implemented, but it could not be built on this host: "
+            f"{type(exc).__name__}: {exc}. charm-crypto is Linux-only; on "
+            f"macOS this is expected and the harness falls back to a "
+            f"non-reportable stand-in."
+        ) from exc
+
+    if resolved.pairing_type != "type-3":
+        raise PairingBackendMissingError(
+            f"backend {resolved.name!r} is {resolved.pairing_type}, but the "
+            f"published map is e : G_1 x G_2 -> G_T (type-3). A Type-I curve "
+            f"changes group-element sizes and pairing cost and must never be "
+            f"substituted here."
+        )
+
+    g1, g2 = resolved.random_g1(), resolved.random_g2()
+    return GroupDescription(
+        curve=resolved.curve,
+        backend=resolved.name,
+        g1=resolved.serialize(g1),
+        g2=resolved.serialize(g2),
+        e_g1_g2=resolved.serialize(resolved.pair(g1, g2)),
+        faithful=True,
     )
 
 

@@ -160,6 +160,104 @@ class CharmSS512Backend(PairingBackend):
         return self._group.serialize(element)
 
 
+class CharmType3Backend(PairingBackend):
+    """Type-III asymmetric pairing on a charm curve (BN254 by default).
+
+    The faithful backend for ``ma_lb_pq_vdse``, whose published map is
+    ``e : G_1 x G_2 -> G_T`` with ``G_1 != G_2`` (crypto.yaml
+    ``ma_lb_pq_vdse.pairing.type: type-3``). Until this existed the proposed
+    scheme ran on an injected hash-based stand-in and every run was stamped
+    ``backend_implemented: false`` -> not reportable, so the paper's own
+    contribution could not produce a quotable number at all.
+
+    Uses charm rather than adding a dependency: charm is already built and
+    verified on the experiment host for Ref[41]'s Type-I curve, and it ships
+    Type-III curves in the same install. ``petrelic`` was the earlier intended
+    route and does not build.
+
+    G1 and G2 are genuinely distinct groups — verified on the host at BN254:
+    a G1 element serialises to 46 B and a G2 element to 90 B, and bilinearity
+    ``e(g1^a, g2^c) == e(g1, g2)^(ac)`` holds. That distinction is the point:
+    it is what makes measured element sizes and pairing costs correspond to
+    the published construction rather than to a symmetric stand-in.
+
+    Note charm does NOT reject ``pair(g2, g1)`` on this curve — it accepts the
+    reversed argument order rather than raising. That is library permissiveness,
+    not evidence the groups are the same (the differing sizes above settle
+    that), but it means calling code cannot rely on the library to catch an
+    argument-order mistake; the construction must get the order right itself.
+    """
+
+    name = "charm_type3"
+    pairing_type = "type-3"
+
+    def __init__(self, curve: str = "BN254") -> None:
+        try:
+            from charm.toolbox.pairinggroup import PairingGroup
+        except ImportError as exc:  # pragma: no cover - platform dependent
+            raise PairingUnavailableError(
+                "charm-crypto is not installed. It is Linux-only; on Windows "
+                "use WSL2 or run on the Ubuntu experiment host. "
+                "Install: pip install charm-crypto"
+            ) from exc
+        self._group = PairingGroup(curve)
+        self.curve = curve
+
+    @property
+    def group(self):
+        """The underlying charm PairingGroup, for scheme-specific operations."""
+        return self._group
+
+    def random_g1(self):
+        from charm.toolbox.pairinggroup import G1
+
+        return self._group.random(G1)
+
+    def random_g2(self):
+        from charm.toolbox.pairinggroup import G2
+
+        # NOT G1: asymmetric pairing, so G2 is a different group. Returning a
+        # G1 element here (as the Type-I backend legitimately does) would
+        # silently make the scheme symmetric.
+        return self._group.random(G2)
+
+    def random_zr(self):
+        from charm.toolbox.pairinggroup import ZR
+
+        return self._group.random(ZR)
+
+    def pair(self, a, b):
+        from charm.toolbox.pairinggroup import pair
+
+        return pair(a, b)
+
+    def hash_to_g1(self, data: bytes):
+        from charm.toolbox.pairinggroup import G1
+
+        return self._group.hash(data, G1)
+
+    def hash_to_g2(self, data: bytes):
+        from charm.toolbox.pairinggroup import G2
+
+        return self._group.hash(data, G2)
+
+    def hash_to_zr(self, data: bytes):
+        from charm.toolbox.pairinggroup import ZR
+
+        return self._group.hash(data, ZR)
+
+    def order(self) -> int:
+        return int(self._group.order())
+
+    def zr_from_int(self, value: int):
+        from charm.toolbox.pairinggroup import ZR
+
+        return self._group.init(ZR, value % self.order())
+
+    def serialize(self, element) -> bytes:
+        return self._group.serialize(element)
+
+
 class PetrelicBN254Backend(PairingBackend):
     """Type-III asymmetric pairing on BN254 (petrelic). DEVELOPMENT ONLY.
 
@@ -220,6 +318,7 @@ class PetrelicBN254Backend(PairingBackend):
 
 _BACKENDS = {
     CharmSS512Backend.name: CharmSS512Backend,
+    CharmType3Backend.name: CharmType3Backend,
     PetrelicBN254Backend.name: PetrelicBN254Backend,
 }
 
@@ -272,6 +371,11 @@ def _build(name: str, cfg: dict) -> PairingBackend:
         raise ValueError(f"unknown pairing backend {name!r}; have {sorted(_BACKENDS)}")
     if name == CharmSS512Backend.name:
         return CharmSS512Backend(cfg.get("curve", "SS512"))
+    if name == CharmType3Backend.name:
+        # curve_fallback is deliberately NOT applied automatically: crypto.yaml
+        # requires it be confirmed on the host and recorded before a reportable
+        # run, "not selected silently".
+        return CharmType3Backend(cfg.get("curve", "BN254"))
     return _BACKENDS[name]()
 
 

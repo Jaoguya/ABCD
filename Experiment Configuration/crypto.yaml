@@ -86,10 +86,19 @@ ma_lb_pq_vdse:
     # A Type-I backend must NEVER be substituted here: it would change group
     # element sizes and pairing cost, and it contradicts the published map.
     allow_symmetric_backend: false
-    # Common/crypto/pairing.py currently exposes CharmSS512Backend (Type-I) and
-    # PetrelicBN254Backend (Type-III, does not build). A Type-III charm backend
-    # still has to be ADDED there, and verified on the host.
-    backend_implemented: false
+    # IMPLEMENTED 2026-08-28. Common/crypto/pairing.py now exposes
+    # CharmType3Backend alongside CharmSS512Backend (Type-I) and
+    # PetrelicBN254Backend (Type-III, still does not build). Verified on the
+    # host at BN254: G1 serialises to 46 B and G2 to 90 B (genuinely distinct
+    # groups, not a symmetric stand-in), and bilinearity
+    # e(g1^a, g2^c) == e(g1, g2)^(ac) holds.
+    #
+    # Known library behaviour, recorded so it is not rediscovered as a bug:
+    # charm does NOT reject pair(g2, g1) on this curve, it accepts the reversed
+    # argument order. The differing element sizes settle that the groups are
+    # distinct; it just means the library will not catch an argument-order
+    # mistake, so the construction must get the order right itself.
+    backend_implemented: true
 
   # MA-CP-ABE master keys — Phase I Step 2:
   #   MSK_i = (alpha_i, beta_i),  alpha_i, beta_i <-$ Z_p

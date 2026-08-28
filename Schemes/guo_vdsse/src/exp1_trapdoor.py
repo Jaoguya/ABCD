@@ -34,6 +34,11 @@ from .scheme import GuoVDSSE
 EXPERIMENT_NAME = "exp1"
 SECONDARY_NAMES = ["trapdoor_size_bytes"]
 
+# Records indexed to build the client keyword state. Not a sweep variable —
+# trapdoor cost is independent of it (see run()). Matches
+# exp3_crossdomain.DEFAULT_N.
+DEFAULT_N = 100_000
+
 
 def _build_keyword_universe(records: List[Record]) -> List[str]:
     """Collect all keywords from the corpus, sorted for reproducibility."""
@@ -54,13 +59,28 @@ def run(
     seed: int = 20260804,
 ) -> None:
     """Run Experiment 1: Trapdoor Generation Latency."""
-    # Setup — not timed
+    # Setup — not timed, but it still has to FINISH.
+    #
+    # This indexed every record it was handed. Against the frozen corpus
+    # (1.14M records) that is the same work as exp2's largest nested build —
+    # measured at ~7.5h — for an experiment whose own runtime estimate is ~0h.
+    # A campaign run against the real corpus never got past it (killed at 40
+    # minutes with no output).
+    #
+    # Scoping it is sound rather than a shortcut: the measured operation is
+    # `generate_search_token` (Alg. 3 lines 1-13), which is O(q) dictionary
+    # lookups over the client's keyword state plus O(1) PRF work — the cost
+    # does not depend on how many records are in the EDB, only on q, the swept
+    # variable. The subset must merely be large enough to give a representative
+    # keyword universe and non-empty `lcnt_w`. DEFAULT_N matches the convention
+    # exp3_crossdomain.py already uses for the same reason.
+    subset = records[: min(DEFAULT_N, len(records))]
     state, edb = scheme.setup()
-    for rec in records:
+    for rec in subset:
         scheme.update(state, edb, "add", rec.rid, rec.kw)
 
     # Build a pool of keywords to sample from
-    kw_universe = _build_keyword_universe(records)
+    kw_universe = _build_keyword_universe(subset)
     rng = DeterministicRNG(seed).spawn("exp1_trapdoor")
 
     # Variable: q = 1 to 20 (README §5)

@@ -223,18 +223,52 @@ class CorpusRecordSource:
             policies_per_domain=2, domains=domain_count
         )
         names = self.domains[:domain_count]
+
+        # Emitted ROUND-ROBIN across domains, not in raw corpus order.
+        #
+        # Each record keeps its own real `dom` — nothing is remapped — but the
+        # ORDER is balanced. Callers that need every domain represented in a
+        # small draw depend on this: Exp3CrossDomain.prepare asks for only
+        # `d * 4` records and then does `next(r for r in records if
+        # r.domain == domain)` for each domain. The synthetic source made that
+        # safe implicitly (`dom = rid % domain_count` is round-robin by
+        # construction); the corpus's natural order is grouped, so the first 8
+        # records can all be domain 0 and that `next()` died with a bare
+        # StopIteration — which took out every Exp. 3 point, d=2 included.
+        #
+        # Record order is not a measured property of any experiment here, so
+        # balancing it changes no reported number; it only makes a small draw
+        # representative, which is what the callers already assumed.
+        from collections import deque
+
+        buckets: Dict[int, Any] = {d: deque() for d in range(domain_count)}
         emitted = 0
-        for record in read_corpus(self._corpus_path):
-            if emitted >= count:
+        stream = read_corpus(self._corpus_path)
+        exhausted = False
+        while emitted < count:
+            # Top up until every domain can supply one, or the corpus runs out.
+            while not exhausted and not all(buckets[d] for d in range(domain_count)):
+                try:
+                    record = next(stream)
+                except StopIteration:
+                    exhausted = True
+                    break
+                if record.dom < domain_count:
+                    buckets[record.dom].append(record)
+            progressed = False
+            for d in range(domain_count):
+                if emitted >= count:
+                    break
+                if buckets[d]:
+                    yield extract_mod.extract(
+                        buckets[d].popleft(), assignment=assignment,
+                        domain_names=names,
+                    )
+                    emitted += 1
+                    progressed = True
+            if not progressed:
                 break
-            # Records whose real domain falls outside the requested subset are
-            # skipped rather than remapped, so `dom` stays the corpus's own.
-            if record.dom >= domain_count:
-                continue
-            yield extract_mod.extract(
-                record, assignment=assignment, domain_names=names
-            )
-            emitted += 1
+
         if emitted < count:
             raise ValueError(
                 f"corpus exhausted after {emitted} records but {count} were "
@@ -291,11 +325,24 @@ def build_deployment(
 ) -> Deployment:
     """Phases I-V for one sweep point. Untimed by construction.
 
-    ``group_provider`` is injected because no faithful Type-III backend exists; the
-    resulting context reports ``reportable = False`` and provenance records it.
+    Prefers the real Type-III backend (``charm_type3``, added 2026-08-28) and
+    falls back to the injected stand-in only where it is unavailable — on a
+    machine without charm, i.e. any non-Linux dev host. The fallback still
+    marks the context ``reportable = False`` and provenance still records why,
+    so a stand-in run can never be mistaken for a real one; the difference is
+    that the real backend is now the default rather than the only option being
+    a stub.
     """
+    faithful_ops: Optional[Any] = None
     if group_provider is None:
-        group_provider = _unfaithful_group_provider
+        try:
+            from Common.crypto import pairing as _pairing_mod
+
+            _backend = _pairing_mod.get_backend("ma_lb_pq_vdse", reportable=True)
+            group_provider = _faithful_group_provider
+            faithful_ops = _BackedGroupOperations(_backend)
+        except Exception:  # noqa: BLE001 - absence is expected off the host
+            group_provider = _unfaithful_group_provider
     domain_count = len(source.domains) if domains is None else domains
     domain_names = tuple(
         source.domains[:domain_count]
@@ -314,7 +361,7 @@ def build_deployment(
     catalog = prop_mod.IndexCatalog()
 
     registry = authority_mod.AttributeNamespaceRegistry()
-    operations = _HarnessGroupOperations()
+    operations = faithful_ops if faithful_ops is not None else _HarnessGroupOperations()
     authorities: Dict[str, authority_mod.Authority] = {}
     for index, domain in enumerate(domain_names, start=1):
         authority = authority_mod.Authority.create(
@@ -423,6 +470,62 @@ def _unfaithful_group_provider(pairing_params):
         g1=b"g1", g2=b"g2", e_g1_g2=b"egt",
         faithful=False,
     )
+
+
+def _faithful_group_provider(pairing_params):
+    """A real Type-III bilinear group from ``Common.crypto.pairing``.
+
+    Replaces ``_unfaithful_group_provider`` when ``charm_type3`` is available.
+    ``faithful=True`` is what lets ``group_faithful`` reach
+    ``provenance.reportability()`` as satisfied — the proposed scheme could not
+    produce a quotable number at all while the stand-in below was the only
+    option (``crypto.yaml: backend_implemented: false``).
+    """
+    from Common.crypto import pairing as pairing_mod
+
+    backend = pairing_mod.get_backend("ma_lb_pq_vdse", reportable=True)
+    g1, g2 = backend.random_g1(), backend.random_g2()
+    return init_mod.GroupDescription(
+        curve=backend.curve,
+        backend=backend.name,
+        g1=backend.serialize(g1),
+        g2=backend.serialize(g2),
+        e_g1_g2=backend.serialize(backend.pair(g1, g2)),
+        faithful=True,
+    )
+
+
+class _BackedGroupOperations:
+    """Real group operations over the configured Type-III backend.
+
+    Elements cross this interface as serialised bytes (that is the shape the
+    scheme's phases already use), so each operation deserialises, works in the
+    group, and re-serialises. That costs a little per call but keeps the
+    measured cost *real* rather than the hash stand-in's constant-time SHA-256,
+    which understated every group operation in the scheme.
+    """
+
+    def __init__(self, backend) -> None:
+        self._b = backend
+        self._group = backend.group
+
+    def _g1(self, raw: bytes):
+        return self._group.deserialize(raw)
+
+    def random_exponent(self) -> bytes:
+        return self._b.serialize(self._b.random_zr())
+
+    def exponentiate_gt(self, base: bytes, exponent: bytes) -> bytes:
+        return self._b.serialize(self._g1(base) ** self._g1(exponent))
+
+    def exponentiate_g1(self, base: bytes, exponent: bytes) -> bytes:
+        return self._b.serialize(self._g1(base) ** self._g1(exponent))
+
+    def multiply_g1(self, left: bytes, right: bytes) -> bytes:
+        return self._b.serialize(self._g1(left) * self._g1(right))
+
+    def hash_to_g1(self, data: bytes) -> bytes:
+        return self._b.serialize(self._b.hash_to_g1(data))
 
 
 class _HarnessGroupOperations:

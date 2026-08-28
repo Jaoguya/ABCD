@@ -630,7 +630,9 @@ def test_lattice_verify_preimage_rejects_wrong_vector():
 # ===========================================================================
 def test_pairing_backend_availability_reported():
     status = pairing.available_backends()
-    assert set(status) == {"charm_ss512", "petrelic_bn254"}
+    assert set(status) == {"charm_ss512", "charm_type3", "petrelic_bn254"}
+    # charm_type3 added 2026-08-28 as the faithful Type-III backend for
+    # ma_lb_pq_vdse; charm_ss512 remains Ref[41]'s published Type-I curve.
     assert all(isinstance(v, bool) for v in status.values())
 
 

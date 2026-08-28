@@ -615,10 +615,23 @@ def test_ablation_covers_the_four_variants():
         assert sample.primary >= 0.0
 
 
-def test_harness_deployment_is_never_reportable():
-    """The injected group must propagate into the context, not stop at the seam."""
+def test_injected_stub_group_is_never_reportable():
+    """An explicitly injected stand-in must propagate into the context.
+
+    Was test_harness_deployment_is_never_reportable, which called
+    build_deployment() with no provider and asserted the result could never be
+    reportable. That held only while a stub was the ONLY option;
+    build_deployment now prefers the real CharmType3Backend where charm is
+    installed, so the old assertion tested the absence of a backend rather than
+    the property it was written to protect.
+
+    The invariant that still matters: when a stand-in IS used, its
+    unfaithfulness must reach context.reportable rather than stopping at the
+    seam -- so a stub run can never be quoted.
+    """
     deployment = exp_mod.build_deployment(
-        config=CONFIG, source=SOURCE, records=4
+        config=CONFIG, source=SOURCE, records=4,
+        group_provider=exp_mod._unfaithful_group_provider,
     )
     assert not deployment.context.reportable
 
@@ -663,8 +676,20 @@ def test_cli_writes_all_three_files_per_experiment():
         assert (folder / name).is_file()
 
 
-def test_cli_require_reportable_refuses_rather_than_producing_output():
-    """Output that could be mistaken for results must not be written."""
+def test_cli_require_reportable_matches_the_actual_reportability():
+    """--require-reportable must refuse when blocked, and proceed when not.
+
+    Was test_cli_require_reportable_refuses_rather_than_producing_output, which
+    asserted code == 2 unconditionally. That encoded "this scheme can never be
+    reportable", true only while no Type-III backend existed; CharmType3Backend
+    landed 2026-08-28 and on the experiment host the run is now legitimately
+    reportable, so the old assertion tested the absence of a backend.
+
+    The contract that actually matters is conditional, and is checked in both
+    directions here: when something blocks reportability the CLI must exit 2
+    and write NOTHING that could be mistaken for results; when nothing blocks
+    it, it must proceed and write them.
+    """
     output = Path(tempfile.mkdtemp())
     code = main_mod.run(
         [
@@ -672,11 +697,30 @@ def test_cli_require_reportable_refuses_rather_than_producing_output():
             "--require-reportable", "--output", str(output),
         ]
     )
-    assert code == 2
-    assert not (output / main_mod.FOLDERS[1] / "results.csv").exists()
+    produced = (output / main_mod.FOLDERS[1] / "results.csv").exists()
+    if code == 2:
+        assert not produced, "refused, but wrote output anyway"
+    else:
+        assert code == 0 and produced
+        meta = json.loads(
+            (output / main_mod.FOLDERS[1] / "run_meta.json").read_text()
+        )
+        assert meta["reportable"] is True
+        assert not meta["not_reportable_because"]
 
 
-def test_cli_records_non_reportability_in_the_output():
+def test_cli_reportability_and_its_reasons_always_agree():
+    """run_meta.json's flag and its reason list must never contradict.
+
+    Was test_cli_records_non_reportability_in_the_output, which asserted
+    reportable is False unconditionally -- again encoding the pre-2026-08-28
+    absence of a Type-III backend rather than a property of the harness.
+
+    The invariant that survives a backend landing: whichever way the flag
+    falls, it must be consistent with the reasons. A run marked reportable
+    with blockers listed, or marked non-reportable with none, would let a
+    reader draw the wrong conclusion from the file.
+    """
     output = Path(tempfile.mkdtemp())
     main_mod.run(
         ["--experiment", "1", "--smoke", "--quiet", "--output", str(output)]
@@ -684,8 +728,10 @@ def test_cli_records_non_reportability_in_the_output():
     meta = json.loads(
         (output / main_mod.FOLDERS[1] / "run_meta.json").read_text()
     )
-    assert meta["reportable"] is False
-    assert meta["not_reportable_because"]
+    if meta["reportable"]:
+        assert not meta["not_reportable_because"]
+    else:
+        assert meta["not_reportable_because"]
 
 
 # ===========================================================================

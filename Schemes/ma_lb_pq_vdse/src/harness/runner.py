@@ -190,7 +190,45 @@ def run_point(
     puts index construction offline, and re-preparing per run would put it in the
     curve.
     """
-    prepared = experiment.prepare(value)
+    # A point whose setup cannot be built is recorded as failed and skipped —
+    # it must NOT abort the sweep. This was not merely theoretical: the frozen
+    # corpus carries 4 domains while Exp. 3 sweeps d=2..10, so
+    # CorpusRecordSource raises at d=6; unguarded, that propagated out of
+    # run_experiment and killed the whole main.run(), meaning Exp. 5-8 never
+    # executed at all. Losing three points of one experiment is a disclosable
+    # limitation; losing four entire experiments to it is not.
+    try:
+        prepared = experiment.prepare(value)
+    except Exception as exc:  # noqa: BLE001 - recorded, then skipped
+        reason = f"{type(exc).__name__}: {exc}"
+        return PointResult(
+            variable_value=value,
+            records=tuple(
+                RunRecord(
+                    scheme=scheme,
+                    experiment=experiment.name,
+                    variable_value=value,
+                    run_id=run_id,
+                    primary=None,
+                    secondaries={},
+                    status=STATUS_FAILED,
+                    error=reason,
+                )
+                for run_id in range(1, runs + 1)
+            ),
+            # summarise() refuses an empty sample by design, so an explicit
+            # NaN summary is built here: n=0 is what write_results must emit
+            # for a point that produced no runs.
+            primary=stats.Summary(
+                n=0, mean=float("nan"), ci95=float("nan"),
+                stdev=float("nan"), minimum=float("nan"), maximum=float("nan"),
+            ),
+            secondaries={},
+            warnings=(
+                f"{experiment.name} {experiment.variable}={value}: setup failed, "
+                f"point skipped — {reason}",
+            ),
+        )
 
     # Warm-ups are executed and discarded. Not recorded: a warm-up row would
     # describe a run at a cache state the reported figures do not use.
