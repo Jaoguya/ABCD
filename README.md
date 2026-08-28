@@ -476,8 +476,15 @@ guessing with what's actually true right now.
   `54.172.21.174`). Never hardcode it; get the current one from the console.
   Each restart also wipes `/tmp`, so long-running output belongs elsewhere.
 
-- **AMI `ami-0feb3b14b4ea27844`** (`abcd-benchmark-2026-08-28`), created
-  2026-08-28 from the above instance. **This is the single point of recovery
+- **AMI `ami-0b2da6ed17be6c7a1`** (`abcd-benchmark-2026-08-28b`) — **current**,
+  created 2026-08-28 after the corpus rebuild. Carries corpus v4
+  (`e56ca2d1`, 10 domains), the Type-III pairing backend, multi-process FSNs
+  and the swept AASS weights. **Launch the fleet from THIS one**: the earlier
+  AMI below holds the superseded 4-domain corpus and would fail the freeze
+  check at startup.
+
+- **AMI `ami-0feb3b14b4ea27844`** (`abcd-benchmark-2026-08-28`), superseded,
+  created 2026-08-28 from the above instance. **This is the single point of recovery
   for two things that exist nowhere else**: the frozen corpus
   `Dataset/derived/corpus.jsonl` (686 MB, git-ignored via `.gitignore:12`) and
   the from-source crypto build (PBC 0.5.14 + charm-crypto + liboqs). It also
