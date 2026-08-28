@@ -497,7 +497,14 @@ def test_registration_user_generates_its_own_kem_keypair():
     require_kem()
     user = make_user()
     assert len(user.encapsulation_key) == kem_mod.ENCAPSULATION_KEY_BYTES
-    assert len(user.decapsulation_key) == kem_mod.DECAPSULATION_KEY_BYTES
+    # dk size is backend-dependent by representation, not by strength: liboqs
+    # and kyber_py emit the 2400-byte expanded key, `cryptography` the 64-byte
+    # (d, z) seed that FIPS 203 §7.1 defines it from. Assert against whichever
+    # backend is live rather than one hardcoded number.
+    assert (
+        len(user.decapsulation_key)
+        == kem_mod.MLKEM768().decapsulation_key_bytes
+    )
     assert user.encapsulation_key != user.decapsulation_key
 
 

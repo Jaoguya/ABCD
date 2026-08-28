@@ -19,10 +19,26 @@ Two containers per batch:
            of the first node at level ``l``. ``bottom`` (``None`` here) when a
            level sees nothing in this batch — Algorithm 1, Update lines 12-13.
 
-``A_c`` is a dict keyed by address rather than a Python list. The paper picks
-addresses at random from ``|A_c|`` (ListGen line 10), so the array is sparse by
-construction; a dict is the honest representation and avoids pretending the
-server allocates a dense array it never fills.
+``A_c`` IS A DENSE ARRAY, BECAUSE THE PAPER SAYS IT IS
+-----------------------------------------------------
+ListGen line 10: "Randomly select the non-repeating ``addr_j``
+(``1 <= addr_j <= |A_c|``)". Non-repeating draws over ``[1, |A_c|]``, one per
+node, are a random PERMUTATION of the address space — so every slot is filled
+and the array is dense, not sparse. ``A_c`` is therefore one flat ``bytearray``
+of ``|A_c|`` fixed-width slots, indexed arithmetically.
+
+This started as a dict keyed by a random 64-bit address, on the reasoning that
+it "avoids needing ``|A_c|`` up front". ``|A_c|`` is in fact known up front —
+it is the node count of the batch being built, which ``Update``/``Add`` already
+hold before they write anything — and the dict cost ~245 B of CPython object
+overhead per node (int key, tuple, two ``bytes`` headers, table slot) on top of
+the ~312 B of actual payload. At the published ``N = 10^6`` sweep point that is
+17.8 GB against ``global.yaml``'s 16 GiB host; the dense array is 9.9 GB and
+fits. Measured, not estimated: see ``debug_history.md``.
+
+Address ``0`` is reserved as the end-of-chain terminator (``next_addr = 0``),
+which is why addresses run ``1..|A_c|`` as the paper writes them rather than
+``0..|A_c|-1``.
 """
 
 from __future__ import annotations
@@ -35,12 +51,66 @@ from typing import Dict, List, Optional, Tuple
 Node = Tuple[bytes, bytes]
 
 
+class NodeArray:
+    """``A_c`` — ``capacity`` fixed-width slots in one contiguous buffer.
+
+    Slot ``addr`` (1-based, as the paper numbers them) holds ``blob || r_j`` at
+    byte offset ``(addr - 1) * record_bytes``. The width is fixed by the
+    construction and the parameters — Peony's node blob is 48 B, Peony++'s is
+    ``4 + |t| + h * (8 + |ct_i|) + 8 + 32`` — so it is learned from the first
+    node written and then enforced, rather than being guessed here.
+    """
+
+    __slots__ = ("capacity", "record_bytes", "_buf", "_filled", "_blob_bytes")
+
+    def __init__(self, capacity: int) -> None:
+        self.capacity = capacity
+        self.record_bytes = 0      # learned from the first put()
+        self._buf: bytearray = bytearray()
+        self._filled = 0
+        self._blob_bytes = 0
+
+    def put(self, address: int, blob: bytes, r: bytes) -> None:
+        if not 1 <= address <= self.capacity:
+            raise IndexError(
+                f"address {address} outside A_c = [1, {self.capacity}]"
+            )
+        width = len(blob) + len(r)
+        if self.record_bytes == 0:
+            self.record_bytes = width
+            self._buf = bytearray(self.capacity * width)
+            self._blob_bytes = len(blob)
+        elif width != self.record_bytes:
+            raise ValueError(
+                f"node width {width} != {self.record_bytes}; A_c slots are "
+                "fixed-width and every node in a batch must share the layout"
+            )
+        off = (address - 1) * width
+        self._buf[off:off + width] = blob + r
+        self._filled += 1
+
+    def get(self, address: int) -> Optional[Node]:
+        """``A_j[v_2]`` — None when the address is outside the array."""
+        if not 1 <= address <= self.capacity or self.record_bytes == 0:
+            return None
+        off = (address - 1) * self.record_bytes
+        rec = self._buf[off:off + self.record_bytes]
+        return bytes(rec[:self._blob_bytes]), bytes(rec[self._blob_bytes:])
+
+    def __len__(self) -> int:
+        return self._filled
+
+    @property
+    def size_bytes(self) -> int:
+        return len(self._buf)
+
+
 @dataclass
 class UpdateBatch:
     """One batch ``I_c = (A_c, T_c)``, exactly as the server receives it."""
 
     batch_id: int
-    A: Dict[int, Node] = field(default_factory=dict)
+    A: Optional[NodeArray] = None
     T: Dict[bytes, Optional[bytes]] = field(default_factory=dict)
 
     # Count of (keyword, level) pairs where this batch holds no file at exactly
@@ -55,13 +125,18 @@ class UpdateBatch:
         """``T_j[tau^j_1]`` — returns None for both 'absent' and 'bottom'."""
         return self.T.get(tau1)
 
+    def allocate(self, capacity: int) -> "NodeArray":
+        """Size ``A_c`` before writing into it — ``|A_c|`` is the node count."""
+        self.A = NodeArray(capacity)
+        return self.A
+
     def node(self, address: int) -> Optional[Node]:
         """``A_j[v_2]``."""
-        return self.A.get(address)
+        return self.A.get(address) if self.A is not None else None
 
     @property
     def node_count(self) -> int:
-        return len(self.A)
+        return len(self.A) if self.A is not None else 0
 
     @property
     def entry_count(self) -> int:
@@ -69,10 +144,12 @@ class UpdateBatch:
 
     @property
     def size_bytes(self) -> int:
-        """Serialised index size — Exp. 5 secondary metric."""
-        total = 0
-        for blob, r in self.A.values():
-            total += len(blob) + len(r) + 8  # +8 for the address key
+        """Serialised index size — Exp. 5 secondary metric.
+
+        ``A_c`` is its own byte count: a dense array carries no per-node key,
+        which is exactly what makes it dense.
+        """
+        total = self.A.size_bytes if self.A is not None else 0
         for tag, val in self.T.items():
             total += len(tag) + (len(val) if val else 0)
         return total

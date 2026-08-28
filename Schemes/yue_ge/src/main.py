@@ -87,6 +87,8 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
                         help="Require a reportable corpus. Default: from dataset.yaml.")
     parser.add_argument("--seed", type=int, default=20260828,
                         help="RNG seed for reproducible keyword selection.")
+    parser.add_argument("--points", default=None,
+                        help="run only these sweep values so one experiment can be split across instances (e.g. '2-5' or '100,1000'); each shard writes to its own directory and infra/merge_points.py reassembles them")
     return parser.parse_args(argv)
 
 
@@ -131,6 +133,7 @@ def main(argv: List[str] | None = None) -> None:
         print(f"{'=' * 60}")
 
         exp_module.run(
+            points=args.points,
             params=params,
             records=records,
             manifest=manifest,

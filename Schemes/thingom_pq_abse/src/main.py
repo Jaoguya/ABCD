@@ -32,6 +32,8 @@ from Common.crypto.config import REPO_ROOT, ConfigError, get, verify_experiment_
 from . import experiments
 from .harness import write_all
 
+from infra import sweep
+
 # README §6 defaults. These live here rather than in a config file because
 # "Experiment Configuration/global.yaml" — referenced by SCHEME.md and
 # README §8 — does not exist in the repository yet. Every value that affects
@@ -99,6 +101,15 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--runs", type=int, default=DEFAULT_REPETITIONS)
     parser.add_argument("--warmups", type=int, default=DEFAULT_WARMUPS)
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument(
+        "--points", default=None,
+        help=(
+            "run only these sweep values so one experiment can be split across "
+            "instances (e.g. '2-5'). Exp. 3's nine d-points at ~1.4h each are "
+            "the longest job in this track, and this is what makes them "
+            "parallel; infra/merge_points.py reassembles the shards."
+        ),
+    )
     parser.add_argument(
         "--output",
         default=None,
@@ -323,7 +334,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     for number in selected:
         result = _run_one(number, workload, args)
-        directory = output_root / OUTPUT_DIRS[number]
+        directory = sweep.shard_dir(output_root / OUTPUT_DIRS[number], args.points)
         write_all(
             directory,
             result,
@@ -344,17 +355,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
 
 def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespace):
+    points = getattr(args, "points", None)
     if number == "1":
         return experiments.experiment_1(
             workload,
-            q_values=EXP1_Q_VALUES,
+            q_values=sweep.select(EXP1_Q_VALUES, points),
             repetitions=args.runs,
             warmups=args.warmups,
         )
     if number == "2":
         return experiments.experiment_2(
             workload,
-            index_sizes=EXP2_INDEX_SIZES,
+            index_sizes=sweep.select(EXP2_INDEX_SIZES, points),
             q=DEFAULT_Q,
             repetitions=args.runs,
             warmups=args.warmups,
@@ -362,7 +374,7 @@ def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespa
         )
     return experiments.experiment_3(
         workload,
-        domain_counts=EXP3_DOMAIN_COUNTS,
+        domain_counts=sweep.select(EXP3_DOMAIN_COUNTS, points),
         total_index_size=EXP3_TOTAL_INDEX_SIZE,
         q=DEFAULT_Q,
         repetitions=args.runs,

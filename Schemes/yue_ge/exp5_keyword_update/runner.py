@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Optional, Any, Dict, List, Sequence, Tuple
 
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
@@ -54,6 +54,8 @@ from ..src.harness import (
 )
 from ..src.params import SchemeParams
 from ..src.workload import build_workload, index_workload
+
+from infra import sweep
 
 EXPERIMENT_NAME = "exp5"
 SECONDARY_NAMES = ["entries_rewritten", "index_growth_bytes", "delete_ms"]
@@ -84,6 +86,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260828,
+    points: Optional[str] = None,
     variant: str = "peony_plus",
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp5_update")
@@ -163,9 +166,13 @@ def run(
             },
         )
 
-    results = run_experiment(actual_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(actual_range, points)
 
-    exp_dir = output_dir / "exp5_keyword_update"
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
+
+    exp_dir = sweep.shard_dir(output_dir / "exp5_keyword_update", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     write_results(exp_dir / "results.csv",

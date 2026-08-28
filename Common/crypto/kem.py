@@ -29,7 +29,8 @@ from typing import Callable, List, Optional, Tuple
 
 # FIPS 203 fixed sizes for the ML-KEM-768 parameter set.
 ENCAPSULATION_KEY_BYTES = 1184
-DECAPSULATION_KEY_BYTES = 2400
+DECAPSULATION_KEY_BYTES = 2400   # expanded dk (liboqs, kyber_py)
+DECAPSULATION_SEED_BYTES = 64    # (d, z) seed form — FIPS 203 §7.1 (cryptography)
 CIPHERTEXT_BYTES = 1088
 SHARED_SECRET_BYTES = 32
 
@@ -55,6 +56,11 @@ class MLKEM768:
 
     def __init__(self, backend: Optional[str] = None) -> None:
         self._impl, self.backend = _select_backend(backend)
+
+    @property
+    def decapsulation_key_bytes(self) -> int:
+        """Size of the dk this backend emits — 2400 expanded, or 64 as a seed."""
+        return self._impl.decapsulation_key_bytes
 
     def keygen(self) -> KeyPair:
         return self._impl.keygen()
@@ -83,34 +89,44 @@ class MLKEM768:
 # Backends
 # ---------------------------------------------------------------------------
 class _CryptographyBackend:
-    """``cryptography``'s native ML-KEM API, on versions that ship it."""
+    """``cryptography``'s native ML-KEM API (``MLKEM768PrivateKey``, 46+).
+
+    THE DECAPSULATION KEY IS THE 64-BYTE SEED, NOT THE 2400-BYTE EXPANDED KEY.
+    ``cryptography`` exposes ``private_bytes_raw()`` as the FIPS 203 ``(d, z)``
+    seed and reconstructs from it with ``from_seed_bytes``. FIPS 203 §7.1 names
+    that an equivalent representation of ``dk`` — the expanded key is derived
+    from it deterministically — so this is a storage-format difference, not a
+    weaker key. ``decapsulation_key_bytes`` reports which representation the
+    live backend produces so a size assertion checks the active backend rather
+    than one hardcoded number (``liboqs`` and ``kyber_py`` both give 2400).
+    """
 
     name = "cryptography"
+    decapsulation_key_bytes = DECAPSULATION_SEED_BYTES
 
     def __init__(self) -> None:
         from cryptography.hazmat.primitives.asymmetric import mlkem  # type: ignore
 
-        self._mlkem = mlkem
-        self._param = mlkem.MLKEMParameterSet.MLKEM768  # type: ignore[attr-defined]
+        # Probed rather than assumed: the module exists on versions that predate
+        # the ML-KEM-768 classes, and an AttributeError here is what tells
+        # _select_backend to move on to the next backend.
+        self._private = mlkem.MLKEM768PrivateKey  # type: ignore[attr-defined]
+        self._public = mlkem.MLKEM768PublicKey  # type: ignore[attr-defined]
 
     def keygen(self) -> KeyPair:
-        private = self._mlkem.MLKEMPrivateKey.generate(self._param)  # type: ignore
+        private = self._private.generate()
         return KeyPair(
             encapsulation_key=private.public_key().public_bytes_raw(),
             decapsulation_key=private.private_bytes_raw(),
         )
 
     def encapsulate(self, encapsulation_key: bytes) -> Encapsulation:
-        public = self._mlkem.MLKEMPublicKey.from_public_bytes(  # type: ignore
-            encapsulation_key, self._param
-        )
+        public = self._public.from_public_bytes(encapsulation_key)
         shared, ct = public.encapsulate()
         return Encapsulation(ciphertext=ct, shared_secret=shared)
 
     def decapsulate(self, decapsulation_key: bytes, ciphertext: bytes) -> bytes:
-        private = self._mlkem.MLKEMPrivateKey.from_private_bytes(  # type: ignore
-            decapsulation_key, self._param
-        )
+        private = self._private.from_seed_bytes(decapsulation_key)
         return private.decapsulate(ciphertext)
 
 
@@ -119,6 +135,7 @@ class _LiboqsBackend:
 
     name = "liboqs"
     _ALG = "ML-KEM-768"
+    decapsulation_key_bytes = DECAPSULATION_KEY_BYTES
 
     def __init__(self) -> None:
         import oqs  # type: ignore
@@ -155,6 +172,7 @@ class _KyberPyBackend:
     """
 
     name = "kyber_py"
+    decapsulation_key_bytes = DECAPSULATION_KEY_BYTES
 
     def __init__(self) -> None:
         from kyber_py.ml_kem import ML_KEM_768  # type: ignore

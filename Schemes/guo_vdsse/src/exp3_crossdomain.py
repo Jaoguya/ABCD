@@ -37,6 +37,8 @@ from .harness import (
 )
 from .scheme import GuoVDSSE
 
+from infra import sweep
+
 EXPERIMENT_NAME = "exp3"
 SECONDARY_NAMES = ["trapdoors_issued", "cross_node_messages"]
 
@@ -69,6 +71,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260804,
+    points: Optional[str] = None,
 ) -> None:
     """Run Experiment 3: Cross-Domain Scalability."""
     rng = DeterministicRNG(seed).spawn("exp3_crossdomain")
@@ -126,10 +129,14 @@ def run(
             },
         )
 
-    results = run_experiment(VARIABLE_RANGE, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(VARIABLE_RANGE, points)
+
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
 
     # Write outputs
-    exp_dir = output_dir / "exp3_crossdomain_scalability"
+    exp_dir = sweep.shard_dir(output_dir / "exp3_crossdomain_scalability", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     aggregated = aggregate_results(results, SECONDARY_NAMES)

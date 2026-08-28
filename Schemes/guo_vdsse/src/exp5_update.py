@@ -21,7 +21,7 @@ Merkle nodes recomputed: N/A for Guo (no Merkle tree in this scheme).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Optional, Any, Dict, List, Tuple
 
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
@@ -36,6 +36,8 @@ from .harness import (
     write_run_meta,
 )
 from .scheme import GuoVDSSE
+
+from infra import sweep
 
 EXPERIMENT_NAME = "exp5"
 SECONDARY_NAMES = ["entries_rewritten"]
@@ -90,6 +92,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260804,
+    points: Optional[str] = None,
 ) -> None:
     """Run Experiment 5: Dynamic Keyword Update."""
     rng = DeterministicRNG(seed).spawn("exp5_update")
@@ -139,10 +142,14 @@ def run(
             },
         )
 
-    results = run_experiment(actual_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(actual_range, points)
+
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
 
     # Write outputs
-    exp_dir = output_dir / "exp5_keyword_update"
+    exp_dir = sweep.shard_dir(output_dir / "exp5_keyword_update", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     aggregated = aggregate_results(results, SECONDARY_NAMES)

@@ -1086,19 +1086,48 @@ def test_revocation_restore_rejects_an_unrevoked_identifier():
     raise AssertionError("restoring an unrevoked identifier should raise")
 
 
-def test_revocation_batch_costs_one_rebuild():
-    """Phase VII recomputes RevRoot once per version, and Exp. 6 sweeps to 1e5.
+def test_revocation_updates_one_path_per_revocation():
+    """Phase VII Step 3 updates RevRoot incrementally, and Exp. 6 sweeps to 1e5.
 
-    A rebuild per revocation would be O(delta^2) hashing and would make Exp. 6
-    measure this class instead of the IAS mechanism.
+    A rebuild per revocation is O(delta^2) hashing and makes Exp. 6 measure this
+    class instead of the IAS mechanism — which is exactly what happened, at a
+    measured O(n^2.02). Assert the mechanism, not just the root: a full rebuild
+    would also change the root, so a root-only test cannot tell the two apart.
     """
     revocation = revocation_mod.RevocationList()
     revocation.revoke_many(f"user-{i}" for i in range(500))
-    assert revocation.rebuild_count == 0     # nothing computed yet
+    assert revocation.path_updates == 500     # one path per revocation
     revocation.root()
-    assert revocation.rebuild_count == 1
     revocation.root()
-    assert revocation.rebuild_count == 1     # cached
+    assert revocation.path_updates == 500     # reading the root costs nothing
+
+
+def test_revocation_cost_per_update_does_not_grow_with_the_list():
+    """The property Exp. 6 needs: revocation 10,000 costs what revocation 1 did.
+
+    Timed rather than counted, because the counter above would still pass if the
+    per-path work itself grew. Compares the second half of a 4,000-revocation
+    run against the first half; a rebuild-per-update implementation makes the
+    second half ~3x the first, so the 2x bound fails loudly while leaving room
+    for ordinary timing noise on a shared machine.
+    """
+    import time
+
+    revocation = revocation_mod.RevocationList()
+
+    def timed(lo: int, hi: int) -> float:
+        start = time.perf_counter()
+        for i in range(lo, hi):
+            revocation.revoke(f"user-{i}")
+            revocation.root()
+        return time.perf_counter() - start
+
+    first_half = timed(0, 2_000)
+    second_half = timed(2_000, 4_000)
+    assert second_half < 2.0 * max(first_half, 1e-4), (
+        f"per-update cost grew with list size: first 2,000 took {first_half:.3f}s, "
+        f"second 2,000 took {second_half:.3f}s — RevRoot is not incremental"
+    )
 
 
 def test_revocation_mutation_invalidates_the_cached_root():

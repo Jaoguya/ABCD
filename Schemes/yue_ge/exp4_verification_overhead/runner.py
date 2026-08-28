@@ -46,7 +46,7 @@ proof size grows as ``log r``.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, Sequence
+from typing import Optional, Any, Dict, Sequence
 
 from Dataset.corpus import Record
 
@@ -64,6 +64,8 @@ from ..src.harness import (
 from ..src.params import SchemeParams
 from ..src.workload import build_workload, index_workload
 
+from infra import sweep
+
 EXPERIMENT_NAME = "exp4"
 SECONDARY_NAMES = ["proof_size_kb", "entries_combined", "accepted"]
 
@@ -79,6 +81,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260828,
+    points: Optional[str] = None,
     variant: str = "peony_plus",
 ) -> None:
     if variant != "peony_plus":
@@ -190,7 +193,11 @@ def run(
             },
         )
 
-    results = run_experiment(actual_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(actual_range, points)
+
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
 
     rejected = [r for r in results if r.secondary_metrics.get("accepted") == 0]
     if rejected:
@@ -200,7 +207,7 @@ def run(
             "correctness failure, not a slow path. Refusing to write results."
         )
 
-    exp_dir = output_dir / "exp4_verification_overhead"
+    exp_dir = sweep.shard_dir(output_dir / "exp4_verification_overhead", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     write_results(exp_dir / "results.csv",

@@ -30,6 +30,8 @@ from Dataset.corpus import Record
 from .harness import RunResult, measure_ns, run_experiment, write_raw_runs, aggregate_results, write_results, write_run_meta
 from .scheme import GuoVDSSE
 
+from infra import sweep
+
 
 EXPERIMENT_NAME = "exp1"
 SECONDARY_NAMES = ["trapdoor_size_bytes"]
@@ -57,6 +59,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260804,
+    points: Optional[str] = None,
 ) -> None:
     """Run Experiment 1: Trapdoor Generation Latency."""
     # Setup — not timed, but it still has to FINISH.
@@ -117,10 +120,14 @@ def run(
             secondary_metrics={"trapdoor_size_bytes": trapdoor_size},
         )
 
-    results = run_experiment(variable_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(variable_range, points)
+
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
 
     # Write outputs
-    exp_dir = output_dir / "exp1_trapdoor_generation"
+    exp_dir = sweep.shard_dir(output_dir / "exp1_trapdoor_generation", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     aggregated = aggregate_results(results, SECONDARY_NAMES)

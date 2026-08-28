@@ -38,8 +38,10 @@ here: ``n_eff`` grows with the result set, and ``batches_scanned`` is fixed at
 
 from __future__ import annotations
 
+import gc
+
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Optional, Any, Dict, List, Sequence
 
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
@@ -57,6 +59,8 @@ from ..src.harness import (
 from ..src.params import SchemeParams
 from ..src.workload import build_workload, index_workload, seed_deletions, select_keywords
 
+from infra import sweep
+
 EXPERIMENT_NAME = "exp2"
 SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio"]
 
@@ -72,6 +76,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260828,
+    points: Optional[str] = None,
     variant: str = "peony_plus",
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp2_search")
@@ -89,9 +94,25 @@ def run(
 
     level = max(1, (params.access_levels + 1) // 2)
 
-    # ---- build one real index per N. Untimed. ----
+    # ---- one real index per N, built ON DEMAND and dropped before the next.
+    # Untimed either way; the difference is peak memory.
+    #
+    # These indexes are large: a Peony++ node occupies a 312 B slot in A_c, so
+    # the N = 10^6 point alone is ~10.5 GB (measured, not estimated) against
+    # `global.yaml`'s 16 GiB host. Building all seven sweep points up front and
+    # holding them — which this did — needs ~34 GB and cannot complete. Since
+    # `harness.run_experiment` walks the sweep strictly in order, finishing every
+    # run at one N before touching the next, only ONE index is ever needed.
+    # Building lazily and releasing the previous one is therefore free.
     built: Dict[int, Any] = {}
-    for n in actual_range:
+
+    def context_for(n: int) -> Dict[str, Any]:
+        if n in built:
+            return built[n]
+        built.clear()          # release the previous point before allocating
+        gc.collect()           # ~10 GB must actually be returned, not merely
+                               # unreferenced, before the next build starts
+
         workload = build_workload(records[:n], params)
         state, index, prooflist = peony_plus.setup(params)
         index_workload(state, index, prooflist, workload, variant)
@@ -114,12 +135,14 @@ def run(
             "keywords": keywords,
         }
         print(f"  built N={n:>9,}: {index.total_nodes:>9,} nodes, "
-              f"{index.batch_count} batches")
+              f"{index.batch_count} batches, "
+              f"{index.size_bytes / 1e9:.2f} GB in A_c")
+        return built[n]
 
     counter: Dict[int, int] = {n: 0 for n in actual_range}
 
     def runner(n: int) -> RunResult:
-        ctx = built[n]
+        ctx = context_for(n)
         i = counter[n]
         counter[n] += 1
         kw = ctx["keywords"][i % len(ctx["keywords"])]
@@ -155,9 +178,13 @@ def run(
             },
         )
 
-    results = run_experiment(actual_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(actual_range, points)
 
-    exp_dir = output_dir / "exp2_search_latency"
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
+
+    exp_dir = sweep.shard_dir(output_dir / "exp2_search_latency", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     write_results(exp_dir / "results.csv",

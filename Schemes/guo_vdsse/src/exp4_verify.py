@@ -26,7 +26,7 @@ SCHEME.md Exp. 4: "Use this scheme's own verification mechanism as published."
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Optional, Any, Dict, List
 
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
@@ -41,6 +41,8 @@ from .harness import (
     write_run_meta,
 )
 from .scheme import GuoVDSSE
+
+from infra import sweep
 
 EXPERIMENT_NAME = "exp4"
 SECONDARY_NAMES = ["proof_size_kb", "proof_elements"]
@@ -80,6 +82,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260804,
+    points: Optional[str] = None,
 ) -> None:
     """Run Experiment 4: Verification Overhead."""
     # Setup — not timed
@@ -148,10 +151,14 @@ def run(
             },
         )
 
-    results = run_experiment(actual_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(actual_range, points)
+
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
 
     # Write outputs
-    exp_dir = output_dir / "exp4_verification_overhead"
+    exp_dir = sweep.shard_dir(output_dir / "exp4_verification_overhead", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     aggregated = aggregate_results(results, SECONDARY_NAMES)

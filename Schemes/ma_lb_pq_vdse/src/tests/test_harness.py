@@ -423,8 +423,20 @@ def test_provenance_lists_every_blocker_by_name():
 
 
 def test_provenance_accepts_a_fully_satisfied_run():
-    """The gate must be passable, or it is not a gate but a wall."""
+    """The gate must be passable, or it is not a gate but a wall.
+
+    Only on the pinned host. The gate's host check queries live EC2 metadata
+    (``Common.crypto.config.verify_experiment_host``) and cannot be satisfied
+    from a dev machine, so off-host this SKIPS rather than fails — the same
+    treatment the pairing and ML-KEM tests get. It still runs, and still has to
+    pass, on the machine that produces reportable numbers.
+    """
     import dataclasses
+
+    from Common.crypto import config as common_config
+
+    if not common_config.verify_experiment_host()["is_pinned_experiment_host"]:
+        raise Skip("not on the pinned AWS experiment host; gate cannot pass here")
 
     fixed = dataclasses.replace(
         CONFIG,

@@ -163,6 +163,34 @@ environment:
     - VECLIB_MAXIMUM_THREADS
 
 # -----------------------------------------------------------------------------
+# Fleet — how the campaign is parallelised. Added 2026-08-29.
+#
+# Campaign wall-clock is bounded by the largest INDIVISIBLE unit of work, not by
+# instance count. Splitting one scheme per instance leaves it at 25.0h (guo's
+# whole track); splitting one experiment per instance leaves it at 17.5h
+# (ma_lb Exp. 7-8); splitting by sweep point with `--points` reaches 11.2h,
+# bounded by guo_vdsse Exp. 2's single N=10^6 index build, which grows one index
+# across nested prefixes and is therefore sequential.
+#
+# NOTE ON SIZE: 14 nodes and 8 nodes both finish in 11.24h. The bound is one
+# 11.24h job, and total compute is 74.4h, so anything above ceil(74.4/11.24) = 7
+# nodes only adds idle time -- at 14 nodes, 13 of them finish in ~4.9h and sit
+# idle for ~83 instance-hours. That is free if each node is terminated when its
+# work ends, and ~$16 of waste if the fleet is left up. Sized at 14 by decision
+# for scheduling headroom; drop to 8 to halve the idle.
+# -----------------------------------------------------------------------------
+fleet:
+  nodes: 14
+  instance_type: m6i.xlarge     # every node identical -- README §1 parity
+  placement: one cluster placement group, same AZ
+  granularity: sweep_point      # see infra/sweep.py
+  expected_wall_clock_h: 11.2
+  total_compute_h: 74.4
+  terminate_when_done: true     # idle nodes bill; the plan leaves 13 idle early
+  merge_step: infra/merge_points.py   # required -- shards are not results
+
+
+# -----------------------------------------------------------------------------
 # Paths — load-bearing for Plots/generate_plots.py (README §13). Relative to
 # the repository root.
 # -----------------------------------------------------------------------------

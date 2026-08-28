@@ -36,7 +36,7 @@ our number is larger because it includes the owner-side revocation work that
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Optional, Any, Dict, List, Sequence
 
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
@@ -53,6 +53,8 @@ from ..src.harness import (
 )
 from ..src.params import SchemeParams
 from ..src.workload import build_workload, index_workload, seed_deletions, select_keywords
+
+from infra import sweep
 
 EXPERIMENT_NAME = "exp1"
 SECONDARY_NAMES = ["token_size_bytes", "tokens_issued"]
@@ -83,6 +85,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260828,
+    points: Optional[str] = None,
     variant: str = "peony_plus",
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp1_trapdoor")
@@ -153,9 +156,13 @@ def run(
             },
         )
 
-    results = run_experiment(VARIABLE_RANGE, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(VARIABLE_RANGE, points)
 
-    exp_dir = output_dir / "exp1_trapdoor_generation"
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
+
+    exp_dir = sweep.shard_dir(output_dir / "exp1_trapdoor_generation", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     write_results(exp_dir / "results.csv",

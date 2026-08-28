@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from Schemes.ma_lb_pq_vdse.src import config as scheme_config  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import experiments as experiments_mod  # noqa: E402
+from infra import sweep  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import provenance, runner  # noqa: E402
 
 SCHEME_NAME = "ma_lb_pq_vdse"
@@ -92,6 +93,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--smoke", action="store_true",
         help="one tiny sweep point and few runs, to exercise the pipeline",
+    )
+    parser.add_argument(
+        "--points", default=None,
+        help=(
+            "run only these sweep values, so one experiment can be split "
+            "across instances (e.g. '100,500' or '2-5'). Each shard writes to "
+            "its own directory; infra/merge_points.py reassembles them. "
+            "Exp. 7-8's 20 configs at ~0.9h each are the largest single job in "
+            "the campaign, and this is what makes them parallel."
+        ),
     )
     parser.add_argument("--quiet", action="store_true")
     return parser
@@ -186,7 +197,16 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             exit_code = 2
             continue
 
-        values = experiment.values[:1] if args.smoke else None
+        if args.smoke:
+            values = experiment.values[:1]
+        else:
+            try:
+                selected = sweep.select(experiment.values, args.points)
+            except sweep.SweepSelectionError as exc:
+                log(f"REFUSED {experiment.name}: {exc}")
+                exit_code = 2
+                continue
+            values = None if selected == list(experiment.values) else selected
         log(
             f"{experiment.name}: {experiment.variable} over "
             f"{list(values or experiment.values)}, {runs} runs "
@@ -200,7 +220,9 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         result = runner.run_experiment(
             experiment, metadata, config=config, scheme=SCHEME_NAME, values=values
         )
-        written = runner.write_outputs(result, output_root / FOLDERS[number])
+        written = runner.write_outputs(
+            result, sweep.shard_dir(output_root / FOLDERS[number], args.points)
+        )
         for point in result.points:
             log(
                 f"  {experiment.variable}={point.variable_value}: "

@@ -3,7 +3,7 @@
 **Back to main README:** [README.md](../../README.md)
 **Paper:** M. Perera and S. Fugkeaw, "LV-PQ-ABSE: A Lightweight Verifiable Postquantum Attribute-Based Searchable Encryption Scheme with Hybrid Indexing and Provenance-Aware Verification for IoT-Based EHRs," *IEEE Internet of Things Journal*, vol. 13, no. 15, pp. 34302–34317, Aug. 2026, doi: `10.1109/JIOT.2026.3695855`. Extracted text: [References/Ref[54]/Ref[54].md](../../References/Ref[54]/Ref[54].md).
 
-**Status (2026-08-27): NOT YET IMPLEMENTED.** `src/` does not exist yet. This file records what the paper publishes, what it doesn't, and the decisions needed before implementation starts — same rigor `thingom_pq_abse/SCHEME.md` and `crypto.yaml` already apply to Ref[41].
+**Status (2026-08-29): IMPLEMENTED.** `src/` and all three experiment runners exist; `src/test_scheme.py` passes 18 tests covering Phases 1–5 including the lattice CP-ABE. The three gaps this file recorded as "decisions needed" are now decided, with reasons, in `crypto.yaml`'s `perera_lv_pqabse` block.
 
 ---
 
@@ -43,15 +43,36 @@ Security: standard game-based reductions (IND-CPA for confidentiality, IND-CKA f
 
 ---
 
-## Decisions needed before implementation (not published by the paper)
+## Decisions taken (the paper publishes none of these)
 
-Both must be fixed and recorded in `crypto.yaml`'s `perera_lv_pqabse` block before any code is written — the same discipline `thingom_pq_abse.attributes.u` already follows, not a default to drift into.
+All recorded in `crypto.yaml`'s `perera_lv_pqabse` block on 2026-08-29 with the full reasoning; summarised here.
 
-| Gap | What the paper says | What's needed |
+| Gap | Decision | Why |
 |---|---|---|
-| Lattice `(n, q, σ)` | "follow established configurations consistent with Kyber768 and Dilithium3" — no concrete triple given anywhere | A specific `(n,q,σ)` triple, with a stated reason (e.g. adopting Kyber768's own ring-LWE parameters `n=256,k=3,q=3329` as the closest citable anchor) |
-| Attribute universe size `\|𝒰\|` | Never numerically fixed | A benchmark value — consider matching `thingom_pq_abse.attributes.u = 10` for cross-baseline comparability, per the precedent already set between `thingom_pq_abse` and the now-dropped `zhuang_lattice_mabse.attributes.l` |
-| Exp. 3 native cross-domain treatment | Paper has no multi-domain concept at all | Decide: independent per-domain trapdoors + client aggregation (matches `thingom_pq_abse`/`guo_vdsse`'s existing native-mode rule) — needs an explicit decision recorded here, not assumed |
+| Lattice `(n, q, σ)` | `n = 768`, `q = 2²²`, `m = 2·n·log q = 33,792`, `σ = 4.0` | Kyber768's security comes from module-LWE of rank 3 over a degree-256 ring — an effective LWE dimension of **768**, which is the number that carries the paper's own λ=192 / Category 3 claim for a plain-LWE construction. Taking Kyber's ring degree 256 as `n` would name the right number for the wrong parameter and would not be Category 3 here. Kyber's `q=3329` cannot be reused at all: this is a trapdoor construction, where `q` must exceed noise accumulated over `m` columns or decryption fails. `2²²` is the largest exponent for which `Common/crypto/lattice.py`'s int64 matmul guard still holds — the overflow class that corrupts results silently rather than raising. |
+| Attribute universe `\|𝒰\|` | `10` | Matches `thingom_pq_abse.attributes.u`, so the two attribute-based baselines are compared at the same policy size. Not results-affecting here (see the measurement boundary below), so alignment is free. |
+| Exp. 3 cross-domain | Native mode — `d` independent trapdoors, `d` independent searches, client-side aggregation | README §3's existing rule, already applied to `guo_vdsse` and `thingom_pq_abse`. The paper has one TA, one fog tier, no federation. |
+| Fuzzy `n` and `θ` | trigrams, `θ = 0.6` | The paper names "n-gram" and `θ` but fixes neither. |
+
+---
+
+## Measurement boundary: `ct_abe` is not on the Exp. 1–3 path
+
+`crypto.yaml`'s `abe_on_measured_path: false`, and this is the one decision most worth reading.
+
+Exp. 1 times trapdoor generation, which here is PRF tokenization plus one Dilithium3 signature — the paper's own headline claim (Table II: `O(n + T_PRF)`, "no lattice sampling at query time"). Exp. 2 times search over the fog-side hybrid index, which holds **PRF tokens, not ciphertexts**. Exp. 3 is `d` independent Exp. 2 searches. **None of the three reads `ct_abe`**: it is payload-key encapsulation, consumed only by Phase 5 retrieval.
+
+So the Exp. 1–3 index build does not generate a `ct_abe` per record. Everything else in Phase 2 is still real and still verified at Phase 3 — AES-256-GCM body, ML-KEM-768 encapsulation, provenance tag and digest, and the Dilithium3 edge signature the fog actually checks before indexing.
+
+Measured cost of generating them anyway, on the dev host at the parameters above: **758 ms per record** — 21 h at `N = 10⁵`, 211 h at `N = 10⁶`. It would consume the entire 24 h track budget as untimed setup **while changing no measured number in either direction**. This does not flatter the baseline: no Exp. 1/2/3 quantity gets faster, because none of them touched `ct_abe` to begin with.
+
+`src/test_scheme.py::test_full_retrieve_verify_accepts_a_fresh_authorised_record` exercises the complete Phase 2 → Phase 5 path *with* `ct_abe`, including policy enforcement, Merkle inclusion and the freshness check — which is the condition under which skipping it in the experiments is honest rather than convenient.
+
+---
+
+## Measured runtime
+
+Full campaign ≈ **7.95 h** against the 24 h track cap (`Experiment Configuration/planning/runtime_estimates.csv`): Exp. 2 builds 5.37 h, Exp. 3 builds 2.57 h, Exp. 1 negligible. Derived from 6.86 ms/record ingest measured on the macOS dev host, with the repo's standard 1.5× derate for `m6i.xlarge` already applied. Ingest cost is dominated by the ML-DSA-65 sign/verify pair and the ML-KEM-768 encapsulation, not by indexing.
 
 ---
 
@@ -67,17 +88,24 @@ The paper's reference implementation is **Rust** (`pqcrypto` crate), on a 4-vCPU
 perera_lv_pqabse/
 ├── SCHEME.md                          # This file
 ├── src/
-│   ├── scheme.py                      # Phases 1-5: ABE.Setup/KeyGen/Encrypt/Decrypt,
-│   │                                   #   Kyber768/Dilithium3 wrappers (via Common/crypto/kem.py
-│   │                                   #   once liboqs coverage is confirmed for Dilithium)
-│   ├── hybrid_index.py                # B+-tree / bitmap / n-gram construction (Phase 3)
-│   ├── merkle.py                      # Partitioned Merkle trees + threshold signing (reuse Common/crypto/merkle.py where possible)
-│   ├── experiments.py                 # Exp. 1, 2, 3
-│   ├── harness.py                     # Timing, 95% CI, CSV/meta output (mirror thingom_pq_abse/src/harness.py)
+│   ├── params.py                      # crypto.yaml -> SchemeParams; nothing hardcoded
+│   ├── abe.py                         # Lattice CP-ABE (ABBB shape over Common/crypto/lattice.py)
+│   ├── hybrid_index.py                # B+-tree / epoch / categorical / n-gram (Phase 3)
+│   ├── scheme.py                      # Phases 1-5, incl. the HKDF hybrid combiner
+│   ├── workload.py                    # corpus field -> index structure mapping
+│   ├── harness.py                     # Timing, 95% CI, CSV/run_meta output
+│   ├── test_scheme.py                 # 18 tests, Phases 1-5 incl. ct_abe
 │   └── main.py                        # CLI + reportability gating
-├── exp1_trapdoor_generation/
-├── exp2_search_latency/
-└── exp3_crossdomain_scalability/
+├── exp1_trapdoor_generation/runner.py
+├── exp2_search_latency/runner.py
+└── exp3_crossdomain_scalability/runner.py
+```
+
+Partitioned Merkle roots reuse `Common/crypto/merkle.py` rather than getting a
+local copy, per README §8's `Common/` scope rule. Dilithium3 needed a new shared
+primitive — `Common/crypto/signature.py` (ML-DSA-65), written the same way
+`kem.py` is, with probed backends so a `cryptography` version lacking the classes
+falls through to the next backend instead of failing the whole run.
 ```
 
 ---

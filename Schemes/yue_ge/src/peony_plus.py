@@ -268,7 +268,9 @@ def add(
     params = state.params
     st = state.key.state(batch_id)
     batch = UpdateBatch(batch_id=batch_id)
-    pool = AddressAllocator()
+    capacity = sum(len(e) for e in per_keyword.values())
+    pool = AddressAllocator(capacity)
+    nodes = batch.allocate(capacity)
 
     for keyword, entries in per_keyword.items():
         if not entries:
@@ -296,7 +298,7 @@ def add(
             blob = _pack_plus_node(ct, next_addr, next_key)
             tau3 = _f_level(state.key.level_keys[level_of[fid]], keyword, st, 3)
             r_j = secure_random_bytes(16)
-            batch.A[N_w[j]] = (_xor(blob, _mask(tau3, r_j, len(blob))), r_j)
+            nodes.put(N_w[j], _xor(blob, _mask(tau3, r_j, len(blob))), r_j)
 
         # --- entry table ---
         for lvl in range(1, params.access_levels + 1):

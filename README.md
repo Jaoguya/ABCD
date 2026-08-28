@@ -10,9 +10,13 @@ Experimental implementation and evaluation harness for:
 
 This repo implements the protocol phases and four baselines, runs the eight experiments in §V of the manuscript, and produces the paper's figures. Every number in the paper should trace back to a `results.csv` produced here.
 
-**Status (2026-08-28):** three schemes are implemented and run — `ma_lb_pq_vdse` (proposed), `guo_vdsse` (Ref[35]), `thingom_pq_abse` (Ref[41]). `perera_lv_pqabse` (Ref[54]) is documentation-only. Corpus v4 is frozen at 10 domains, the Type-III pairing backend is in place, FSNs execute as independent processes, and the λ weights are fixed by the documented sweep — so the proposed scheme produces **reportable** results for the first time.
+New to this project? Start with **[SystemConfiguration.md](SystemConfiguration.md)** — the operator's guide: what the experiment is, how it is configured, how to run it, and the flag points that are not obvious from the code. This README stays the *specification*.
 
-**Blocking a complete campaign:** Exp. 6 is O(δ²) and cannot finish at the published sweep top (§14 item 10) — the 2026-08-28 run was killed with Exp. 1–5 complete at n=30 and Exp. 6–8 unstarted. Exp. 4 and Exp. 6 additionally depend on a Fabric ledger adapter that does not exist yet.
+**Status (2026-08-29):** **all five schemes are implemented and run** — `ma_lb_pq_vdse` (proposed), `guo_vdsse` (Ref[35]), `thingom_pq_abse` (Ref[41]), `perera_lv_pqabse` (Ref[54]), `yue_ge` (Ref[55]). Corpus v4 is frozen at 10 domains, the Type-III pairing backend is in place, FSNs execute as independent processes, and the λ weights are fixed by the documented sweep. Every runner of every scheme has been executed end to end; the full test suite is 651 passed / 5 skipped.
+
+**Campaign cost:** 74.4 h of compute, ~$14–36. Wall-clock is 25 h at one instance per scheme, or **~11 h** split by sweep point with `--points` (§11).
+
+**Blocking a complete campaign:** Exp. 4 and Exp. 6 depend on a Fabric ledger adapter that does not exist yet — they run, but `run_meta.json` records that their chain-consistency cost is understated. Exp. 6's O(δ²) blocker was **resolved 2026-08-29** (§14 item 10).
 
 ---
 
@@ -73,7 +77,7 @@ The three novelty claims — PDSI, AASS, IAS — are measured by Exp. 2, Exp. 7�
 | `guo_vdsse/` | Ref[35] | Guo *et al.*, IEEE TDSC 2024 | Verifiable dynamic SSE |
 | ~~`xb_muse/`~~ | Ref[36] | Jiang *et al.*, IEEE IoT-J 2025 | **DROPPED 2026-08-23** — no SGX on the benchmark host (§14 item 8). Folder removed; the citation remains in related work. |
 | `thingom_pq_abse/` | Ref[41] | Thingom *et al.*, IEEE TCE 2026 | Multi-authority ABSE |
-| `perera_lv_pqabse/` | Ref[54] | Perera and Fugkeaw, IEEE IoT-J 2026 | Lattice-based post-quantum ABSE — **not yet implemented**, replaced Ref[52] on 2026-08-27 |
+| `perera_lv_pqabse/` | Ref[54] | Perera and Fugkeaw, IEEE IoT-J 2026 | Lattice-based post-quantum ABSE — replaced Ref[52] on 2026-08-27, implemented 2026-08-29 |
 | `yue_ge/` | Ref[55] | Ge *et al.*, IEEE IoT-J 2024 | Verifiable multilevel DSSE (Peony/Peony++), forward + Type-II backward privacy — added 2026-08-28 |
 
 Per-scheme experiment lists and run commands are in each `SCHEME.md`. Reference PDFs in [References/](References/).
@@ -82,7 +86,7 @@ Per-scheme experiment lists and run commands are in each `SCHEME.md`. Reference 
 
 - **Ref[35]** — SHA-256 hashes, HMAC-SHA256 PRFs, t-Pun-PRF from two HMACs (SHA256 + Blake2b), λ=128, 192-bit hash output. Note the VBTree `L=32` in that paper belongs to a *compared* scheme (Wu et al.), not Guo's own.
 - **Ref[41]** — Type-I symmetric pairing `e : I₁×I₁→I₂` under DBDH. The paper calls itself post-quantum while resting on DBDH, which Shor breaks; it also states elsewhere that pairings aren't post-quantum. Implement as published and report the observation.
-- **Ref[54]** — λ=192 (NIST Category 3), Kyber768 KEM, Dilithium3 signatures, SHA3-256/HKDF, AES-256-GCM — all published. Lattice CP-ABE parameters `(n,q,σ)` are **not published**, stated only as "consistent with Kyber768 and Dilithium3" (`Ref[54].md` §IV.C); attribute universe size is also unpublished. Both need a benchmark decision before implementation — see `Experiment Configuration/crypto.yaml`'s `perera_lv_pqabse` block.
+- **Ref[54]** — λ=192 (NIST Category 3), Kyber768 KEM, Dilithium3 signatures, SHA3-256/HKDF, AES-256-GCM — all published. Lattice CP-ABE parameters `(n,q,σ)` are **not published**, stated only as "consistent with Kyber768 and Dilithium3" (`Ref[54].md` §IV.C); attribute universe size is also unpublished. Both were decided on 2026-08-29 — `n=768` (Kyber768's security is module-LWE of rank 3 over a degree-256 ring, i.e. an effective LWE dimension of 768; the ring degree 256 would name the right number for the wrong parameter), `q=2²²`, `σ=4.0`, `|U|=10` — with the full reasoning in `Experiment Configuration/crypto.yaml`'s `perera_lv_pqabse` block.
 - **Ref[36]** — clean copy obtained 2026-08-05 (the original was corrupted; archived under `References/corrupted_archive/`). Construction: **SRE (Symmetric Revocable Encryption)** built from a **multi-puncturable PRF** and a **Bloom filter** of revoked tags, plus keyed PRFs `F`/`G` for address derivation and on-chain revocation status. Our existing `prf.py` (puncturable PRF, punctures at a set of points) and `bloom.py` cover the SRE building blocks. **Requires Intel SGX** — key provisioning and part of the algorithm run inside an enclave with SGX attestation (`Ref[36].txt:341,359`). See §14.
 
 In Exp. 3 the baselines run in native mode: `d` independent trapdoors and `d` searches with client-side aggregation. That's what Table VI assumes.
@@ -285,7 +289,7 @@ BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores 
 
 **`Common/` scope.** Primitives a paper *cites* (SHA-256, HMAC, AES-GCM, Merkle, Bloom, Gaussians, pairings, ML-KEM) live here so every scheme measures the same cost. Anything a paper *contributes* (Guo's forward index, Perera & Fugkeaw's hybrid index, Thingom's LSSS encoding, our PDSI/AASS/IAS) stays in its own `src/`. If two schemes seem to need the same construction, one of them is probably being implemented unfaithfully.
 
-Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · Ge (Ref[55]) 1,2,3,4,5 · Thingom 1,2,3 · Perera & Fugkeaw (Ref[54]) 1,2,3 — the last **not yet implemented**, see their `SCHEME.md` files. Ref[54] does not cover Exp. 5/6 (no incremental-update primitive; self-disclosed no fine-grained revocation, only coarse epoch-based key evolution) — narrower than Zhuang's old slot, deliberately, not copied over. Ref[57] (Feng *et al.*, MDPI) was added on 2026-08-28 and **removed the same day**: the co-author does not accept MDPI as a venue, so only IEEE references may be cited — see `.claude/skills/reference-vetting`. Exp. 6 has no baseline as a result. XB-Muse (Ref[36]) was **dropped on 2026-08-23** — see §14 item 8. Zhuang (Ref[52]) was **dropped and replaced by Ref[54] on 2026-08-27** — see §16.
+Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · Ge (Ref[55]) 1,2,3,4,5 · Thingom 1,2,3 · Perera & Fugkeaw (Ref[54]) 1,2,3 — all implemented, see their `SCHEME.md` files. Ref[54] does not cover Exp. 5/6 (no incremental-update primitive; self-disclosed no fine-grained revocation, only coarse epoch-based key evolution) — narrower than Zhuang's old slot, deliberately, not copied over. Ref[57] (Feng *et al.*, MDPI) was added on 2026-08-28 and **removed the same day**: the co-author does not accept MDPI as a venue, so only IEEE references may be cited — see `.claude/skills/reference-vetting`. Exp. 6 has no baseline as a result. XB-Muse (Ref[36]) was **dropped on 2026-08-23** — see §14 item 8. Zhuang (Ref[52]) was **dropped and replaced by Ref[54] on 2026-08-27** — see §16.
 
 ---
 
@@ -343,14 +347,31 @@ docker compose -f infra/fabric/docker-compose.yaml up -d
 ipfs daemon &
 
 # Schemes
-python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment all \
-    --config "Experiment Configuration/global.yaml" --dataset Dataset/derived --runs 30
-python3 -m Schemes.guo_vdsse.src.main --experiment 1,2,3,4,5 \
-    --dataset Dataset/derived --runs 30
+python3 -m Schemes.ma_lb_pq_vdse.src.main    --experiment all       --runs 30 \
+    --config "Experiment Configuration/global.yaml" --dataset Dataset/derived
+python3 -m Schemes.guo_vdsse.src.main        --experiment 1,2,3,4,5 --runs 30
+python3 -m Schemes.thingom_pq_abse.src.main  --experiment 1,2,3     --runs 30 \
+    --dataset Dataset/derived
+python3 -m Schemes.perera_lv_pqabse.src.main --experiment all       --runs 30
+python3 -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 30
 
 # Figures
 python3 Plots/generate_plots.py --input Schemes --output Plots/output
 ```
+
+**Flags are not uniform** — they were written at different times. Only `ma_lb_pq_vdse` and `thingom_pq_abse` accept `--dataset`; the others read the corpus from its configured location. `guo_vdsse` and `yue_ge` use `--output-dir` where the rest use `--output`, and `--warmup` where `ma_lb_pq_vdse` and `thingom_pq_abse` use `--warmups`. See [SystemConfiguration.md §7](SystemConfiguration.md) for the full table.
+
+### Splitting one experiment across instances
+
+Campaign wall-clock is bounded by the largest **indivisible** unit of work, so extra instances only help if the work is split more finely. `--points` selects which sweep values one process runs:
+
+```bash
+python3 -m Schemes.thingom_pq_abse.src.main --experiment 3 --points 2-5
+python3 -m Schemes.thingom_pq_abse.src.main --experiment 3 --points 6-10
+python3 infra/merge_points.py Schemes/thingom_pq_abse/exp3_crossdomain_scalability
+```
+
+Each shard writes to its own `…__points-…` directory so instances cannot overwrite each other; `merge_points.py` re-aggregates from `raw_runs.csv` and refuses shards that disagree on git commit, corpus hash or config hashes, or that repeat a sweep value. A `--points` value the experiment does not sweep is an error, not a silent no-op. This takes the campaign from **25 h to ~11 h** at the same total compute. Exp. 2 for `guo_vdsse` and `perera_lv_pqabse` grows one index across nested prefixes and is inherently sequential — sharding it is allowed but buys nothing.
 
 `generate_plots.py` walks `Schemes/*/exp<N>_*/results.csv` and skips schemes with no results, so partial runs still plot. Windows works for development — substitute `python` and backtick line continuations — but reportable Ref[41] runs need Linux.
 
@@ -404,7 +425,7 @@ Decisions still needed, roughly in order of impact.
 | 7 | ~~**Primitive tests never run.** The crypto layer is unverified.~~ **RESOLVED 2026-08-27** — `Common/crypto/tests/test_primitives.py`: 64 passed, 1 skipped, 0 failed. | — |
 | 8 | **Ref[36] requires Intel SGX** — key provisioning and part of the algorithm run in an enclave with SGX attestation. `m6i.xlarge` does not expose SGX (AWS provides Nitro Enclaves, a different trust and attestation model). | (a) Simulate the enclave as a process boundary and disclose — the cryptographic work is identical, only hardware isolation is absent, and omitting SGX's enclave-transition and EPC-paging overhead makes the baseline look *faster* than reality, which is the conservative direction; (b) run Ref[36] on an SGX-capable instance, breaking §1 parity; (c) drop it and say so in §V **RESOLVED 2026-08-23: option (c).** Ref[36] is dropped from all experiments; §V must state the omission and that the reason is hardware parity, not an unfavourable result. |
 | 9 | ~~`load_verified_corpus()` materialises 1.2M records (~1–2 GB per process).~~ **PARTLY RESOLVED 2026-08-28** — `CorpusRecordSource` streams and stops at the records it needs. `load_verified_corpus()` itself is unchanged and still materialises; other schemes still use it. | Stream there too, if a baseline ever needs the full corpus |
-| 10 | **Exp. 6 is O(δ²) and cannot complete.** `authority/revocation.py::_compute_root` rebuilds the ENTIRE revocation Merkle tree on every `synchronize` call, so cost per update grows with the number of updates. Measured on the pinned host: δ=2,000 → 5.6 s; 4,000 → 21.1 s; 8,000 → 81.3 s — **O(n^1.93)**. Extrapolated to the published sweep top δ=10⁵: **≈10,594 s per run × 35 runs ≈ 103 hours**, so the 2026-08-28 campaign was killed after 72 min with zero Exp. 6 points. Beyond runtime this contradicts what Exp. 6 is *for*: README §5 requires IAS to be measured as **incremental** propagation, and recomputing the whole root per update is the opposite. Treat it as a Phase VII implementation defect, not a slow benchmark. **Not visible below δ≈2,000** — a fit over δ≤2,000 reads as O(n^1.00), which is how it was nearly missed. | Recompute one Merkle path per update instead of the whole tree (the incremental update Phase VII already claims), then re-run Exp. 6 |
+| 10 | ~~**Exp. 6 is O(δ²) and cannot complete.**~~ **RESOLVED 2026-08-29** — root cause was `RevocationList`'s sorted-array Merkle tree: inserting one identifier shifts every later leaf, so a single revocation cost a full O(n) rebuild and Phase VII reads the root once per update. Reproduced at **O(n^2.02)** (0.8 s at δ=1,000; 53 s at 8,000; ~8,673 s/run extrapolated to δ=10⁵). Replaced with `Common/crypto/merkle.SetMerkleTrie`, a canonical binary radix Merkle trie keyed by the leaf digest — the shape depends on the key set alone, so the root stays order-independent and `restore` still returns to the exact previous root, while insert and delete rewrite only one O(log n) path. Now **O(n^1.08), ~2 s/run**; the full sweep to δ=10⁵ completes in 32 s at 3 runs/point and is linear in δ. | — |
 
 ---
 
@@ -414,7 +435,7 @@ Decisions still needed, roughly in order of impact.
 - [ ] Every `results.csv` has a matching `run_meta.json` with a real commit and dataset SHA-256
 - [ ] All reportable runs used `corpus_type: synthea`
 - [x] λ₁…λ₅ fixed by the documented held-out sweep and committed — **(0.2, 0.4, 0.1, 0.2, 0.1)**, 2026-08-28. Index parameters and the statement in the manuscript are still outstanding
-- [ ] **Exp. 6's O(δ²) revocation-root recomputation fixed** (§14 item 10) — it cannot complete at δ=10⁵ until then
+- [x] **Exp. 6's O(δ²) revocation-root recomputation fixed** (§14 item 10) — 2026-08-29, now O(n^1.08); the full δ=10⁵ sweep completes
 - [ ] **Fabric ledger adapter written** — Exp. 4 and Exp. 6 are blocked on `ledger_faithful`; `infra/fabric/` brings the network up but no adapter reads it
 - [ ] **FSN independent-process topology confirmed in the reported runs** — implemented 2026-08-28 (`fsn/pool.py`), recorded in `run_meta.json` as `fsn_processes`
 - [ ] All 8 figures regenerate from one `generate_plots.py` invocation
@@ -458,6 +479,16 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 | 2026-08-27 | **charm-crypto built on the new host; Ref[41] sweep capped to a 24h-per-track budget; a real methodology bug fixed in Exp. 3.** Built PBC 0.5.14 + charm-crypto on `98.91.21.219` (same fix as 2026-08-04, now scripted into `provision.sh`) — **64 passed, 1 skipped, 0 failed** on `test_primitives.py`, resolving §14 items 6–7. Measured Ref[41]'s real pairing cost at **0.703 ms/pairing** (vs. an earlier 1.5 ms/pairing guess) — 2.1× better, but the published `N=10⁴–10⁶` / `d=2–10` sweep still costs ~178h even at the real rate, so Exp. 2 is capped to `N=10⁴` only and Exp. 3's held-constant total index is capped `1e5 → 2,000` (`Schemes/thingom_pq_abse/src/main.py`; ~20.1h combined, disclosed in `SCHEME.md`). While sizing that cap, found and fixed a real bug in `experiment_3`: `shard_size` was a fixed constant (`DEFAULT_INDEX_SIZE // DEFAULT_DOMAINS`) instead of dividing the swept `d` into the held-constant total, so total work scaled linearly with `d` instead of staying flat as the measurement boundary requires — verified fixed (latency flat within noise across `d=2/5/10`). Audited all four schemes' Exp. 2 methodology against the "build once, then measure" standard `ma_lb_pq_vdse`'s own harness uses: `guo_vdsse` and `thingom_pq_abse` already matched it; `zhuang_lattice_mabse` does not (approximates an N-record scan by replaying one real entry N times rather than building a real N-record index) — still open, decision pending. Confirmed `ma_lb_pq_vdse`'s own full campaign (previously unmeasured) is dominated by Exp. 7–8's ramp+steady windows at ~17.6h, plausibly fitting the 24h budget without cuts. **[results-affecting: thingom_pq_abse exp2/exp3 sweep range]** |
 
 ---
+| 2026-08-29 | **`Common/crypto/kem.py`'s primary backend never worked on any host** — written against `mlkem.MLKEMParameterSet`, an API no `cryptography` release shipped. Rewritten against the shipped `MLKEM768PrivateKey`/`MLKEM768PublicKey`. This alone was **132 of 132** suite failures. dk is the 64-byte FIPS 203 seed on that backend, so backends now declare `decapsulation_key_bytes` and the size assertion checks the live backend. |
+| 2026-08-29 | **`Common/crypto/signature.py` added** — ML-DSA-65 (Ref[54]'s Dilithium3), probed backends, same shape as `kem.py`. |
+| 2026-08-29 | **Exp. 6's O(δ²) fixed** — `RevocationList` moved from a sorted-array Merkle tree to `merkle.SetMerkleTrie`, a canonical binary radix Merkle trie. O(n^2.02) → O(n^1.08); ~8,673 s/run → ~2 s/run at δ=10⁵. §14 item 10 resolved. **[results-affecting]** — RevRoot values change; no Exp. 6 results existed. |
+| 2026-08-29 | **`yue_ge` Exp. 2 memory 34 GB → 10.5 GB.** `A_c` was a dict keyed by a random 64-bit address (557 B/node measured); ListGen line 10's "non-repeating `addr_j` ≤ \|A_c\|" is a *permutation*, so `A_c` is dense. Now one flat `bytearray` of fixed-width slots (330 B/node) — closer to the paper *and* it fits the host. Runners also build one sweep point at a time. |
+| 2026-08-29 | **`yue_ge` Exp. 3 held the total index constant.** It built one deployment per real corpus domain over that domain's whole record set, so `d=10` indexed 5× the data of `d=2` — the same defect fixed in `thingom_pq_abse` on 2026-08-27. Now shards a fixed N=10⁵ subset. **[results-affecting]** |
+| 2026-08-29 | **`perera_lv_pqabse` (Ref[54]) implemented** — all five phases, 18 tests. Undetermined parameters decided and recorded in `crypto.yaml`: `n=768`, `q=2²²`, `σ=4.0`, `\|U\|=10`, trigram fuzzy θ=0.6, native-mode Exp. 3, and `abe_on_measured_path: false`. |
+| 2026-08-29 | **Exp. 2 builds made incremental** for `guo_vdsse` and `perera_lv_pqabse`. The sweep points are nested prefixes, so rebuilding per point cost 1,880,000 inserts to produce a largest index of 1,000,000 — a 1.88× waste. guo 34.9 h → 25.0 h, perera 8.0 h → 5.5 h. Guarded by equivalence tests on index structure and search results. |
+| 2026-08-29 | **`--points` sweep splitting** (`infra/sweep.py`) on every scheme, plus `infra/merge_points.py` to reassemble shards by re-aggregating from `raw_runs.csv`. Campaign wall-clock 25 h → ~11 h at unchanged total compute. |
+| 2026-08-29 | **`synthetic_generator.py` no longer overwrites the frozen corpus manifest.** `--manifest` defaults to the committed `Dataset/dataset_manifest.json`, so making a dev corpus silently replaced the campaign's provenance pin. Now refused unless `--force`. |
+| 2026-08-29 | **`SystemConfiguration.md` added** — operator's guide for anyone new to the project. |
 
 ## 17. Session Handoff — 2026-08-27
 

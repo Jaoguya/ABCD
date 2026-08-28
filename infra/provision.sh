@@ -177,8 +177,11 @@ Next:
      Experiment Configuration/dataset.yaml -> freeze.expected_corpus_sha256
   3. Create an AMI from this instance.
   4. Launch the fleet from that AMI:
-       4x FSN, 1x cloud+Fabric+IPFS, 1x client, 3x baseline runners
-     all m6i.xlarge, one cluster placement group, same AZ.
+       14x m6i.xlarge, one cluster placement group, same AZ.
+     Sized in global.yaml's `fleet:` block. The old "3x baseline runners"
+     line predated two schemes -- there are now FOUR baselines, and work is
+     split by sweep point (--points), not by scheme, so nodes are
+     interchangeable rather than role-assigned.
 
   Activate the venv in every new shell:
        source ~/.venv-malbpq/bin/activate

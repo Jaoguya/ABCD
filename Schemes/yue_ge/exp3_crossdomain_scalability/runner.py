@@ -20,21 +20,36 @@ is identically 0 because no such message exists in the construction. Counting
 trapdoors issued is what makes the mechanism visible in the plot (README §5,
 Exp. 3: "Count trapdoors issued so the mechanism is visible").
 
-DOMAIN COUNT IS A HARD CORPUS LIMIT
------------------------------------
-The corpus carries exactly 4 real administrative domains (README §4:
-"``CorpusRecordSource`` refuses ``d > 4`` rather than re-bucketing records into
-a synthetic split"). This runner honours that: it sweeps only the ``d`` values
-the corpus can actually supply and reports the truncation, rather than inventing
-domains to reach ``d = 10``. That is an open item in README §14, not something
-to paper over here.
+TOTAL INDEX IS HELD CONSTANT ACROSS d
+-------------------------------------
+``d`` is the only variable, so the total amount of indexed data must not move
+with it. A fixed subset of ``N = 10^5`` records (README §6's default index size)
+is sharded into ``d`` parts, exactly as ``guo_vdsse``'s Exp. 3 does
+("each of ``d`` independent EDB instances holds 1/d of the corpus ... so total
+data is constant as d varies").
+
+This runner previously built one deployment per REAL corpus domain and indexed
+that domain's entire record set, so the ``d = 10`` point indexed five times the
+data of the ``d = 2`` point. The resulting slope would have been mostly the
+growing corpus, not the growing domain count — the identical defect found and
+fixed in ``thingom_pq_abse``'s Exp. 3 on 2026-08-27, where a shard size computed
+from a constant instead of the swept ``d`` made ``d = 10`` cost ~5x ``d = 2``.
+It also made the sweep unaffordable in memory: ten full-domain Peony++
+deployments are ~12 GB against a 16 GiB host.
+
+Sharding by ``rec.dom % d`` keeps shards aligned to real institutional
+boundaries wherever ``d`` divides the corpus's 10 domains, and never invents a
+domain the corpus does not have — README §4's constraint is about not
+FABRICATING domains, which sharding a fixed subset does not do.
 """
 
 from __future__ import annotations
 
+import gc
+
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Dict, List, Sequence
+from typing import Optional, Any, Dict, List, Sequence
 
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
@@ -52,10 +67,16 @@ from ..src.harness import (
 from ..src.params import SchemeParams
 from ..src.workload import build_workload, index_workload, select_keywords
 
+from infra import sweep
+
 EXPERIMENT_NAME = "exp3"
 SECONDARY_NAMES = ["trapdoors_issued", "cross_node_msgs", "results_returned"]
 
 VARIABLE_RANGE = list(range(2, 11))
+
+# README §6 default index size. Held constant across the whole d sweep so
+# that d is the only variable — see the module docstring.
+TOTAL_INDEX_SIZE = 100_000
 
 
 def run(
@@ -67,56 +88,71 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260828,
+    points: Optional[str] = None,
     variant: str = "peony_plus",
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp3_crossdomain")
 
-    # Partition by the corpus's own domain field — real institutional
-    # boundaries, not a synthetic split.
-    by_domain: Dict[int, List[Record]] = defaultdict(list)
-    for rec in records:
-        by_domain[rec.dom].append(rec)
-    available_domains = sorted(by_domain)
-
-    actual_range = [d for d in VARIABLE_RANGE if d <= len(available_domains)]
-    if not actual_range:
-        actual_range = [len(available_domains)]
-    if actual_range != VARIABLE_RANGE:
+    # The fixed total index, held constant across every d.
+    subset = list(records[:min(TOTAL_INDEX_SIZE, len(records))])
+    if len(subset) < TOTAL_INDEX_SIZE:
         print(
-            f"  NOTE: corpus carries {len(available_domains)} domains; sweep "
-            f"truncated to {actual_range}. README §4 forbids re-bucketing "
-            f"records into a synthetic split to reach d=10 (open item, §14)."
+            f"  NOTE: corpus holds {len(subset):,} records; total index is "
+            f"that rather than the §6 default {TOTAL_INDEX_SIZE:,}."
         )
 
+    actual_range = list(VARIABLE_RANGE)
     level = max(1, (params.access_levels + 1) // 2)
 
-    # ---- one independent deployment per domain. Untimed. ----
-    domains: Dict[int, Dict[str, Any]] = {}
-    for dom in available_domains:
-        wl = build_workload(by_domain[dom], params)
-        state, index, prooflist = peony_plus.setup(params)
-        index_workload(state, index, prooflist, wl, variant)
-        kws = select_keywords(
-            wl.keyword_freq, rng, warmup + runs, total_records=wl.record_count
-        )
-        domains[dom] = {
-            "state": state, "index": index, "workload": wl, "keywords": kws,
-        }
-        print(f"  domain {dom}: {len(by_domain[dom]):,} records, "
-              f"{index.total_nodes:,} nodes")
+    # ---- d independent deployments over d shards of ONE fixed subset.
+    # Built on demand and released before the next d: each set is ~1.0 GB of
+    # A_c slots, and holding all nine sweep points at once does not fit the
+    # 16 GiB host. run_experiment walks the sweep in order, so one is enough.
+    built: Dict[int, List[Dict[str, Any]]] = {}
+
+    def shards_for(d: int) -> List[Dict[str, Any]]:
+        if d in built:
+            return built[d]
+        built.clear()
+        gc.collect()
+
+        buckets: Dict[int, List[Record]] = defaultdict(list)
+        for rec in subset:
+            buckets[rec.dom % d].append(rec)
+
+        deployments: List[Dict[str, Any]] = []
+        for shard_idx in range(d):
+            shard = buckets.get(shard_idx, [])
+            if not shard:
+                continue
+            wl = build_workload(shard, params)
+            state, index, prooflist = peony_plus.setup(params)
+            index_workload(state, index, prooflist, wl, variant)
+            kws = select_keywords(
+                wl.keyword_freq, rng, warmup + runs,
+                total_records=wl.record_count,
+            )
+            deployments.append(
+                {"state": state, "index": index, "workload": wl,
+                 "keywords": kws}
+            )
+        built[d] = deployments
+        total_nodes = sum(x["index"].total_nodes for x in deployments)
+        print(f"  d={d:>2}: {len(deployments)} shards, {len(subset):,} records "
+              f"total, {total_nodes:,} nodes total")
+        return deployments
 
     counter = {d: 0 for d in actual_range}
 
     def runner(d: int) -> RunResult:
         i = counter[d]
         counter[d] += 1
-        targets = available_domains[:d]
+        targets = shards_for(d)
 
         def federated():
             issued = 0
             merged: set = set()
-            for dom in targets:
-                ctx = domains[dom]
+            for ctx in targets:
                 if not ctx["keywords"]:
                     continue
                 kw = ctx["keywords"][i % len(ctx["keywords"])]
@@ -144,9 +180,13 @@ def run(
             },
         )
 
-    results = run_experiment(actual_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(actual_range, points)
 
-    exp_dir = output_dir / "exp3_crossdomain_scalability"
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
+
+    exp_dir = sweep.shard_dir(output_dir / "exp3_crossdomain_scalability", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     write_results(exp_dir / "results.csv",

@@ -241,28 +241,76 @@ perera_lv_pqabse:
     # established configurations consistent with Kyber768 and Dilithium3"
     # (Ref[54].md, Sec. IV.C "Lattice Parameterization and Security
     # Justification") -- no concrete (n,q,sigma) triple is given anywhere in
-    # the text. This is the same class of gap as thingom_pq_abse's u: a
-    # benchmark decision is required before implementation, not a default to
-    # silently pick. Candidate anchor: Kyber768's own ring-LWE parameters
-    # (n=256, k=3, q=3329) are the most defensible citable choice given the
-    # paper's own "consistent with Kyber768" framing, but this must be a
-    # deliberate decision recorded here with a date, not assumed.
-    n: null
-    q: null
-    gaussian_sigma: null
+    # the text. Same class of gap as thingom_pq_abse's u.
+    #
+    # DECIDED 2026-08-29, when the scheme was implemented.
+    #
+    # n = 768. The paper's own anchor is "consistent with Kyber768", and
+    # Kyber768's security comes from module-LWE of rank 3 over a degree-256
+    # ring -- an effective LWE dimension of 3*256 = 768. This construction's
+    # CP-ABE is plain (not module) LWE with G-trapdoors, so the dimension that
+    # carries the same NIST Category 3 / lambda=192 claim the paper makes is
+    # 768 itself. Taking Kyber's ring degree 256 as n instead would name the
+    # right number for the wrong parameter and would NOT be Category 3 here.
+    #
+    # q = 2^22. Kyber's own q=3329 cannot be reused: this is a trapdoor
+    # construction (TrapGen/SampleLeft/SamplePre), where the modulus must
+    # exceed the noise accumulated over m columns or decryption fails outright.
+    # A power of two keeps the gadget decomposition exact. 22 is the largest
+    # exponent for which Common/crypto/lattice.py's int64 matmul guard still
+    # holds at m = 2*n*log_q (m*(q-1)^2 = 2^59.0 < 2^63) -- the same overflow
+    # class that silently corrupts results and was flagged for Ref[52].
+    #
+    # sigma = 4.0 matches the repo's existing LatticeParams default and is a
+    # standard GPV sampling width for this trapdoor.
+    n: 768
+    m: 33792                          # 2 * n * log_q -- gadget block + uniform block
+    log_q: 22                         # q = 2^22 = 4,194,304
+    q: 4194304
+    gaussian_sigma: 4.0
   security_parameter_lambda: 192      # published: "lambda = 192 (NIST Category 3)"
   attributes:
     # NOT PUBLISHED. No attribute universe size |U| is given anywhere in the
-    # paper (unlike zhuang's published l=10). Needs a benchmark decision --
-    # consider matching thingom_pq_abse.attributes.u (10) for cross-baseline
-    # comparability, per the precedent already used between thingom and zhuang.
-    universe_size: null
+    # paper (unlike zhuang's published l=10).
+    #
+    # DECIDED 2026-08-29: 10, matching thingom_pq_abse.attributes.u so the two
+    # attribute-based baselines are compared at the same policy size. That is
+    # the precedent already set between thingom and the dropped zhuang, and it
+    # is the choice SCHEME.md proposed. Not results-affecting for Exp. 1/2/3
+    # (see abe_on_measured_path below), so it costs nothing to align.
+    universe_size: 10
+  abe_on_measured_path: false
+  # MEASUREMENT BOUNDARY, decided 2026-08-29 and disclosed in SCHEME.md.
+  #
+  # Exp. 1 times trapdoor generation, which in this scheme is PRF tokenization
+  # plus a Dilithium3 signature -- the paper's own headline claim (Table II:
+  # O(n + T_PRF), "no lattice sampling at query time"). Exp. 2 times search
+  # over the fog-side hybrid index, which holds PRF tokens, not ciphertexts.
+  # Exp. 3 is d independent Exp. 2 searches. The lattice CP-ABE ciphertext
+  # ct_abe is therefore read by NONE of the three; it is payload-key
+  # encapsulation, consumed only by Phase 5 retrieval.
+  #
+  # So the Exp. 1/2/3 index build populates the searchable index and does not
+  # generate a ct_abe per record. Measured cost of doing so anyway, on this
+  # host at the parameters above: 758 ms per record, i.e. 21 h at N = 10^5 and
+  # 211 h at N = 10^6 -- it would consume the entire 24 h track budget as
+  # untimed setup while changing no measured number in either direction.
+  # test_scheme.py exercises the full Phase 2 -> Phase 5 path including
+  # ct_abe, so the construction is verified end to end regardless.
   kem: kyber768                       # published
   signature: dilithium3               # published
   hash: sha3-256                      # published (H1,H2,H3 domain-separated; HKDF-SHA3-256)
   symmetric: aes-256-gcm              # published
-  # keywords_per_query, range/fuzzy query parameters: not numerically fixed
-  # by the paper either -- same "benchmark decision needed" status.
+  cross_domain:
+    # NOT PUBLISHED: the paper's system model has a single TA, a single fog
+    # tier and no federation -- there is no multi-domain notion at all.
+    # DECIDED 2026-08-29: native mode, the same rule README §3 already applies
+    # to guo_vdsse and thingom_pq_abse -- d independent trapdoors, d
+    # independent searches, client-side aggregation.
+    mode: independent_trapdoors
+  fuzzy:
+    ngram_size: 3                     # benchmark: standard trigram; paper says "n-gram"
+    match_threshold: 0.6              # benchmark: paper names theta, never fixes it
 
 # -----------------------------------------------------------------------------
 

@@ -14,8 +14,10 @@ Defaults: q = 5 keywords, d = 4 domains (README §6).
 
 from __future__ import annotations
 
+import gc
+
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Optional, Any, Dict, List
 
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
@@ -30,6 +32,8 @@ from .harness import (
     write_run_meta,
 )
 from .scheme import GuoVDSSE
+
+from infra import sweep
 
 
 EXPERIMENT_NAME = "exp2"
@@ -87,6 +91,7 @@ def run(
     runs: int = 30,
     warmup: int = 5,
     seed: int = 20260804,
+    points: Optional[str] = None,
 ) -> None:
     """Run Experiment 2: Search Latency vs. Index Size."""
     rng = DeterministicRNG(seed).spawn("exp2_search")
@@ -101,36 +106,59 @@ def run(
     # so the difference is attributable to index size alone.
     query_sets: List[List[str]] = []
 
-    # Build EDBs of different sizes — not timed
-    edbs: Dict[int, Any] = {}
-    states: Dict[int, Any] = {}
+    # Build the EDB ONCE and GROW it through the sweep — not timed.
+    #
+    # Every sweep point is `records[:n]` — the points are nested prefixes, and
+    # `run_experiment` walks them in ascending order. Rebuilding from scratch at
+    # each point therefore re-inserted every record already indexed: the seven
+    # points cost 1,880,000 inserts to produce a largest index of 1,000,000.
+    # Growing one EDB costs exactly 1,000,000 — the same work the largest point
+    # needs anyway, so six of the seven points become free.
+    #
+    # IDENTICAL, not merely similar. `update()` is called on the same records in
+    # the same order either way (0..n-1 ascending), so after reaching n the EDB
+    # is byte-for-byte what a fresh `records[:n]` build produces. This is a
+    # harness change only: no scheme code, no call order, no parameter differs.
+    # `test_exp2_incremental_build_matches_a_fresh_build` pins that.
+    #
+    # It also bounds memory at the LARGEST index rather than the largest plus
+    # whatever is being built next — ~9.5 GB at N = 10^6, measured, against
+    # global.yaml's 16 GiB host. The previous build-all-then-hold version needed
+    # ~18 GB and could not complete at all.
+    #
+    # One deliberate consequence: a single `setup()` means one key set across
+    # the whole sweep, where rebuilding drew fresh keys per point. That removes
+    # a confound rather than adding one — search latency must not depend on
+    # which keys were drawn, and now it demonstrably cannot.
+    built_to = [0]
+    state, edb = scheme.setup()
 
-    for n in actual_range:
-        subset = records[:n]
-        state, edb = scheme.setup()
-        for rec in subset:
+    def _ensure_built(n: int) -> None:
+        if built_to[0] >= n:
+            return
+        for rec in records[built_to[0]:n]:
             scheme.update(state, edb, "add", rec.rid, rec.kw)
-        edbs[n] = edb
-        states[n] = state
+        built_to[0] = n
 
-        # Generate keyword sets from THIS subset's vocabulary
+        # Query keywords are drawn ONCE, from the smallest sweep point, and
+        # reused at every N: the same queries must be issued at every index size
+        # or the curve mixes two variables. `records[:n]` is a prefix, so a
+        # keyword present in the smallest subset is present in all of them.
         if not query_sets:
             for _ in range(warmup + runs):
-                kws = _find_conjunctive_keywords(subset, rng, DEFAULT_Q)
+                kws = _find_conjunctive_keywords(records[:n], rng, DEFAULT_Q)
                 query_sets.append(kws)
 
-    # Ensure keywords exist in all subsets — use keywords from smallest
-    # corpus that also exist in the larger ones (they will, since we
-    # always use records[:n] with the same ordering).
     iteration_counter: Dict[int, int] = {n: 0 for n in actual_range}
 
     def runner(n: int) -> RunResult:
+        _ensure_built(n)
         idx = iteration_counter[n]
         iteration_counter[n] += 1
         keywords = query_sets[idx % len(query_sets)]
 
-        state = states[n]
-        edb = edbs[n]
+        # `state` and `edb` are the single grown pair; at this point they hold
+        # exactly records[:n].
 
         # Measure full search path — token gen through final result
         elapsed_ms, search_result = measure_ns(
@@ -157,10 +185,14 @@ def run(
             },
         )
 
-    results = run_experiment(actual_range, runner, runs=runs, warmup=warmup)
+    sweep_values = sweep.select(actual_range, points)
+
+    results = run_experiment(
+
+        sweep_values, runner, runs=runs, warmup=warmup)
 
     # Write outputs
-    exp_dir = output_dir / "exp2_search_latency"
+    exp_dir = sweep.shard_dir(output_dir / "exp2_search_latency", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     aggregated = aggregate_results(results, SECONDARY_NAMES)

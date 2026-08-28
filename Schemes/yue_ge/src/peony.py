@@ -34,11 +34,12 @@ derive a level-3 node key even holding the whole index.
 
 from __future__ import annotations
 
+from array import array
 from dataclasses import dataclass, field
 from typing import Dict, List, Sequence, Set, Tuple
 
 from Common.crypto.hashes import hmac_sha256, sha256
-from Common.crypto.rng import secure_random_bytes
+from Common.crypto.rng import secure_random_bytes, secure_random_int
 
 from .index import EncryptedIndex, UpdateBatch
 from .levels import sort_descending_by_level
@@ -223,20 +224,44 @@ def list_gen(
 class AddressAllocator:
     """Distinct random addresses within one ``A_c`` — ListGen line 10.
 
-    "Randomly select the non-repeating addr_j (1 <= addr_j <= |A_c|)". Draws
-    from a 64-bit space and rejects collisions, which is equivalent and avoids
-    needing ``|A_c|`` up front.
+    "Randomly select the non-repeating ``addr_j`` (``1 <= addr_j <= |A_c|``)."
+    Taken literally: ``capacity`` non-repeating draws from ``[1, capacity]`` are
+    a random permutation of the whole address space, so the allocator IS a
+    shuffled ``1..capacity``, handed out one at a time.
+
+    That is what makes ``A_c`` dense (see ``index.NodeArray``), and it is the
+    only reading under which the paper's own bound ``addr_j <= |A_c|`` holds —
+    an allocator drawing from a 64-bit space violates it on the first draw.
+
+    The shuffle uses ``SecureRandom`` rather than ``DeterministicRNG``: node
+    placement is key-dependent secret material (it is what the address mask
+    ``tau_2`` hides), not a reproducible experiment artefact, so it belongs on
+    the OS entropy side of the rule in ``Common/crypto/rng.py``.
     """
 
-    def __init__(self) -> None:
-        self._used: Set[int] = set()
+    def __init__(self, capacity: int) -> None:
+        if capacity < 0:
+            raise ValueError(f"|A_c| must be non-negative, got {capacity}")
+        self.capacity = capacity
+        # Fisher-Yates over 1..capacity, drawing each swap index from OS
+        # entropy. array("q") rather than a list: at the published N = 10^6
+        # sweep point a batch holds ~8M addresses, which is 64 MB packed
+        # against ~280 MB as boxed Python ints.
+        self._order = array("q", range(1, capacity + 1))
+        for i in range(capacity - 1, 0, -1):
+            j = secure_random_int(i + 1)
+            self._order[i], self._order[j] = self._order[j], self._order[i]
+        self._next = 0
 
     def next(self) -> int:
-        while True:
-            addr = int.from_bytes(secure_random_bytes(ADDR_BYTES), "big")
-            if addr and addr not in self._used:
-                self._used.add(addr)
-                return addr
+        if self._next >= self.capacity:
+            raise IndexError(
+                f"A_c exhausted: {self.capacity} addresses allocated, more "
+                "requested — the batch was sized smaller than its node count"
+            )
+        addr = int(self._order[self._next])
+        self._next += 1
+        return addr
 
 
 # ---------------------------------------------------------------------------
@@ -261,7 +286,11 @@ def update(
     """
     st = key.state(batch_id)
     batch = UpdateBatch(batch_id=batch_id)
-    pool = AddressAllocator()
+    # |A_c| — ListGen line 10's bound. Known before anything is written: it is
+    # the node count of this batch, one node per (keyword, file) posting.
+    capacity = sum(len(e) for e in per_keyword.values())
+    pool = AddressAllocator(capacity)
+    nodes = batch.allocate(capacity)
 
     for keyword, entries in per_keyword.items():
         if not entries:
@@ -288,7 +317,7 @@ def update(
             tau3 = _f_level(key.level_keys[this_level], keyword, st, 3)
             r_j = secure_random_bytes(16)
             masked = _xor(blob, _mask(tau3, r_j, len(blob)))
-            batch.A[N_w[j]] = (masked, r_j)
+            nodes.put(N_w[j], masked, r_j)
 
         # --- Lines 9-15: the entry table T_c ---
         for lvl in range(1, params.access_levels + 1):

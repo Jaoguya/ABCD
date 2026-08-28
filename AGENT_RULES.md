@@ -83,7 +83,9 @@ Think like a **journal reviewer**. After experiments complete, verify these will
 
 ### 1. Do NOT Edit README.md
 
-The main `README.md` is the **source of truth** for the benchmark specification. AI agents must **never** modify it. If `README.md` needs an update, ask the user to make the change.
+The main `README.md` is the **source of truth** for the benchmark specification. AI agents must **never** modify it on their own initiative. If `README.md` needs an update, ask the user to make the change.
+
+*Exception, and only this one:* when the user explicitly instructs the agent to update `README.md`, do it — surgically, changing only what is factually stale, and say in the reply which sections were touched. The 2026-08-29 update (status, §3, §8, §11, §14 item 10, §15, §16) was made under that instruction.
 
 Scheme-specific `SCHEME.md` files may be updated by the agent if needed (e.g., correcting a command, noting an issue).
 
@@ -163,6 +165,6 @@ Recommended order for running experiments:
    - `guo_vdsse` — Exp. 1, 2, 3, 4, 5
    - `thingom_pq_abse` — Exp. 1, 2, 3
    - `yue_ge` (Ref[55]) — Exp. 1, 2, 3, 4, 5
-   - `perera_lv_pqabse` (Ref[54]) — Exp. 1, 2, 3 — **not yet implemented**, see `Schemes/perera_lv_pqabse/SCHEME.md`
+   - `perera_lv_pqabse` (Ref[54]) — Exp. 1, 2, 3
 4. **Plotting** — `python Plots/generate_plots.py`
 5. **Full validation loop** — recheck all outputs and reviewer checks

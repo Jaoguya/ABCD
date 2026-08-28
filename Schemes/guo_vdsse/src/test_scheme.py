@@ -216,3 +216,106 @@ class TestSearchToken:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestIncrementalBuildEquivalence:
+    """Exp. 2 grows one EDB through the sweep instead of rebuilding per point.
+
+    The sweep points are nested prefixes (`records[:n]`) walked in ascending
+    order, so growing one EDB costs 1,000,000 inserts where rebuilding costs
+    1,880,000. That is only sound if the grown EDB is INDISTINGUISHABLE from a
+    fresh build of the same prefix — otherwise the saving buys a different
+    measurement, which is worse than no saving at all.
+
+    "Indistinguishable" cannot mean byte-identical: `update()` draws a fresh
+    `ran_id` per record, so two builds of the same records differ in their
+    ciphertexts by construction (that is the scheme working correctly). What
+    must match is everything a measurement can see — the index STRUCTURE, which
+    is deterministic given the keys, and the SEARCH RESULTS.
+    """
+
+    @staticmethod
+    def _records(n, offset=0):
+        from Dataset.corpus import Record
+        import random
+        rng = random.Random(20260829)
+        vocab = [f"kw{i}" for i in range(50)]
+        return [
+            Record(rid=i, pid=f"P{i}", vid=1, dom=i % 4,
+                   ts="2026-01-01T00:00:00",
+                   kw=sorted(rng.sample(vocab, 5)))
+            for i in range(n)
+        ]
+
+    def _two_paths(self, n_mid, n_end):
+        """Build records[:n_end] two ways from IDENTICAL starting key material."""
+        import copy
+        from Schemes.guo_vdsse.src.scheme import GuoVDSSE
+
+        records = self._records(n_end)
+        sch = GuoVDSSE()
+        state0, edb0 = sch.setup()
+
+        # Same keys down both paths, so any difference is the build strategy.
+        state_a, edb_a = copy.deepcopy(state0), copy.deepcopy(edb0)
+        state_b, edb_b = copy.deepcopy(state0), copy.deepcopy(edb0)
+
+        for rec in records[:n_mid]:
+            sch.update(state_a, edb_a, "add", rec.rid, rec.kw)
+        mid_keys = (set(edb_a._ti), set(edb_a._tf))
+        for rec in records[n_mid:n_end]:
+            sch.update(state_a, edb_a, "add", rec.rid, rec.kw)
+
+        for rec in records[:n_end]:
+            sch.update(state_b, edb_b, "add", rec.rid, rec.kw)
+
+        return sch, records, (state_a, edb_a), (state_b, edb_b), mid_keys
+
+    def test_incremental_build_yields_the_same_index_structure(self, scheme):
+        sch, _, (sa, ea), (sb, eb), _ = self._two_paths(40, 100)
+        assert set(ea._ti) == set(eb._ti), (
+            "grown and fresh EDBs disagree on the inverted index Ti; the "
+            "incremental Exp. 2 build would measure a different index"
+        )
+        assert set(ea._tf) == set(eb._tf), "forward index Tf disagrees"
+        assert len(ea._ti) == len(eb._ti) and len(ea._tf) == len(eb._tf)
+
+    def test_incremental_build_returns_the_same_search_results(self, scheme):
+        """The property that actually matters: identical answers."""
+        sch, records, (sa, ea), (sb, eb), _ = self._two_paths(40, 100)
+        for kw in ("kw0", "kw7", "kw23", "kw49"):
+            got_a = sch.search(sa, ea, [kw])
+            got_b = sch.search(sb, eb, [kw])
+            assert set(got_a.result_ids) == set(got_b.result_ids), (
+                f"grown and fresh EDBs return different documents for {kw!r}"
+            )
+            expected = {r.rid for r in records if kw in r.kw}
+            assert set(got_a.result_ids) == expected, (
+                f"grown EDB is wrong for {kw!r}, not merely different"
+            )
+
+    def test_intermediate_sweep_point_matches_a_fresh_prefix_build(self, scheme):
+        """The SMALLER points must be right too, not just the final one."""
+        import copy
+        from Schemes.guo_vdsse.src.scheme import GuoVDSSE
+
+        records = self._records(100)
+        sch = GuoVDSSE()
+        state0, edb0 = sch.setup()
+        state_a, edb_a = copy.deepcopy(state0), copy.deepcopy(edb0)
+        state_c, edb_c = copy.deepcopy(state0), copy.deepcopy(edb0)
+
+        for rec in records[:40]:
+            sch.update(state_a, edb_a, "add", rec.rid, rec.kw)
+        for rec in records[:40]:
+            sch.update(state_c, edb_c, "add", rec.rid, rec.kw)
+
+        assert set(edb_a._ti) == set(edb_c._ti)
+        assert set(edb_a._tf) == set(edb_c._tf)
+
+    def test_incremental_build_does_less_work(self, scheme):
+        """The saving is real: 7 nested points cost 1.88x their largest."""
+        points = [10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000]
+        assert sum(points) == 1_880_000
+        assert max(points) == 1_000_000
+        assert sum(points) / max(points) > 1.8

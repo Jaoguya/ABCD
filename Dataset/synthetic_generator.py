@@ -36,6 +36,7 @@ Usage
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -198,6 +199,39 @@ def resolve_profile(args: argparse.Namespace, config: Dict[str, Any]) -> Dict[st
     return profile
 
 
+
+def _refuse_to_clobber_a_reportable_manifest(path: Path, force: bool) -> None:
+    """Do not overwrite the frozen Synthea pin with a dev-corpus manifest.
+
+    ``--manifest`` defaults to ``Dataset/dataset_manifest.json``, which is
+    COMMITTED provenance: it carries the frozen corpus's SHA-256, and
+    ``dataset.yaml``'s ``freeze.expected_corpus_sha256`` is checked against it
+    before any run is called reportable. Generating a development corpus with
+    only ``--output`` set therefore used to silently replace the campaign's pin
+    with a 20,000-record synthetic one, and nothing said so until a later run
+    was quietly judged non-reportable for the wrong reason.
+
+    Writing a synthetic manifest over a synthea one is almost always that
+    accident rather than an intention, so it now requires ``--force``.
+    """
+    if force or not path.exists():
+        return
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if existing.get("corpus_type") != "synthea":
+        return
+    raise SystemExit(
+        f"REFUSED: {path} currently describes the reportable Synthea corpus\n"
+        f"  ({existing.get('records', '?')} records, "
+        f"sha256 {str(existing.get('corpus_sha256', ''))[:16]}...).\n"
+        "Writing a synthetic manifest over it would replace the campaign's "
+        "frozen provenance pin.\n"
+        "  - to keep it:      pass --manifest <somewhere else>\n"
+        "  - to replace it:   pass --force"
+    )
+
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Generate a synthetic development corpus (NOT reportable).",
@@ -216,6 +250,9 @@ def main(argv: List[str] | None = None) -> int:
                         help="manifest path; README §4 keeps it in Dataset/ "
                              "(committed provenance) while the corpus itself "
                              "stays git-ignored under derived/")
+    parser.add_argument("--force", action="store_true",
+                        help="overwrite the manifest even if it currently "
+                             "describes the reportable Synthea corpus")
     parser.add_argument("--match-profile", type=Path, default=None,
                         help="a Synthea dataset_manifest.json whose distribution to match")
     parser.add_argument("--records-per-patient", type=float, default=2.5,
@@ -265,6 +302,8 @@ def main(argv: List[str] | None = None) -> int:
             start_time=datetime(2180, 1, 1, tzinfo=timezone.utc),
         ),
     )
+
+    _refuse_to_clobber_a_reportable_manifest(Path(args.manifest), args.force)
 
     manifest = write_manifest(
         Path(args.manifest),
