@@ -429,14 +429,36 @@ guessing with what's actually true right now.
   CPU credits make latency non-reproducible) and launch **one** instance first,
   never all 9 — `provision.sh` is a build-once-then-snapshot workflow, not
   nine independent provisions.
-- **Current host `44.222.205.213`** (key `~/.ssh/ojcoms.pem`, Ubuntu 24.04.4
-  LTS, `m6i.xlarge`, 30 GiB gp3): `~/abcd` is a real git clone (`origin` set to
-  `https://github.com/Jaoguya/ABCD.git`), `pytest` is installed, and
-  `infra/provision.sh` has passed its primitive-tests gate: **61 passed, 4
-  skipped, 0 failed**. The 4 skips are the pairing tests — `charm-crypto`
-  failed to build from source on this box (see below). **Not yet snapshotted
-  as an AMI**, and the other 8 fleet instances (4 FSN, 1 cloud+Fabric+IPFS, 1
-  client, 3 baseline runners — §1) have not been launched.
+- **Experiment host** (instance `i-007e491c10f5e7d62`, name `OJCOMS`, key
+  `~/.ssh/ojcoms.pem`, Ubuntu 24.04.4 LTS, `m6i.xlarge`, 30 GiB gp3): `~/abcd`
+  is a real git clone, `pytest` installed, `charm-crypto` **now builds** (see
+  the 2026-08-28 change-log entry) — **612 passed, 1 skipped, 0 failed**.
+  **No Elastic IP**: the public IP changes on every stop/start and has already
+  moved four times (`44.222.205.213` → `98.91.21.219` → `34.228.7.222` →
+  `54.172.21.174`). Never hardcode it; get the current one from the console.
+  Each restart also wipes `/tmp`, so long-running output belongs elsewhere.
+
+- **AMI `ami-0feb3b14b4ea27844`** (`abcd-benchmark-2026-08-28`), created
+  2026-08-28 from the above instance. **This is the single point of recovery
+  for two things that exist nowhere else**: the frozen corpus
+  `Dataset/derived/corpus.jsonl` (686 MB, git-ignored via `.gitignore:12`) and
+  the from-source crypto build (PBC 0.5.14 + charm-crypto + liboqs). It also
+  carries the ~11 GB of raw Synthea CSVs at `~/synthea/output_full/csv` —
+  keep them: the corpus non-determinism came from Synthea *generating*
+  patients across threads, not from `prepare_dataset.py` extracting a corpus
+  out of fixed CSVs, so those CSVs are what make the current corpus
+  re-derivable. Launch the fleet **from this AMI**, not from a stock Ubuntu
+  image: `provision.sh` is a build-once-then-clone workflow, and cloning one
+  image is what makes §1's "identical hardware" parity claim exact rather
+  than "we installed the same packages nine times".
+
+- **Fleet: not yet launched.** The other 8 instances (4 FSN, 1
+  cloud+Fabric+IPFS, 1 client, 3 baseline runners — §1) do not exist. Note
+  that several of those roles have nothing to run yet: Exp. 7–8 still execute
+  all FSNs in one interpreter (a recorded reportability blocker), so the 4 FSN
+  nodes are idle until that is fixed; `infra/fabric/` does not exist, so the
+  Fabric/IPFS node has nothing to deploy; and two of the five schemes
+  (`feng_bl_abse`, `perera_lv_pqabse`) are documentation-only.
 
 ### Local fixes — now committed (were scp'd to `44.222.205.213` but had no git
 history anywhere until this session; still need pulling onto that host)
