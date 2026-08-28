@@ -45,12 +45,12 @@ Learning With Errors (LWE)-based searchable encryption, lattice-based
 cryptographic techniques, and post-quantum secure data-sharing
 frameworks to protect outsourced data against future quantum adversaries
 while preserving secure search and fine-grained access
-control [@ref16; @ref52; @ref54; @ref55; @ref57]. However, these works
-primarily focus on quantum-resistant cryptographic primitives, secure
-storage, or encrypted query processing, with limited consideration of
-dynamic searchable-index maintenance, multi-authority authorization,
-verifiable retrieval, and adaptive workload-aware search execution in
-distributed fog--cloud IoMT environments.
+control [@ref16; @ref52; @ref54; @ref55]. However, these works primarily
+focus on quantum-resistant cryptographic primitives, secure storage, or
+encrypted query processing, with limited consideration of dynamic
+searchable-index maintenance, multi-authority authorization, verifiable
+retrieval, and adaptive workload-aware search execution in distributed
+fog--cloud IoMT environments.
 
 Meanwhile, multi-authority attribute-based encryption has been
 introduced to enable fine-grained authorization across multiple
@@ -149,7 +149,6 @@ traversal in continuously evolving multi-domain IoMT environments.
   Zhuang *et al.* [@ref52]       $\checkmark$      $\times$        $\times$         $\times$          $\times$          $\times$       $\checkmark$
   Chen *et al.* [@ref53]           $\times$        $\times$        $\times$         $\times$          $\times$          $\times$         $\times$
   Perera and Fugkeaw [@ref54]      $\times$      $\checkmark$      $\times$       $\checkmark$      $\checkmark$        $\times$       $\checkmark$
-  Feng *et al.* [@ref57]           $\times$        $\times$        $\times$       $\checkmark$        $\times$          $\times$       $\checkmark$
   **Proposed**                   $\checkmark$    $\checkmark$    $\checkmark$     $\checkmark$      $\checkmark$      $\checkmark$     $\checkmark$
   ----------------------------- -------------- ---------------- --------------- ---------------- ------------------- --------------- ----------------
 :::
@@ -235,25 +234,21 @@ Representative DSSE and VDSE schemes [@ref29; @ref35; @ref46] improve
 dynamic updates, search privacy, and retrieval verification, yet
 generally assume centralized search processing and do not provide
 blockchain-backed auditing or quantum-resistant security. Recent
-lattice-/post-quantum approaches [@ref16; @ref52; @ref54; @ref57]
-strengthen cryptographic resilience against quantum adversaries but
-primarily focus on secure searchable-encryption constructions rather
-than scalable authorization management, verifiable retrieval, and
-distributed search orchestration. Notably, Feng *et al*. [@ref57]
-achieve constant-time permission revocation through an on-chain
-revocation list, but support only single-keyword exact matching and
-provide no verifiable retrieval of search results. Thingom *et
-al*. [@ref41], although presented as a post-quantum construction, rest
-on the Decisional Bilinear Diffie--Hellman assumption, which is not
-quantum-resistant. Blockchain-assisted healthcare
-frameworks [@ref47; @ref51] enhance decentralized trust and auditability
-but do not jointly support dynamic searchable encryption and verifiable
-retrieval, while the load-balanced framework of Perera and
-Fugkeaw [@ref48] improves search scalability without supporting
-multi-authority authorization, verifiable retrieval, or
-quantum-resistant cryptography. In contrast, the proposed framework is
-the first to unify dynamic searchable encryption, verifiable retrieval,
-multi-authority authorization, blockchain-backed auditing,
+lattice-/post-quantum approaches [@ref16; @ref52; @ref54] strengthen
+cryptographic resilience against quantum adversaries but primarily focus
+on secure searchable-encryption constructions rather than scalable
+authorization management, verifiable retrieval, and distributed search
+orchestration. Thingom *et al*. [@ref41], although presented as a
+post-quantum construction, rest on the Decisional Bilinear
+Diffie--Hellman assumption, which is not quantum-resistant.
+Blockchain-assisted healthcare frameworks [@ref47; @ref51] enhance
+decentralized trust and auditability but do not jointly support dynamic
+searchable encryption and verifiable retrieval, while the load-balanced
+framework of Perera and Fugkeaw [@ref48] improves search scalability
+without supporting multi-authority authorization, verifiable retrieval,
+or quantum-resistant cryptography. In contrast, the proposed framework
+is the first to unify dynamic searchable encryption, verifiable
+retrieval, multi-authority authorization, blockchain-backed auditing,
 lattice-/post-quantum secure communication, expressive Boolean search,
 and adaptive authorization-aware load-balanced search execution within a
 single architecture for large-scale cross-domain IoMT data sharing.
@@ -1719,34 +1714,31 @@ The notation used in the analysis is summarized below.
   $T_{\mathrm{Exp}}$     One modular exponentiation (or scalar multiplication)
   $T_P$                  One bilinear pairing operation
   $T_{\mathrm{Samp}}$    One lattice sampling operation
-  $T_{\mathrm{NTT}}$     One NTT-based polynomial multiplication over $R_q$
   $T_{\mathrm{Basis}}$   One lattice basis delegation/update operation
 
   : Notation used in the computation-cost analysis. {#tab:cost-notation}
 
 ::: table*
-  ---------------------------------------- -------------------------- ------------ ------------- ------------------------ ---------------------
-  **Scheme**                                      **Trapdoor**         **Search**   **Keyword**      **Verification**       **Authorization**
-                                                 **Generation**                     **Update**                             **Synchronization**
-  Guo *et al*. [@ref35]                            $O(d)T_P$                                                              
-  $(T_P+T_H)$                                                                                                             
-  $(T_P+T_H)$                                      $O(x)T_H$              N/A                                             
-  XB-Muse [@ref36]                                 $O(d)T_P$                                                              
-  $(T_P+T_E)$                                   $O(1)(T_P+T_H)$           N/A           N/A                               
-  Thingom *et al*. [@ref41]                                                                                               
-  $(T_H+T_E)+dT_B$                                                                                                        
-  $(T_E+T_B)$                                         N/A                 N/A           N/A                               
-  Feng *et al*. [@ref57]                                                                                                  
-  $(T_{\mathrm{Samp}}+T_{\mathrm{NTT}})$    $O(N n)T_{\mathrm{Exp}}$      N/A           N/A       $O(1)T_{\mathrm{Sig}}$  
-  Perera and Fugkeaw [@ref54]                $O(q)T_{\mathrm{PRF}}$                                                       
-  $(T_{\mathrm{BF}}+T_H)$                             N/A                                                                 
-  $(T_{\mathrm{MT}}+T_{\mathrm{Sig}})$                N/A                                                                 
-  **Proposed**                                     $O(q)T_P$                                                              
-  $+O(n_{\rm eff})(T_F+T_H)$                                                                                              
-  $+O(\log n)T_M$                                                                                                         
-  $+O(d)T_{Sig}$                                                                                                          
-  $+O(\log d)T_M$                                                                                                         
-  ---------------------------------------- -------------------------- ------------ ------------- ------------------------ ---------------------
+  -------------------------------------- ------------------------ ------------ ------------- ------------------ ---------------------
+  **Scheme**                                   **Trapdoor**        **Search**   **Keyword**   **Verification**    **Authorization**
+                                              **Generation**                    **Update**                       **Synchronization**
+  Guo *et al*. [@ref35]                         $O(d)T_P$                                                       
+  $(T_P+T_H)$                                                                                                   
+  $(T_P+T_H)$                                   $O(x)T_H$             N/A                                       
+  XB-Muse [@ref36]                              $O(d)T_P$                                                       
+  $(T_P+T_E)$                                $O(1)(T_P+T_H)$          N/A           N/A                         
+  Thingom *et al*. [@ref41]                                                                                     
+  $(T_H+T_E)+dT_B$                                                                                              
+  $(T_E+T_B)$                                      N/A                N/A           N/A                         
+  Perera and Fugkeaw [@ref54]             $O(q)T_{\mathrm{PRF}}$                                                
+  $(T_{\mathrm{BF}}+T_H)$                          N/A                                                          
+  $(T_{\mathrm{MT}}+T_{\mathrm{Sig}})$             N/A                                                          
+  **Proposed**                                  $O(q)T_P$                                                       
+  $+O(n_{\rm eff})(T_F+T_H)$                                                                                    
+  $+O(\log n)T_M$                                                                                               
+  $+O(d)T_{Sig}$                                                                                                
+  $+O(\log d)T_M$                                                                                               
+  -------------------------------------- ------------------------ ------------ ------------- ------------------ ---------------------
 :::
 
 Table [\[tab:cost\]](#tab:cost){reference-type="ref"
@@ -2260,9 +2252,4 @@ mechanism for generating synthetic patients and the synthetic electronic
 health care record," Journal of the American Medical Informatics
 Association, vol. 25, no. 3, pp. 230--238, 2018, doi:
 10.1093/jamia/ocx079.
-
-Z. Feng, W. Yang, Y. Hu, Y. Yin, T. Ma, X. Tian, and X. Deng,
-"Blockchain-Enabled Lattice-Based Attribute-Based Searchable Encryp-
-tion with Instant Revocation," Electronics, vol. 15, no. 11, art. 2471,
-2026, doi: 10.3390/electronics15112471.
 :::

@@ -163,6 +163,5 @@ Recommended order for running experiments:
    - `guo_vdsse` — Exp. 1, 2, 3, 4, 5
    - `thingom_pq_abse` — Exp. 1, 2, 3
    - `perera_lv_pqabse` (Ref[54]) — Exp. 1, 2, 3 — **not yet implemented**, see `Schemes/perera_lv_pqabse/SCHEME.md`
-   - `feng_bl_abse` (Ref[57]) — Exp. 1, 2, 6 (Exp. 3 deferred pending a decision) — **not yet implemented**, see `Schemes/feng_bl_abse/SCHEME.md`
 4. **Plotting** — `python Plots/generate_plots.py`
 5. **Full validation loop** — recheck all outputs and reviewer checks

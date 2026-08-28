@@ -116,7 +116,7 @@ EHRs, dynamic symmetric searchable encryption, bloom filter, post-quantum, block
 
 Since encrypted medical data cannot be directly queried, searchable encryption has become a fundamental technique for secure cloud-based healthcare systems. Dynamic Searchable Symmetric Encryption (DSSE) enables encrypted keyword search while supporting dynamic insertions, deletions, and updates without revealing plaintext information~\cite{ref29,ref30,ref31,ref37,ref38,ref42,ref45,ref46}. Recent advances further improve forward and backward privacy, expressive search capabilities, and multi-user support. To guarantee search correctness over untrusted cloud servers, Verifiable Dynamic Searchable Encryption (VDSE) incorporates authenticated data structures, Merkle proofs, and blockchain-assisted auditing to verify the completeness and integrity of returned search results~\cite{ref6,ref8,ref9,ref10,ref22,ref23,ref24,ref30,ref31,ref32,ref35,ref46}.
 
-The emergence of quantum computing has accelerated research on quantum-resistant searchable data sharing. Recent studies have explored Learning With Errors (LWE)-based searchable encryption, lattice-based cryptographic techniques, and post-quantum secure data-sharing frameworks to protect outsourced data against future quantum adversaries while preserving secure search and fine-grained access control~\cite{ref16,ref52,ref54,ref55,ref57}. However, these works primarily focus on quantum-resistant cryptographic primitives, secure storage, or encrypted query processing, with limited consideration of dynamic searchable-index maintenance, multi-authority authorization, verifiable retrieval, and adaptive workload-aware search execution in distributed fog--cloud IoMT environments.
+The emergence of quantum computing has accelerated research on quantum-resistant searchable data sharing. Recent studies have explored Learning With Errors (LWE)-based searchable encryption, lattice-based cryptographic techniques, and post-quantum secure data-sharing frameworks to protect outsourced data against future quantum adversaries while preserving secure search and fine-grained access control~\cite{ref16,ref52,ref54,ref55}. However, these works primarily focus on quantum-resistant cryptographic primitives, secure storage, or encrypted query processing, with limited consideration of dynamic searchable-index maintenance, multi-authority authorization, verifiable retrieval, and adaptive workload-aware search execution in distributed fog--cloud IoMT environments.
 
 
 Meanwhile, multi-authority attribute-based encryption has been introduced to enable fine-grained authorization across multiple administrative healthcare organizations~\cite{ref26,ref27,ref28}. By distributing trust among independent authorities, these schemes improve cross-domain access control and eliminate single points of trust. However, they generally treat authorization, searchable encryption, and dynamic index management as independent components, limiting scalability in continuously evolving IoMT environments.
@@ -209,8 +209,6 @@ Chen \textit{et al.}~\cite{ref53}
 Perera and Fugkeaw~\cite{ref54}
 & $\times$ & $\checkmark$ & $\times$ & $\checkmark$ & $\checkmark$ & $\times$ & $\checkmark$ \\
 
-Feng \textit{et al.}~\cite{ref57}
-& $\times$ & $\times$ & $\times$ & $\checkmark$ & $\times$ & $\times$ & $\checkmark$ \\
 \hline
 \textbf{Proposed}
 & $\checkmark$
@@ -239,7 +237,7 @@ Fine-grained authorization across multiple organizations has been extensively st
 
 Overall, existing research has advanced blockchain-assisted healthcare sharing, dynamic and verifiable searchable encryption, and multi-authority authorization independently. However, no existing framework jointly integrates multi-authority authorization, dynamic searchable encryption, verifiable encrypted retrieval, blockchain-backed auditing, and adaptive load-balanced search execution for large-scale IoMT data sharing. These limitations motivate the proposed framework.
 
-Table~\ref{tab:comparison} compares representative searchable encryption frameworks with the proposed scheme. Existing studies have addressed dynamic searchable encryption, verifiable retrieval, multi-authority authorization, blockchain-assisted auditing, or lattice-/post-quantum cryptography individually, but none integrates these capabilities within a unified framework. Xu \textit{et al}.~\cite{ref26} and Yu \textit{et al}.~\cite{ref28} support multi-authority access control but lack verifiable encrypted search and workload-aware search execution. Representative DSSE and VDSE schemes~\cite{ref29,ref35,ref46} improve dynamic updates, search privacy, and retrieval verification, yet generally assume centralized search processing and do not provide blockchain-backed auditing or quantum-resistant security. Recent lattice-/post-quantum approaches~\cite{ref16,ref52,ref54,ref57} strengthen cryptographic resilience against quantum adversaries but primarily focus on secure searchable-encryption constructions rather than scalable authorization management, verifiable retrieval, and distributed search orchestration. Notably, Feng \textit{et al}.~\cite{ref57} achieve constant-time permission revocation through an on-chain revocation list, but support only single-keyword exact matching and provide no verifiable retrieval of search results. Thingom \textit{et al}.~\cite{ref41}, although presented as a post-quantum construction, rest on the Decisional Bilinear Diffie--Hellman assumption, which is not quantum-resistant. Blockchain-assisted healthcare frameworks~\cite{ref47,ref51} enhance decentralized trust and auditability but do not jointly support dynamic searchable encryption and verifiable retrieval, while the load-balanced framework of Perera and Fugkeaw~\cite{ref48} improves search scalability without supporting multi-authority authorization, verifiable retrieval, or quantum-resistant cryptography. In contrast, the proposed framework is the first to unify dynamic searchable encryption, verifiable retrieval, multi-authority authorization, blockchain-backed auditing, lattice-/post-quantum secure communication, expressive Boolean search, and adaptive authorization-aware load-balanced search execution within a single architecture for large-scale cross-domain IoMT data sharing.
+Table~\ref{tab:comparison} compares representative searchable encryption frameworks with the proposed scheme. Existing studies have addressed dynamic searchable encryption, verifiable retrieval, multi-authority authorization, blockchain-assisted auditing, or lattice-/post-quantum cryptography individually, but none integrates these capabilities within a unified framework. Xu \textit{et al}.~\cite{ref26} and Yu \textit{et al}.~\cite{ref28} support multi-authority access control but lack verifiable encrypted search and workload-aware search execution. Representative DSSE and VDSE schemes~\cite{ref29,ref35,ref46} improve dynamic updates, search privacy, and retrieval verification, yet generally assume centralized search processing and do not provide blockchain-backed auditing or quantum-resistant security. Recent lattice-/post-quantum approaches~\cite{ref16,ref52,ref54} strengthen cryptographic resilience against quantum adversaries but primarily focus on secure searchable-encryption constructions rather than scalable authorization management, verifiable retrieval, and distributed search orchestration. Thingom \textit{et al}.~\cite{ref41}, although presented as a post-quantum construction, rest on the Decisional Bilinear Diffie--Hellman assumption, which is not quantum-resistant. Blockchain-assisted healthcare frameworks~\cite{ref47,ref51} enhance decentralized trust and auditability but do not jointly support dynamic searchable encryption and verifiable retrieval, while the load-balanced framework of Perera and Fugkeaw~\cite{ref48} improves search scalability without supporting multi-authority authorization, verifiable retrieval, or quantum-resistant cryptography. In contrast, the proposed framework is the first to unify dynamic searchable encryption, verifiable retrieval, multi-authority authorization, blockchain-backed auditing, lattice-/post-quantum secure communication, expressive Boolean search, and adaptive authorization-aware load-balanced search execution within a single architecture for large-scale cross-domain IoMT data sharing.
 \section{Our Proposed System}
 
 This section presents the architecture of
@@ -1790,7 +1788,6 @@ $T_{\mathrm{Sig}}$ & One digital-signature verification \\
 $T_{\mathrm{Exp}}$ & One modular exponentiation (or scalar multiplication) \\
 $T_P$ & One bilinear pairing operation \\
 $T_{\mathrm{Samp}}$ & One lattice sampling operation \\
-$T_{\mathrm{NTT}}$ & One NTT-based polynomial multiplication over $R_q$ \\
 $T_{\mathrm{Basis}}$ & One lattice basis delegation/update operation \\
 \hline
 \end{tabular}
@@ -1857,19 +1854,6 @@ N/A
 N/A
 &
 N/A
-\\
-
-Feng \textit{et al}.~\cite{ref57}
-&
-\makecell{$O(q)$\\$(T_{\mathrm{Samp}}+T_{\mathrm{NTT}})$}
-&
-$O(N n)T_{\mathrm{Exp}}$
-&
-N/A
-&
-N/A
-&
-$O(1)T_{\mathrm{Sig}}$
 \\
 
 Perera and Fugkeaw~\cite{ref54}
@@ -2303,12 +2287,6 @@ Computing, early access, 2026, doi: 10.1109/TMC.2026.3682118.
 
 \bibitem{ref56}
 J. Walonoski et al., ”Synthea: An approach, method, and software mechanism for generating synthetic patients and the synthetic electronic health care record,” Journal of the American Medical Informatics Association, vol. 25, no. 3, pp. 230–238, 2018, doi: 10.1093/jamia/ocx079.
-
-\bibitem{ref57}
-Z. Feng, W. Yang, Y. Hu, Y. Yin, T. Ma, X. Tian, and X. Deng,
-”Blockchain-Enabled Lattice-Based Attribute-Based Searchable Encryp-
-tion with Instant Revocation,” Electronics, vol. 15, no. 11, art. 2471,
-2026, doi: 10.3390/electronics15112471.
 
 
 \end{thebibliography}

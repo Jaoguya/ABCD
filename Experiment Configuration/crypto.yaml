@@ -265,58 +265,13 @@ perera_lv_pqabse:
   # by the paper either -- same "benchmark decision needed" status.
 
 # -----------------------------------------------------------------------------
-# Ref[57] -- Feng et al., "BL-ABSE", Electronics (MDPI) 15(11):2471, June 2026,
-# doi: 10.3390/electronics15112471. Added 2026-08-28 as a FIFTH scheme
-# (additive -- nothing was dropped for it). Genuinely lattice-based throughout
-# (RLWE commitment + lattice CP-ABE, NTT-optimized; zero pairings, zero DBDH).
-# Chosen to fill the Exp. 6 (authorization sync) gap no other baseline covers:
-# instant on-chain revocation is this paper's headline contribution, proven
-# O(1) in system size and measured flat ~2s from N=100 to N=50,000.
-#
-# Venue note: only non-IEEE venue among the implemented baselines. MDPI
-# Electronics is Scopus/WoS-indexed, not predatory, but carries less prestige
-# than IEEE in this field. Included on content quality -- it passed this
-# repo's legitimacy checks more cleanly than either Ref[41] or Ref[54] (see
-# References/Ref[57]/Ref[57].md's assessment section). Cite the venue plainly.
-#
-# NOT YET IMPLEMENTED. Schemes/feng_bl_abse/src/ does not exist -- only
-# SCHEME.md and this block. Unlike Ref[41] and Ref[54], this paper publishes
-# every cryptographic parameter numerically, so there are no undetermined
-# values to decide here; the open decisions are scoping ones, recorded in
-# SCHEME.md (Exp. 3 inclusion, blockchain dependency for Exp. 6, native-mode
-# multi-keyword handling, NTT placement).
+# -----------------------------------------------------------------------------
+# Ref[57] -- Feng et al., "BL-ABSE", Electronics (MDPI). ADDED then REMOVED
+# 2026-08-28. The paper passed every content check in this repo -- genuinely
+# lattice-based, coherent, self-disclosing its own limitations -- and was
+# rejected purely on venue: the co-author does not accept MDPI. Only IEEE
+# references may be cited from now on; see .claude/skills/reference-vetting.
+# Parameters intentionally absent and NOT to be repopulated.
+# -----------------------------------------------------------------------------
 feng_bl_abse:
-  lattice:
-    n: 1024                           # published: Table 1, Alg. 1 line 1
-    q: 12289                          # published: smallest prime with q = 1 mod 2n (NTT requirement)
-    gaussian_sigma: 3.2               # published: Table 1
-    ring: "Z_q[x]/(x^1024 + 1)"       # published: Table 1
-  security_parameter_lambda: 128      # published: Table 1 (claimed 128-bit PQ; backed by a
-                                      # root-Hermite/Core-SVP calculation, not just asserted)
-  commitment:
-    match_threshold_B: 40             # published: Alg. 1 line 1, derived from noise analysis
-  threshold:
-    # published: Assumption 3 gives (3,5) as the typical configuration,
-    # tolerating floor((n-1)/3) = 1 Byzantine node under PBFT (Theorem 1).
-    t: 3
-    n: 5
-  blockchain:
-    platform: hyperledger-fabric      # published: Alg. 1 line 5
-    consensus: pbft                   # published
-    block_time_seconds: 2             # published: Alg. 1 line 6 -- dominates RevokeAccess latency
-  storage: ipfs                       # published: Alg. 3 line 13
-  symmetric: aes-256-gcm              # published: Alg. 3 line 11, 96-bit nonce
-  hash:
-    keyword_encoding: "H: {0,1}* -> R_q"        # published: Alg. 1 design notes
-    seed_derivation: "H_seed: {0,1}* -> {0,1}^256"  # published; independence from H is
-                                                    # load-bearing for the security proof
-  multi_keyword:
-    # benchmark: the paper is SINGLE-KEYWORD exact-match only and self-discloses
-    # this as its limitation #1 (Sec. 7.1). A q-keyword query therefore needs the
-    # same native-mode treatment as thingom_pq_abse: q independent trapdoors + q
-    # independent searches with client-side intersection. Decision recorded here
-    # rather than defaulted silently.
-    mode: independent_trapdoors
-
-
-
+  status: dropped_non_ieee_venue
