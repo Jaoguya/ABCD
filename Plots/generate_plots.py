@@ -99,7 +99,6 @@ SCHEME_LABELS: Dict[str, str] = {
     "guo_vdsse": "Guo et al. [35]",
     "thingom_pq_abse": "Thingom et al. [41]",
     "perera_lv_pqabse": "Perera & Fugkeaw [54]",
-    "feng_bl_abse": "Feng et al. [57]",
 }
 
 # Marker AND linestyle both vary, so the figures survive grayscale (README §10).
@@ -107,7 +106,7 @@ SCHEME_LABELS: Dict[str, str] = {
 # all eight figures rather than shifting when a baseline is absent.
 STYLE_ORDER: Tuple[str, ...] = (
     "ma_lb_pq_vdse", "guo_vdsse", "thingom_pq_abse",
-    "perera_lv_pqabse", "feng_bl_abse",
+    "perera_lv_pqabse",
 )
 MARKERS = ("o", "s", "^", "D", "v", "P", "X")
 LINESTYLES = ("-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 2)), (0, (1, 1)))

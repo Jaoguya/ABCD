@@ -88,12 +88,10 @@ experiments:
     # same mistake already caught and fixed for Ref[41]'s PQ claim. Was
     # zhuang's slot; not carried over, see debug_history.md.
     #
-    # feng_bl_abse (Ref[57]) was briefly added here on 2026-08-28 and REMOVED
-    # the same day: the co-author rejected MDPI as a venue, so only IEEE
-    # references may be cited (.claude/skills/reference-vetting). Exp. 6 is a
-    # proposed-scheme-only ablation again. A baseline here would need an
-    # IEEE-published scheme with a fine-grained authorization-sync primitive;
-    # Ref[54] explicitly disclaims having one.
+    # No baseline: Exp. 6 is a proposed-scheme-only ablation, like Exp. 7-8.
+    # A baseline here needs a fine-grained authorization-sync primitive, and
+    # Ref[54] explicitly disclaims having one. Any candidate must be
+    # IEEE-published -- see .claude/skills/reference-vetting.
     schemes: [ma_lb_pq_vdse]
   exp7_search_throughput:
     variable: concurrency

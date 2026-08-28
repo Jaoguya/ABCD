@@ -192,10 +192,10 @@ thingom_pq_abse:
     # block reduced to a status marker, so the original basis no longer exists
     # in this file -- the value is retained deliberately rather than silently
     # re-derived, because changing it now would be results-affecting and would
-    # invalidate the Exp. 1/2 measurements already taken at u=10. If a fresh
-    # justification is ever needed, note that Ref[57] (feng_bl_abse) publishes
-    # no attribute-universe size either, so there is no newer published anchor
-    # to match against. Ref[41]'s trapdoor is 2u exponentiations and its search
+    # invalidate the Exp. 1/2 measurements already taken at u=10. No newer
+    # published anchor exists to match against: Ref[54] does not fix an
+    # attribute-universe size either. Ref[41]'s trapdoor is 2u exponentiations
+    # and its search
     # is 2u+1 pairings per candidate, so this value places the baseline on
     # Exp. 1 and Exp. 2.
     u: 10                             # number of user attributes
@@ -265,13 +265,3 @@ perera_lv_pqabse:
   # by the paper either -- same "benchmark decision needed" status.
 
 # -----------------------------------------------------------------------------
-# -----------------------------------------------------------------------------
-# Ref[57] -- Feng et al., "BL-ABSE", Electronics (MDPI). ADDED then REMOVED
-# 2026-08-28. The paper passed every content check in this repo -- genuinely
-# lattice-based, coherent, self-disclosing its own limitations -- and was
-# rejected purely on venue: the co-author does not accept MDPI. Only IEEE
-# references may be cited from now on; see .claude/skills/reference-vetting.
-# Parameters intentionally absent and NOT to be repopulated.
-# -----------------------------------------------------------------------------
-feng_bl_abse:
-  status: dropped_non_ieee_venue
