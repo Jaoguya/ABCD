@@ -265,3 +265,96 @@ perera_lv_pqabse:
   # by the paper either -- same "benchmark decision needed" status.
 
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Ref[55] — Ge, Gao, Ning, Ma, Chen, IEEE Internet of Things Journal, vol. 11,
+# no. 24, pp. 40861-40874, 15 Dec 2024. doi: 10.1109/JIOT.2024.3457270
+#
+# "Verifiable Multilevel Dynamic Searchable Encryption With Forward and
+# Backward Privacy in Cloud-Assisted IoT" — schemes Peony and Peony++.
+#
+# Added 2026-08-28. Purely ADDITIVE: no existing value in this file changed,
+# so no existing baseline result is affected.
+#
+# Full parameter provenance and the list of what the paper does NOT publish:
+# References/Ref[55]/Ref[55].md sections 4 and 5.
+#
+# NOTE ON SECURITY CLASS: this is a SYMMETRIC-key construction (HMAC-SHA-256,
+# AES, keccak256, GGM-PRF). It makes no post-quantum claim and needs none --
+# there is no pairing or discrete-log anywhere. Cite it for verifiability and
+# forward/backward privacy, NOT as a post-quantum comparison point.
+# -----------------------------------------------------------------------------
+yue_ge:
+  # --- published ---
+  access_levels: 3                    # published: Ref[55].md §4 — "three levels,
+                                      # where level 3 is the highest and level 1
+                                      # is the lowest" (paper §VII-A)
+  bloom_filter:
+    false_positive_rate: 1.0e-4       # published: "The false positive rate for
+                                      # BF is p = 10^-4 in Peony++, same as
+                                      # Aura" (paper §VII-A)
+    num_hashes: 5                     # published as one of TWO reported settings
+                                      # (h=5 and h=13, Tables V-VII). The paper
+                                      # declares no default. We take h=5 as the
+                                      # primary because it is the setting Aura
+                                      # is compared against first in every table,
+                                      # and expose h=13 via num_hashes_alt so a
+                                      # sensitivity run needs no code change.
+                                      # CHANGING THIS IS RESULTS-AFFECTING.
+    num_hashes_alt: 13                # published: the second reported setting
+    # Array size is DERIVED, not stored: b = -d*ln(p)/(ln 2)^2, published in
+    # paper §VII-B. See src/params.py::bloom_array_bits(). d is the number of
+    # deletions between two searches, so b is per-(keyword,level) and grows
+    # with deletion volume -- it is not a fixed constant.
+  deletions_between_searches: 1000    # published sweep point: the paper reports
+                                      # d in {10, 100, 1000, 10000} and fixes no
+                                      # default. 1000 is the value its own
+                                      # Table VII singles out for the deletion
+                                      # timing table, so it is the most defensible
+                                      # single choice. benchmark: default only.
+  file_identifier_bytes: 32           # published: "The length of a file
+                                      # identifier is up to 32 bytes" (§VII-A)
+  hash: sha256                        # published: OpenSSL SHA-256 (§VII-A)
+  digest_hash: keccak256              # published: keccak256 for the on-chain
+                                      # digests (§VII-A). Used for prooflist
+                                      # entries only.
+  symmetric_encryption: aes-256-gcm   # benchmark: paper says only "AES" and
+                                      # never fixes a key length (Ref[55].md §5
+                                      # item 1). Matched to guo_vdsse's
+                                      # symmetric_encryption so the two
+                                      # verifiable baselines pay the same
+                                      # primitive cost (README §1 parity).
+
+  # --- benchmark decisions: NOT published by the paper ---
+  security_parameter_lambda: 128      # benchmark: never fixed numerically by the
+                                      # paper (Ref[55].md §5 item 1). Matched to
+                                      # guo_vdsse.security_parameter_lambda=128
+                                      # so the two verifiable baselines are
+                                      # compared at equal security.
+  update_batches_c: 4                 # benchmark: the paper says only "we
+                                      # implement batch updating; thus c is
+                                      # relatively small" (§V-D) and never fixes
+                                      # it. Search is O(c) PRF evaluations, so
+                                      # this is DIRECTLY RESULTS-AFFECTING.
+                                      # 4 matches the repo's default domain count
+                                      # d=4 (README §6) so batch count and domain
+                                      # count do not silently differ.
+  puncturable_prf:
+    # The GGM tree DEPTH is derived, not stored. Ref[55] §IV-B (MSRE.Enc step 1)
+    # fixes the t-punc-PRF domain as the Bloom index space itself:
+    #   "Calculates j_i = H_i(t) in [b] and sk_{j_i} = F(sk, j_i)"
+    # so depth = ceil(log2(b)), and b is itself derived from d and p. Storing a
+    # fixed wider domain here would inflate the punctured key beyond what the
+    # paper's own communication-cost figures (§VII-B) imply. The derivation is
+    # src/msre.py::domain_bits_for().
+    #
+    # The paper never states the depth explicitly (Ref[55].md §5 item 3); this
+    # derivation is the reading its own Enc step forces.
+    output_bits: 256                  # benchmark: full SHA-256 output
+  level_assignment: pid_hash          # benchmark: the corpus carries no access
+                                      # level and the paper never says how it
+                                      # assigned one to Wikipedia (Ref[55].md §5
+                                      # item 4). We derive it deterministically
+                                      # from the record's pseudonymous patient id
+                                      # so it is stable across runs and balanced
+                                      # across levels. See src/levels.py.
