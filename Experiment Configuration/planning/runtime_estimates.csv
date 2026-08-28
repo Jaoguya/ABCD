@@ -1,21 +1,21 @@
 scheme,experiment,sweep_value,per_run_s,reps,warmups,runs,point_total_s,point_total_h,basis,confidence,notes
-thingom_pq_abse,exp2,20000,816.9,30,5,35,28591.5,7.94,MEASURED,high,0.389ms/pairing end-to-end with 2-process parallel search (2026-08-28); N raised 10000->20000 using the freed budget. Worst-case rate used for sizing; best case in isolation is 0.361ms
-thingom_pq_abse,exp2,10000,408.45,0,0,0,0.0,0.0,MEASURED,high,SUPERSEDED 2026-08-28 — was the capped value at the pre-parallel 0.703ms/pairing rate (7.18h); N=20000 now fits instead
+thingom_pq_abse,exp2,10000,391.65,30,5,35,13707.75,3.81,MEASURED,high,0.373ms/pairing end-to-end with 2-process parallel search. N reverted 20000->10000 on 2026-08-28: 20000 matched no point in global.yaml exp2 sweep so Ref[41] would have been uncomparable on the figure
+thingom_pq_abse,exp2,20000,783.3,0,0,0,0.0,0.0,MEASURED,high,SUPERSEDED 2026-08-28 -- affordable at the parallel rate but aligns with no other scheme measurement point
 thingom_pq_abse,exp2,50000,2042.25,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED — ~19.9h at the parallel rate for this point alone; does not fit alongside exp3
 thingom_pq_abse,exp2,100000,4084.5,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED — ~39.7h at the parallel rate; over budget by itself
 thingom_pq_abse,exp2,500000,20422.5,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED by cap decision 2026-08-23, reaffirmed 2026-08-27 and 2026-08-28
 thingom_pq_abse,exp2,1000000,40845.0,0,0,0,0.0,0.0,MEASURED,high,EXCLUDED by cap decision 2026-08-23, reaffirmed 2026-08-27 and 2026-08-28
-thingom_pq_abse,exp3,2,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500 (raised from 2000 on 2026-08-28 using the parallel-search speedup); shard_size bug fixed 2026-08-27 — previously scaled with d instead of staying flat (see debug_history.md)
-thingom_pq_abse,exp3,3,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
-thingom_pq_abse,exp3,4,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
-thingom_pq_abse,exp3,5,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
-thingom_pq_abse,exp3,6,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
-thingom_pq_abse,exp3,7,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
-thingom_pq_abse,exp3,8,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
-thingom_pq_abse,exp3,9,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
-thingom_pq_abse,exp3,10,142.96,30,5,35,5003.6,1.39,MEASURED,high,total index HELD at 3500; flat in d (post-fix)
+thingom_pq_abse,exp3,2,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,3,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,4,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,5,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,6,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,7,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,8,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,9,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
+thingom_pq_abse,exp3,10,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HELD at 2000 (3500 reverted 2026-08-28); SINGLE-THREADED on purpose -- pooling per (domain,token) put pool startup inside the timer and scaled it with d, the swept variable, manufacturing a false slope
 thingom_pq_abse,exp1,1-20,0.5,30,5,35,17.5,0.0,estimated,low,trapdoor only; negligible
-thingom_pq_abse,TOTAL,,,,,,,20.45,MEASURED,high,exp1(~0)+exp2(7.94h @N=20000)+exp3(9x1.39h @total=3500) — fits 24h with ~3.55h margin. total=4000 was considered and rejected (~22.2h, only ~1.8h margin). See debug_history.md 2026-08-28 entry
+thingom_pq_abse,TOTAL,,,,,,,16.73,MEASURED,high,exp1(~0)+exp2(3.81h @N=10^4 2-proc)+exp3(9x1.44h @total=2000 single-threaded). Fully single-threaded would be 20.09h; the 2-process search on exp2 saves 3.37h
 perera_lv_pqabse,exp2,,,,,,,,not_started,,DROPPED zhuang_lattice_mabse rows here 2026-08-27 (scheme removed, see crypto.yaml/debug_history.md); replacement scheme not yet implemented -- no estimate possible until Schemes/perera_lv_pqabse/ exists
 feng_bl_abse,exp2,,,,,,,,not_started,,Ref[57] added 2026-08-28 as a 5th scheme (additive). Not implemented -- no estimate possible until Schemes/feng_bl_abse/src/ exists. Paper's own figure: ~29us/record search (Python/NumPy on a 14-core Xeon) -- NOT reusable here per README 13, re-measure on the pinned host
 guo_vdsse,exp5,100,0.089,30,5,35,3.1,0.0,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
