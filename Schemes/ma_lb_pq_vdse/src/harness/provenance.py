@@ -140,6 +140,7 @@ def reportability(
     corpus_sha256: Optional[str],
     group_faithful: bool,
     token_scheme_keyed: Optional[bool],
+    ledger_faithful: bool = False,
 ) -> Tuple[bool, List[str]]:
     """Every condition a quotable number must satisfy, and which ones failed.
 
@@ -193,6 +194,24 @@ def reportability(
             "Type-III backend (crypto.yaml: backend_implemented: false)"
         )
 
+    if not ledger_faithful:
+        # README §1 states the ledger is Hyperledger Fabric v2.5, but the
+        # harness runs chain.ledger.InProcessLedger -- whose OWN docstring says
+        # it is "NOT a substitute for Fabric once Fog Search Nodes become
+        # independent processes" and that "Exp. 4 is where it starts to be
+        # measured". Exp. 4 reports verification overhead (Merkle proof +
+        # commitment recomputation + CHAIN CONSISTENCY), so an in-memory hash
+        # chain understates the anchoring cost the paper claims. That gap was
+        # documented in the ledger module but never reached run_meta.json, so a
+        # figure could have been quoted without it travelling along. Added
+        # 2026-08-28.
+        reasons.append(
+            "the ledger is an in-process hash chain, not the Hyperledger "
+            "Fabric v2.5 deployment README §1 specifies; Exp. 4's chain-"
+            "consistency cost is therefore understated (see "
+            "chain/ledger.py::InProcessLedger)"
+        )
+
     if token_scheme_keyed is False:
         reasons.append(
             "index tokens use an unkeyed H, which is invertible over the "
@@ -231,6 +250,7 @@ def build_metadata(
     dataset_records: Optional[int] = None,
     group_faithful: bool = False,
     token_scheme_keyed: Optional[bool] = None,
+    ledger_faithful: bool = False,
     runs: Optional[int] = None,
     warmups: Optional[int] = None,
     notes: Optional[List[str]] = None,
@@ -243,6 +263,7 @@ def build_metadata(
         corpus_sha256=corpus_sha256,
         group_faithful=group_faithful,
         token_scheme_keyed=token_scheme_keyed,
+        ledger_faithful=ledger_faithful,
     )
     return RunMetadata(
         scheme=SCHEME_NAME,

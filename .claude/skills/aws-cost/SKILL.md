@@ -63,6 +63,23 @@ Default output covers **only `Project=OJCOMS`**. Anything outside that tag is
 listed solely under `--all-account`, and only so an account-wide bill can be
 explained; it is never a target for action.
 
+## Is anything actually running?
+
+```bash
+python3 .claude/skills/aws-cost/scripts/fleet_status.py            # one snapshot
+python3 .claude/skills/aws-cost/scripts/fleet_status.py --watch    # refresh until Ctrl-C
+```
+
+Shows, per running project instance, the experiment processes it finds, how
+long each has been going, its CPU%, and — where the runner prints progress —
+how far through it is (e.g. `progress 400/1001 (40%)`).
+
+**A process at ~0% CPU is flagged.** That distinguishes "working" from "stuck",
+which matters: a run that is quietly wedged looks identical to a slow one
+until you check, and that has cost real hours on this project.
+
+Also read-only, and scoped to `Project=OJCOMS` like everything else here.
+
 ## Reading the output
 
 - **Burn rate** is computed from instances in the `running` state only.
