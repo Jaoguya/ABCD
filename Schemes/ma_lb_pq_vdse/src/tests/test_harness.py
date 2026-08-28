@@ -390,8 +390,23 @@ def test_provenance_marks_a_dirty_tree():
 
 def test_provenance_lists_every_blocker_by_name():
     """"reportable: false" with no reason is not provenance."""
-    reportable, reasons = provenance.reportability(
+    import dataclasses
+
+    # Every blocker must be nameable AT ONCE, so the config is forced back to
+    # pending here rather than relying on the live one -- which now carries the
+    # swept weights, so "pending_sweep" would legitimately be absent and this
+    # test would stop checking the message it exists to check.
+    pending = dataclasses.replace(
         CONFIG,
+        scheduler=dataclasses.replace(
+            CONFIG.scheduler,
+            weights=dataclasses.replace(
+                CONFIG.scheduler.weights, status="pending_sweep", provisional=True
+            ),
+        ),
+    )
+    reportable, reasons = provenance.reportability(
+        pending,
         experiment="exp7_search_throughput",
         corpus_type="synthetic",
         corpus_sha256=None,

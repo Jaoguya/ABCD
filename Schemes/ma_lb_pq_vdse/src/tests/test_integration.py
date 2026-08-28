@@ -840,8 +840,26 @@ def test_lifecycle_nothing_is_reportable_on_a_stub_group():
     else:
         raise AssertionError("a stub-group deployment must not be reportable")
     # And the scheduler refuses a reportable Exp. 7-8 run while lambdas are pending.
+    # The weights were fixed by the documented sweep on 2026-08-28, so the gate
+    # is exercised against a deliberately pending copy -- it must keep refusing
+    # after the weights are fixed, which is exactly when a regression would
+    # otherwise go unnoticed.
+    import dataclasses
+
+    cfg = config_mod.load()
+    pending = dataclasses.replace(
+        cfg,
+        scheduler=dataclasses.replace(
+            cfg.scheduler,
+            weights=dataclasses.replace(
+                cfg.scheduler.weights, status="pending_sweep", provisional=True
+            ),
+        ),
+    )
     try:
-        aass_mod.Scheduler(aass_mod.VARIANT_AASS, reportable=True)
+        aass_mod.Scheduler(
+            aass_mod.VARIANT_AASS, config=pending, reportable=True
+        )
     except config_mod.SchedulerWeightsPendingError:
         return
     raise AssertionError("a reportable AASS run must be refused")

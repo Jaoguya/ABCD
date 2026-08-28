@@ -357,9 +357,35 @@ def test_scheduler_has_exactly_the_four_variants():
 
 
 def test_scheduler_refuses_a_reportable_aass_run_while_weights_are_pending():
-    """The live gate: Exp. 7-8 cannot report the provisional uniform vector."""
+    """Exp. 7-8 must not report an unswept scheduler as AASS.
+
+    The weights were fixed by the documented sweep on 2026-08-28, so a
+    reportable AASS scheduler now builds. The gate is therefore exercised
+    against a deliberately pending config rather than the live one -- the
+    mechanism has to keep working after the weights are fixed, which is
+    precisely when a regression here would go unnoticed.
+    """
+    import dataclasses
+
+    # Fixed weights: a reportable scheduler builds.
+    live = aass_mod.Scheduler(aass_mod.VARIANT_AASS, reportable=True)
+    assert live.weights.is_fixed
+
+    # Pending weights: still refused, with an actionable message.
+    cfg = config_mod.load()
+    pending_cfg = dataclasses.replace(
+        cfg,
+        scheduler=dataclasses.replace(
+            cfg.scheduler,
+            weights=dataclasses.replace(
+                cfg.scheduler.weights, status="pending_sweep", provisional=True
+            ),
+        ),
+    )
     try:
-        aass_mod.Scheduler(aass_mod.VARIANT_AASS, reportable=True)
+        aass_mod.Scheduler(
+            aass_mod.VARIANT_AASS, config=pending_cfg, reportable=True
+        )
     except config_mod.SchedulerWeightsPendingError as exc:
         assert "issue #5" in str(exc)
         return
@@ -367,9 +393,13 @@ def test_scheduler_refuses_a_reportable_aass_run_while_weights_are_pending():
 
 
 def test_scheduler_allows_a_non_reportable_aass_run():
-    """The sweep itself and smoke tests must still be able to run."""
+    """The sweep itself and smoke tests must still be able to run.
+
+    No longer asserts the weights are unfixed -- that was true only before the
+    2026-08-28 sweep. What matters is that reportable=False never refuses,
+    since that is the path the sweep itself runs on.
+    """
     scheduler = aass_mod.Scheduler(aass_mod.VARIANT_AASS, reportable=False)
-    assert not scheduler.weights.is_fixed
     assert scheduler.is_authorization_aware
 
 

@@ -619,19 +619,47 @@ def test_config_authority_topology_matches_the_decision():
     assert authorities.disjoint_attribute_universes
 
 
-def test_config_scheduler_weights_are_still_pending():
-    """README §14 issue #5 is open; the config must not claim otherwise."""
+def test_config_scheduler_weights_are_fixed_and_internally_consistent():
+    """The sweep ran 2026-08-28, so README §14 issue #5 is closed.
+
+    Was test_config_scheduler_weights_are_still_pending, which asserted the
+    weights could never be fixed -- it encoded an open TODO as an invariant.
+    What must actually hold is that `status` and `provisional` agree with each
+    other and that the vector is a valid simplex point; a config claiming
+    `fixed` while still flagged provisional, or weights not summing to 1,
+    would let an untuned scheduler be reported as AASS.
+    """
     scheduler = config_mod.load().scheduler
-    assert not scheduler.weights.is_fixed
-    assert scheduler.weights.provisional
-    assert scheduler.refuse_reportable_runs_while_pending
+    assert scheduler.weights.is_fixed
+    assert not scheduler.weights.provisional
+    assert scheduler.refuse_reportable_runs_while_pending  # gate stays armed
+    total = sum(scheduler.weights.as_tuple())
+    assert abs(total - 1.0) < 1e-9, f"weights sum to {total}, not 1.0"
+    assert all(w >= 0 for w in scheduler.weights.as_tuple())
 
 
 def test_config_refuses_reportable_run_on_pending_weights():
-    """The gate that stops Exp. 7-8 reporting an untuned scheduler as AASS."""
+    """The gate that stops Exp. 7-8 reporting an untuned scheduler as AASS.
+
+    The live config now carries swept weights, so the gate is exercised against
+    a deliberately pending copy rather than against whatever the config happens
+    to say today. That keeps this testing the MECHANISM -- which must survive
+    the weights being fixed -- instead of the current state.
+    """
+    import dataclasses
+
     scheduler = config_mod.load().scheduler
+    # Fixed weights must pass.
+    scheduler.require_fixed(context="exp7")
+    # Pending weights must still refuse, with an actionable message.
+    pending = dataclasses.replace(
+        scheduler,
+        weights=dataclasses.replace(
+            scheduler.weights, status="pending_sweep", provisional=True
+        ),
+    )
     try:
-        scheduler.require_fixed(context="exp7")
+        pending.require_fixed(context="exp7")
     except config_mod.SchedulerWeightsPendingError as exc:
         assert "pending_sweep" in str(exc)
         assert "issue #5" in str(exc)
