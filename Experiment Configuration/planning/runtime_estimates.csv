@@ -17,7 +17,6 @@ thingom_pq_abse,exp3,10,147.63,30,5,35,5167.05,1.44,MEASURED,high,total index HE
 thingom_pq_abse,exp1,1-20,0.5,30,5,35,17.5,0.0,estimated,low,trapdoor only; negligible
 thingom_pq_abse,TOTAL,,,,,,,16.73,MEASURED,high,exp1(~0)+exp2(3.81h @N=10^4 2-proc)+exp3(9x1.44h @total=2000 single-threaded). Fully single-threaded would be 20.09h; the 2-process search on exp2 saves 3.37h
 perera_lv_pqabse,exp2,,,,,,,,not_started,,DROPPED zhuang_lattice_mabse rows here 2026-08-27 (scheme removed, see crypto.yaml/debug_history.md); replacement scheme not yet implemented -- no estimate possible until Schemes/perera_lv_pqabse/ exists
-feng_bl_abse,exp2,,,,,,,,not_started,,Ref[57] added 2026-08-28 as a 5th scheme (additive). Not implemented -- no estimate possible until Schemes/feng_bl_abse/src/ exists. Paper's own figure: ~29us/record search (Python/NumPy on a 14-core Xeon) -- NOT reusable here per README 13, re-measure on the pinned host
 guo_vdsse,exp5,100,0.089,30,5,35,3.1,0.0,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
 guo_vdsse,exp5,1000,0.891,30,5,35,31.2,0.01,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
 guo_vdsse,exp5,10000,8.958,30,5,35,313.5,0.09,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
