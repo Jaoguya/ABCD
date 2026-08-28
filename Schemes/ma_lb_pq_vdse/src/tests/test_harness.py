@@ -421,15 +421,57 @@ def test_provenance_accepts_a_fully_satisfied_run():
         ),
         topology=dataclasses.replace(CONFIG.topology, independent_processes=False),
     )
+    # Must be the ACTUAL frozen pin, not an arbitrary digest: a "fully
+    # satisfied" run is by definition one whose corpus matches the campaign's
+    # freeze, and reportability() now enforces that (it previously claimed to
+    # and did not). Read from config rather than hardcoded so this test keeps
+    # testing the real condition after a re-freeze.
+    pinned = provenance._expected_corpus_sha256()
+    assert pinned, "dataset.yaml has no freeze.expected_corpus_sha256 to test against"
     reportable, reasons = provenance.reportability(
         fixed,
         experiment="exp7_search_throughput",
         corpus_type="synthea",
-        corpus_sha256="fd4b7654" + "0" * 56,
+        corpus_sha256=pinned,
         group_faithful=True,
         token_scheme_keyed=True,
     )
     assert reportable, reasons
+
+
+def test_provenance_refuses_a_corpus_that_is_not_the_frozen_one():
+    """A run against a different corpus than the campaign was frozen on must
+    not be reportable.
+
+    Regression guard. reportability() used to only check that a SHA-256 was
+    *present*, while its own message claimed it had been "verified against the
+    frozen pin" — so a run on any other corpus passed the gate. That is the
+    silent data swap dataset.yaml's freeze pin exists to prevent (README §13).
+    """
+    import dataclasses
+
+    fixed = dataclasses.replace(
+        CONFIG,
+        scheduler=dataclasses.replace(
+            CONFIG.scheduler,
+            weights=dataclasses.replace(
+                CONFIG.scheduler.weights, status="fixed", provisional=False
+            ),
+        ),
+        topology=dataclasses.replace(CONFIG.topology, independent_processes=False),
+    )
+    wrong = "0" * 64
+    assert wrong != provenance._expected_corpus_sha256()
+    reportable, reasons = provenance.reportability(
+        fixed,
+        experiment="exp7_search_throughput",
+        corpus_type="synthea",
+        corpus_sha256=wrong,
+        group_faithful=True,
+        token_scheme_keyed=True,
+    )
+    assert not reportable
+    assert any("frozen pin" in reason for reason in reasons), reasons
 
 
 def test_provenance_rejects_a_wrong_repetition_count():

@@ -119,6 +119,131 @@ class SyntheticRecordSource:
 
 
 @dataclass
+class CorpusRecordSource:
+    """Records streamed from the frozen Synthea corpus — the reportable source.
+
+    Interface-compatible with :class:`SyntheticRecordSource` so the experiments
+    do not care which one they were given, but with three real differences:
+
+    * ``corpus_type`` is ``"synthea"`` and ``corpus_sha256`` is the verified
+      digest, so runs built on it can actually satisfy README §4/§15.
+    * Keyword co-occurrence is the corpus's own. Exp. 2's ``n_eff`` depends on
+      exactly that, which is why the synthetic source can never stand in for a
+      reportable number.
+    * It **streams**. ``load_verified_corpus()`` materialises all 1.14M records
+      (~1-2 GB per process — README §14 issue #9); every experiment here needs
+      only the first ``count``, so this verifies the digest and then reads
+      lazily, taking what it needs and stopping.
+
+    DOMAIN LIMIT — a real constraint, deliberately not papered over. The frozen
+    corpus carries exactly ``len(per_domain_counts)`` domains (4: balanced
+    whole-organization buckets, README §4). Exp. 3 sweeps ``d = 2..10``. For
+    ``d <= 4`` each record keeps its real ``dom``, which is the point of using
+    the corpus at all. For ``d > 4`` the corpus simply has no such partition,
+    and inventing one by re-bucketing ``rid`` would silently replace real
+    institutional boundaries with a synthetic split *while still reporting
+    ``corpus_type: synthea``* — the exact class of misrepresentation README §13
+    forbids. So it raises instead, naming the decision.
+    """
+
+    corpus_dir: Optional[Path] = None
+    manifest_path: Optional[Path] = None
+
+    corpus_type: str = field(init=False, default="synthea")
+    corpus_sha256: Optional[str] = field(init=False, default=None)
+    keywords_per_record: int = field(init=False, default=6)
+    domains: Tuple[str, ...] = field(init=False, default=extract_mod.DEFAULT_DOMAIN_NAMES)
+    vocabulary: int = field(init=False, default=0)
+
+    _corpus_path: Path = field(init=False, repr=False)
+    _available_domains: int = field(init=False, repr=False, default=0)
+
+    def __post_init__(self) -> None:
+        from Common.crypto.config import REPO_ROOT
+        from Dataset.corpus import verify_corpus
+        from Common.crypto.config import load_dataset_config
+
+        config = load_dataset_config()
+        output_cfg = config["output"]
+        corpus_dir = Path(self.corpus_dir) if self.corpus_dir else (
+            REPO_ROOT / "Dataset" / "derived"
+        )
+        self._corpus_path = corpus_dir / output_cfg["corpus_filename"]
+        manifest_path = Path(self.manifest_path) if self.manifest_path else (
+            REPO_ROOT / "Dataset" / output_cfg["manifest_filename"]
+        )
+
+        # Verifies the corpus against its manifest (SHA-256) and refuses on
+        # mismatch. The manifest-vs-dataset.yaml freeze pin is a separate,
+        # stricter gate; it is applied by provenance.build_metadata(), which is
+        # what decides reportability, so a development run can proceed here
+        # while a pin mismatch still correctly marks the run non-reportable.
+        manifest = verify_corpus(
+            self._corpus_path, manifest_path, require_reportable=False
+        )
+        self.corpus_type = str(manifest.get("corpus_type", "unknown"))
+        self.corpus_sha256 = manifest.get("corpus_sha256")
+        self.vocabulary = int(manifest.get("keyword_universe_size", 0))
+
+        # Exp. 2 sizes its record count as `index_size // keywords_per_record`,
+        # so this must be the corpus's real mean |W_i|, not a nominal constant.
+        kpr = manifest.get("keywords_per_record") or {}
+        mean = kpr.get("mean")
+        self.keywords_per_record = max(1, int(round(float(mean)))) if mean else 6
+
+        per_domain = manifest.get("per_domain_counts") or {}
+        self._available_domains = len(per_domain)
+        if self._available_domains:
+            self.domains = tuple(
+                extract_mod.DEFAULT_DOMAIN_NAMES[i]
+                if i < len(extract_mod.DEFAULT_DOMAIN_NAMES) else f"dom{i}"
+                for i in range(self._available_domains)
+            )
+
+    def records(self, count: int, *, domains: Optional[int] = None):
+        from Dataset.corpus import read_corpus
+
+        domain_count = self._available_domains if domains is None else domains
+        domain_count = max(int(domain_count), 1)
+        if domain_count > self._available_domains:
+            raise ValueError(
+                f"the frozen corpus has {self._available_domains} domains "
+                f"(per_domain_counts in the manifest), but d={domain_count} was "
+                f"requested. Splitting it further would replace real "
+                f"institutional boundaries with a synthetic partition while "
+                f"still reporting corpus_type={self.corpus_type!r}, which "
+                f"README §13 forbids. This needs a recorded benchmark decision: "
+                f"either cap Exp. 3 at d<={self._available_domains}, or "
+                f"regenerate the corpus with more domains and re-freeze "
+                f"(results-affecting), or state in §V that d>"
+                f"{self._available_domains} uses a sub-partitioned corpus."
+            )
+
+        assignment = extract_mod.BucketedPolicyAssignment(
+            policies_per_domain=2, domains=domain_count
+        )
+        names = self.domains[:domain_count]
+        emitted = 0
+        for record in read_corpus(self._corpus_path):
+            if emitted >= count:
+                break
+            # Records whose real domain falls outside the requested subset are
+            # skipped rather than remapped, so `dom` stays the corpus's own.
+            if record.dom >= domain_count:
+                continue
+            yield extract_mod.extract(
+                record, assignment=assignment, domain_names=names
+            )
+            emitted += 1
+        if emitted < count:
+            raise ValueError(
+                f"corpus exhausted after {emitted} records but {count} were "
+                f"requested at d={domain_count}; the sweep point does not fit "
+                f"this corpus"
+            )
+
+
+@dataclass
 class _SyntheticRecord:
     """Mirrors ``Dataset.corpus.Record``'s field names and shape."""
 
@@ -1004,6 +1129,7 @@ def build_experiment(
 
 __all__ = [
     "SyntheticRecordSource",
+    "CorpusRecordSource",
     "Deployment",
     "build_deployment",
     "EXPERIMENTS",

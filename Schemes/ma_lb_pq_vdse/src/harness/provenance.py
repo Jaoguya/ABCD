@@ -115,6 +115,23 @@ class RunMetadata:
         return path
 
 
+def _expected_corpus_sha256() -> Optional[str]:
+    """dataset.yaml's ``freeze.expected_corpus_sha256``, or None if unset.
+
+    Returns None rather than raising when the config or key is absent: an
+    unset pin means the campaign has not been frozen yet, which is a legitimate
+    early state, not a reportability failure on its own.
+    """
+    try:
+        from Common.crypto.config import load_dataset_config
+
+        freeze = (load_dataset_config().get("freeze") or {})
+        pinned = freeze.get("expected_corpus_sha256")
+        return str(pinned) if pinned else None
+    except Exception:  # noqa: BLE001 - a missing/unreadable pin must not crash a run
+        return None
+
+
 def reportability(
     config: scheme_config.Configuration,
     *,
@@ -151,6 +168,24 @@ def reportability(
             "no corpus SHA-256: the corpus was not loaded and verified against "
             "the frozen pin"
         )
+    else:
+        # The message above promised a comparison against the frozen pin, but
+        # nothing here performed one: a run against a DIFFERENT corpus than the
+        # campaign was frozen on would have passed this gate and been marked
+        # reportable, which is precisely the silent data swap
+        # dataset.yaml's freeze pin exists to prevent (README §13, "The corpus
+        # is frozen"). Dataset/corpus.py guards its own loader, but a scheme
+        # that obtains a digest another way bypassed that entirely. Checked
+        # here so the gate matches what it claims. Added 2026-08-28.
+        pinned = _expected_corpus_sha256()
+        if pinned and pinned != corpus_sha256:
+            reasons.append(
+                f"corpus SHA-256 {corpus_sha256[:12]}... does not match "
+                f"dataset.yaml's frozen pin {pinned[:12]}...; results from a "
+                f"different corpus are not comparable to the campaign "
+                f"(README §13). Either restore the frozen corpus or re-freeze "
+                f"and re-run EVERY scheme."
+            )
 
     if not group_faithful:
         reasons.append(

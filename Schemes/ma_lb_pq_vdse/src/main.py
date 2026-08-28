@@ -23,7 +23,7 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
@@ -103,11 +103,33 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     numbers = parse_experiments(args.experiment)
     scheme_root = Path(__file__).resolve().parent.parent
     output_root = Path(args.output) if args.output else scheme_root
-    source = experiments_mod.SyntheticRecordSource()
 
     def log(message: str) -> None:
         if not args.quiet:
             print(message, flush=True)
+
+    # --dataset used to be accepted and then silently ignored: the source was
+    # hardcoded to SyntheticRecordSource, so every run stamped
+    # corpus_type='synthetic' and could never be reportable no matter what the
+    # caller passed or how the corpus freeze was resolved. Prefer the real
+    # corpus, and fall back only when it genuinely cannot be read -- saying so
+    # rather than degrading quietly.
+    source: Any
+    try:
+        source = experiments_mod.CorpusRecordSource(corpus_dir=args.dataset)
+        log(f"corpus: {source.corpus_type} "
+            f"sha256={(source.corpus_sha256 or 'none')[:12]}... "
+            f"|W_i|~{source.keywords_per_record} "
+            f"domains={len(source.domains)} vocab={source.vocabulary}")
+    except Exception as exc:  # noqa: BLE001 - reported, never swallowed
+        source = experiments_mod.SyntheticRecordSource()
+        log(f"corpus unavailable ({type(exc).__name__}: {exc})")
+        log("  falling back to SyntheticRecordSource -- runs will be marked "
+            "NOT REPORTABLE (README §4 admits only corpus_type 'synthea')")
+        if args.require_reportable:
+            log("REFUSED: --require-reportable was passed but the verified "
+                "corpus could not be loaded")
+            return 2
 
     runs = args.runs if args.runs is not None else config.measurement.repetitions
     warmups = (
