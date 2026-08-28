@@ -1,0 +1,122 @@
+# =============================================================================
+# infra/fabric/docker-compose.yaml — Hyperledger Fabric v2.5 for the benchmark
+# =============================================================================
+# README §1 specifies "Hyperledger Fabric v2.5 (on-chain commitments, off-chain
+# data)" and §11 tells you to bring it up with:
+#
+#     docker compose -f infra/fabric/docker-compose.yaml up -d
+#
+# That file did not exist until 2026-08-28, so the instruction was broken and
+# every run silently used chain/ledger.py's InProcessLedger instead — an
+# in-memory hash chain, which understates Exp. 4's chain-consistency cost. That
+# gap is now a named reportability blocker in provenance.py; this compose file
+# is what lets it actually be cleared.
+#
+# SCOPE — deliberately minimal, and that is a decision, not an oversight.
+# A production Fabric network means an org CA, MSP material, channel artifacts,
+# chaincode packaging and an orderer genesis block. What Exp. 4 and Exp. 6
+# actually measure is the COST OF ANCHORING A COMMITMENT AND READING IT BACK:
+# ordering latency, block cut, and endorsement round-trip. So this runs a
+# single-org solo-orderer network, which reproduces those costs while staying
+# reproducible on one m6i.xlarge.
+#
+# WHAT THAT MEANS FOR A REPORTED NUMBER — state this in §V, do not bury it:
+# a solo orderer has NO consensus round, so it is a LOWER BOUND on a Raft
+# deployment's anchoring latency. It is the conservative direction for the
+# proposed scheme (it does not flatter our own numbers relative to a baseline
+# that anchors less often), but it is not the same as a production network and
+# must not be described as one.
+# =============================================================================
+
+name: abcd-fabric
+
+networks:
+  fabric:
+    name: abcd_fabric
+
+volumes:
+  orderer-data:
+  peer-data:
+
+services:
+  # ---------------------------------------------------------------------------
+  # Orderer — cuts blocks. BatchTimeout is the single most important knob for
+  # Exp. 4/6: it sets the floor on how long an anchor takes to commit.
+  # ---------------------------------------------------------------------------
+  orderer:
+    image: hyperledger/fabric-orderer:2.5
+    container_name: abcd-orderer
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=7050
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+      # TLS off: this is a single-host benchmark network on a private VPC, and
+      # TLS handshake cost would be measured as if it were anchoring cost.
+      # NEVER carry this setting into a deployment that leaves the host.
+      - ORDERER_GENERAL_TLS_ENABLED=false
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+      - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+      - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:7053
+      - ORDERER_ADMIN_TLS_ENABLED=false
+      - ORDERER_METRICS_PROVIDER=disabled
+    volumes:
+      - orderer-data:/var/hyperledger/production/orderer
+    ports:
+      - "7050:7050"
+      - "7053:7053"
+    networks:
+      - fabric
+
+  # ---------------------------------------------------------------------------
+  # Peer — endorses and commits. Holds the world state the scheme reads back
+  # when verifying chain consistency (Exp. 4).
+  # ---------------------------------------------------------------------------
+  peer:
+    image: hyperledger/fabric-peer:2.5
+    container_name: abcd-peer
+    depends_on:
+      - orderer
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_ID=abcd-peer
+      - CORE_PEER_ADDRESS=peer:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+      - CORE_PEER_TLS_ENABLED=false
+      - CORE_PEER_GOSSIP_USELEADERELECTION=true
+      - CORE_PEER_GOSSIP_ORGLEADER=false
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer:7051
+      # LevelDB, not CouchDB: the scheme stores opaque commitments and never
+      # issues a rich query, so CouchDB would add indexing cost to Exp. 4 that
+      # the construction does not incur.
+      - CORE_LEDGER_STATE_STATEDATABASE=goleveldb
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=abcd_fabric
+      - CORE_METRICS_PROVIDER=disabled
+    volumes:
+      - peer-data:/var/hyperledger/production
+      - /var/run/docker.sock:/host/var/run/docker.sock
+    ports:
+      - "7051:7051"
+    networks:
+      - fabric
+
+  # ---------------------------------------------------------------------------
+  # IPFS — README §1 "Storage | IPFS", §11 runs `ipfs daemon`. Encrypted
+  # payloads go off-chain here; only the CID is anchored.
+  # ---------------------------------------------------------------------------
+  ipfs:
+    image: ipfs/kubo:v0.29.0
+    container_name: abcd-ipfs
+    environment:
+      - IPFS_PROFILE=server   # disables local-network discovery on a cloud host
+    volumes:
+      - ./ipfs-data:/data/ipfs
+    ports:
+      - "5001:5001"   # HTTP API — what chain/ipfs.py talks to
+      - "8080:8080"   # gateway
+    networks:
+      - fabric

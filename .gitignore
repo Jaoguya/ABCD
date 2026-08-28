@@ -77,3 +77,4 @@ Thumbs.db
 # Schemes/*/exp*/raw_runs.csv, results.csv, run_meta.json  -> committed results
 # Dataset/dataset_manifest.json                            -> committed provenance
 # Plots/output/*.pdf                                       -> committed figures
+infra/fabric/ipfs-data/
