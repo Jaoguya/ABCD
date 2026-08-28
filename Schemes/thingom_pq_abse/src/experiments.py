@@ -80,6 +80,11 @@ _MP_PLAN: Any = None
 # extra hyperthreads add pool overhead without adding real compute capacity.
 _SEARCH_PROCESSES = 2
 
+# Used only by the feasibility guard, never in a reported number. Held below
+# the 1.94-1.95x actually measured so the guard errs toward attempting a point
+# rather than refusing one it could have finished.
+_PARALLEL_SPEEDUP_FOR_ESTIMATES = 1.7
+
 
 def _mp_search_worker(position: int) -> Tuple[bool, int]:
     """Runs in a forked worker process. Only a plain (bool, int) crosses back
@@ -99,7 +104,22 @@ def _parallel_search(
     to what a single-threaded loop over search_with_plan() would return."""
     global _MP_PARAMS, _MP_INDEX, _MP_TOKEN, _MP_PLAN
     _MP_PARAMS, _MP_INDEX, _MP_TOKEN, _MP_PLAN = params, index, token, plan
-    with mp.Pool(processes=_SEARCH_PROCESSES) as pool:
+    # Explicit fork context, never the platform default. The workers rely
+    # ENTIRELY on inheriting the globals above through fork's copy-on-write —
+    # charm's Element/Pairing objects cannot be pickled, so they can never be
+    # passed as map() arguments. Under spawn (macOS default) or forkserver
+    # (the Linux default from Python 3.14) a worker re-imports this module,
+    # sees _MP_INDEX is None, and every entry raises TypeError. macOS is a
+    # supported development path (MacOS/SETUP.md), so the default must not be
+    # trusted here.
+    if "fork" not in mp.get_all_start_methods():
+        raise RuntimeError(
+            "parallel search requires the 'fork' start method, which this "
+            "platform does not provide. Set _SEARCH_PROCESSES = 1 to run "
+            "single-threaded instead."
+        )
+    ctx = mp.get_context("fork")
+    with ctx.Pool(processes=_SEARCH_PROCESSES) as pool:
         results = pool.map(
             _mp_search_worker, range(len(index)),
             chunksize=max(1, len(index) // 8),
@@ -263,7 +283,7 @@ def experiment_2(
 
     for size in index_sizes:
         keyword = workload.keywords[0]
-        estimate = _estimated_seconds(workload, size, q)
+        estimate = _estimated_seconds(workload, size, q, parallel=True)
         if estimate > max_seconds_per_run:
             result.runs.extend(
                 _budget_exceeded_runs(size, repetitions, estimate, max_seconds_per_run)
@@ -334,11 +354,30 @@ def experiment_3(
     aggregation." Ref[41] has no notion of a domain, so each domain is an
     independent shard searched with its own freshly generated trapdoor.
 
+    NOT PARALLELIZED, unlike ``experiment_2`` — deliberate, and load-bearing.
+    A fresh trapdoor is generated per (domain, token) *inside* the timer,
+    which is the cost this experiment exists to expose, and the fork-inherited
+    globals a worker pool depends on cannot be updated after the pool is
+    forked. Pooling per (domain, token) therefore creates ``d * q`` pools per
+    run — 10 at d=2 but 50 at d=10 — so pool startup cost lands *inside* the
+    timer and scales with ``d``, the swept variable itself. Measured at
+    ~66 ms/pool, that manufactured a ~2.6 s upward drift across d=2..10 and
+    would have put a harness-induced slope into the published figure that
+    looks like scheme behaviour. Single-threaded here is slower but honest;
+    Exp. 2 keeps the pool because there ``q`` is fixed at 5, so the overhead
+    is a constant ~0.08% rather than a slope in the measured variable.
+
     ``total_index_size`` is held constant across the whole ``domain_counts``
     sweep and divided evenly across domains (``shard_size = total /
-    domains``), so total pairings per run — and therefore latency — stays
-    flat in d; only the number of independent trapdoor/search round-trips
-    changes. This is the whole point of the experiment (README §5: "count
+    domains``), so the *search* work — total pairings per run — stays flat in
+    d. Measured latency still rises with d, and legitimately so: the baseline
+    must issue ``d * q`` independent trapdoors inside the timer because it
+    cannot reuse one across domains, which is exactly the cost this experiment
+    exists to expose. At ~20.7 ms/trapdoor that is ~829 ms of real growth from
+    d=2 to d=10, and a clean run measures ~922 ms — i.e. the slope is the
+    mechanism, not overhead. (An earlier parallelised version added ~1.8 s of
+    pool-startup cost on top of that, inflating the slope with a harness
+    artifact; see the note above.) This is the whole point of the experiment (README §5: "count
     trapdoors issued so the mechanism is visible"). An earlier version passed
     a pre-multiplied, domain-count-independent shard size, which made total
     work scale linearly with d instead of staying flat — fixed 2026-08-27.
@@ -361,7 +400,8 @@ def experiment_3(
     keyword = workload.keywords[0]
     for domains in domain_counts:
         shard_size = max(1, total_index_size // domains)
-        estimate = _estimated_seconds(workload, shard_size * domains, q)
+        # parallel=False: experiment_3 runs single-threaded (see its docstring)
+        estimate = _estimated_seconds(workload, shard_size * domains, q, parallel=False)
         if estimate > max_seconds_per_run:
             result.runs.extend(
                 _budget_exceeded_runs(
@@ -389,11 +429,13 @@ def experiment_3(
                         plan = scheme.prepare_query(
                             workload.params, shard[0].structure, token
                         )
-                        hits, _pairings = _parallel_search(
-                            workload.params, shard, token, plan
-                        )
-                        for position in hits:
-                            aggregated.add((domain, position))
+                        # DELIBERATELY SINGLE-THREADED — see note below.
+                        for position, entry in enumerate(shard):
+                            outcome = scheme.search_with_plan(
+                                workload.params, entry, token, plan
+                            )
+                            if outcome.matched:
+                                aggregated.add((domain, position))
             return Measurement(
                 primary=timer.elapsed_ms,
                 secondary_1=float(domains * q),
@@ -414,12 +456,22 @@ def experiment_3(
 # ---------------------------------------------------------------------------
 # Feasibility guard
 # ---------------------------------------------------------------------------
-def _estimated_seconds(workload: Workload, entries: int, q: int) -> float:
+def _estimated_seconds(
+    workload: Workload, entries: int, q: int, *, parallel: bool = False
+) -> float:
     """Rough wall-clock estimate for one run, from a measured unit pairing.
 
     Used ONLY to decide whether to attempt a point. It never becomes a
     reported number — README §13 forbids deriving measurements analytically,
     and a point that is attempted is measured end to end.
+
+    ``parallel`` must match how the caller actually executes. The unit pairing
+    below is timed single-threaded, so an unadjusted estimate over-states a
+    parallelised point by ~2x and could record 30 ``failed:budget_exceeded``
+    runs for a point that would in fact have finished in half the budget. The
+    speedup applied is deliberately conservative (below the 1.94-1.95x
+    measured) so the guard still errs toward attempting a point rather than
+    refusing one it could have completed.
     """
     backend = workload.params.backend
     element = workload.params.i
@@ -429,7 +481,10 @@ def _estimated_seconds(workload: Workload, entries: int, q: int) -> float:
     unit_ms = timer.elapsed_ms / 10
 
     pairings_per_entry = 2 * len(workload.policy_attributes) + 1
-    return (entries * q * pairings_per_entry * unit_ms) / 1000.0
+    seconds = (entries * q * pairings_per_entry * unit_ms) / 1000.0
+    if parallel and _SEARCH_PROCESSES > 1:
+        seconds /= _PARALLEL_SPEEDUP_FOR_ESTIMATES
+    return seconds
 
 
 def _budget_exceeded_runs(

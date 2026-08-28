@@ -62,9 +62,16 @@ EXP1_Q_VALUES = list(range(1, 21))
 # At these values: Exp.2 ~7.94h + Exp.3 ~12.51h = ~20.45h, ~3.55h margin.
 # EXP3_TOTAL_INDEX_SIZE=4_000 was considered and rejected: it lands at
 # ~22.2h, only ~1.8h of margin.
-EXP2_INDEX_SIZES = [20_000]  # was 10_000 before the 2026-08-28 speedup
+# N MUST be a point global.yaml's exp2_search_latency.values actually sweeps
+# ([10000, 50000, 100000, 500000, 1000000]). A brief 2026-08-28 change to
+# 20_000 -- taken because the parallel speedup made it affordable -- aligned
+# with NO other scheme's measurements: Plots/generate_plots.py draws every
+# scheme on one axis, so Ref[41] would have been a lone point at 2x10^4 with
+# nothing to compare it against, defeating the purpose of the figure.
+# Affordability is not the constraint that sets this value; comparability is.
+EXP2_INDEX_SIZES = [10**4]
 EXP3_DOMAIN_COUNTS = list(range(2, 11))
-EXP3_TOTAL_INDEX_SIZE = 3_500  # was 2_000 before the 2026-08-28 speedup; held constant across the d sweep; see experiment_3()
+EXP3_TOTAL_INDEX_SIZE = 2_000  # held constant across the d sweep; see experiment_3()
 
 OUTPUT_DIRS = {
     "1": "exp1_trapdoor_generation",
@@ -300,6 +307,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "native: q independent trapdoors + q independent searches, "
             "client-side intersection (Ref[41] is single-keyword)"
         ),
+        # Provenance for the two 2026-08-28 decisions that change what a
+        # reported number MEANS. SCHEME.md prose is not machine-readable
+        # provenance (README §15), and neither fact is otherwise recoverable
+        # from the outputs: exp3's variable is d, so the held index size
+        # appears in no results.csv column at all.
+        "exp2_search_processes": experiments._SEARCH_PROCESSES,
+        "exp3_search_processes": 1,  # single-threaded on purpose; see experiment_3()
+        "exp2_index_sizes": list(EXP2_INDEX_SIZES),
+        "exp3_total_index_size": EXP3_TOTAL_INDEX_SIZE,
+        "exp3_domain_counts": list(EXP3_DOMAIN_COUNTS),
     }
 
     _print_banner(reportable, blockers, parameters)

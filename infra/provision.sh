@@ -82,21 +82,36 @@ if ! pip install --quiet charm-crypto; then
     tmp=$(mktemp -d)
 
     # PBC is charm's pairing backend and isn't packaged for apt on 22.04/24.04.
-    curl -sLO --output-dir "$tmp" https://crypto.stanford.edu/pbc/files/pbc-0.5.14.tar.gz
+    # Non-fatal, like the charm build below it: PBC exists only to serve that
+    # build, and under `set -euo pipefail` an unguarded failure here would
+    # abort provisioning entirely — skipping the BLAS thread pinning and the
+    # primitive-test gate that follow, over a dependency the script already
+    # tolerates failing.
     (
         cd "$tmp"
+        curl -sLO https://crypto.stanford.edu/pbc/files/pbc-0.5.14.tar.gz
         tar xzf pbc-0.5.14.tar.gz
         cd pbc-0.5.14
         ./configure --prefix=/usr/local
         make -j"$(nproc)"
         sudo make install
         sudo ldconfig
-    )
+    ) || echo "WARNING: PBC build FAILED — charm-crypto will not build either"
 
     # charm's configure.sh probes `which python3-config`, which deadsnakes never
     # installs (only the versioned python3.11-config exists) — it fails with
     # "requires the python development environment" without this symlink.
-    sudo ln -sf "$(command -v "${PYTHON}-config")" /usr/local/bin/python3-config
+    # Resolved into a variable first: if ${PYTHON}-config is absent, an inline
+    # command substitution yields "" and `ln -sf "" ...` fails pointing at ln
+    # rather than at the real cause, the missing ${PYTHON}-dev package.
+    python_config="$(command -v "${PYTHON}-config" || true)"
+    if [[ -z "$python_config" ]]; then
+        echo "WARNING: ${PYTHON}-config not found — install ${PYTHON}-dev."
+        echo "         charm-crypto will fail with 'requires the python"
+        echo "         development environment'."
+    else
+        sudo ln -sf "$python_config" /usr/local/bin/python3-config
+    fi
 
     git clone --depth 1 https://github.com/JHUISI/charm.git "$tmp/charm"
     (

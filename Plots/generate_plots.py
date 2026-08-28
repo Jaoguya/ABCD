@@ -211,16 +211,22 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
         return found
     for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
         matches = sorted(scheme_dir.glob(f"exp{spec.number}_*"))
+        used: Optional[Path] = None
         for exp_dir in matches:
             if not exp_dir.is_dir():
                 continue
             series = read_results(exp_dir / "results.csv", scheme_dir.name)
             if series is not None:
                 found.append(series)
-                break  # first matching directory wins; duplicates reported below
+                used = exp_dir  # the one that actually contributed data
+                break
         if len(matches) > 1:
+            # Name the directory that supplied the data, not matches[0]: the
+            # loop skips directories whose results.csv is missing or unusable,
+            # so the two can differ and reporting the wrong one misleads.
             print(f"  NOTE {scheme_dir.name}: multiple exp{spec.number}_* dirs "
-                  f"{[m.name for m in matches]}; used {matches[0].name}")
+                  f"{[m.name for m in matches]}; used "
+                  f"{used.name if used else 'none (no usable results.csv)'}")
     return found
 
 
@@ -281,7 +287,17 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
     ax.set_xlabel(spec.xlabel)
     ax.set_ylabel(spec.ylabel)
     if spec.log_x:
-        ax.set_xscale("log")
+        # Same guard as log_y below, for the same reason: a log axis silently
+        # drops non-positive values, so a variable_value of 0 would vanish from
+        # the figure without any indication it had been read.
+        all_x = [v for s in series_list for v in s.x]
+        if all_x and min(all_x) > 0:
+            ax.set_xscale("log")
+        else:
+            warnings.append(
+                f"exp{spec.number}: log x-axis requested but data contains "
+                f"non-positive values; drew linear instead so nothing is hidden"
+            )
     if spec.log_y:
         # Only if every plotted value is strictly positive — a zero or negative
         # would be silently dropped by a log axis, which would hide data.

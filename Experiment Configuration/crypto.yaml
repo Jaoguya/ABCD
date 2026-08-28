@@ -177,11 +177,18 @@ thingom_pq_abse:
     # attributes (l = 30)"), and the manuscript's §V never sets one despite
     # declaring u, l and e in its cost-notation table.
     #
-    # 10 matches zhuang_lattice_mabse.attributes.l below, which IS published,
-    # so the two attribute-based baselines are compared at the same policy
-    # size. Ref[41]'s trapdoor is 2u exponentiations and its search is 2u+1
-    # pairings per candidate, so this value places the baseline on Exp. 1 and
-    # Exp. 2 — changing it is results-affecting.
+    # 10 was chosen to match zhuang_lattice_mabse.attributes.l, which WAS
+    # published, so the two attribute-based baselines would be compared at the
+    # same policy size. Ref[52] has since been dropped (2026-08-27) and that
+    # block reduced to a status marker, so the original basis no longer exists
+    # in this file -- the value is retained deliberately rather than silently
+    # re-derived, because changing it now would be results-affecting and would
+    # invalidate the Exp. 1/2 measurements already taken at u=10. If a fresh
+    # justification is ever needed, note that Ref[57] (feng_bl_abse) publishes
+    # no attribute-universe size either, so there is no newer published anchor
+    # to match against. Ref[41]'s trapdoor is 2u exponentiations and its search
+    # is 2u+1 pairings per candidate, so this value places the baseline on
+    # Exp. 1 and Exp. 2.
     u: 10                             # number of user attributes
   multi_keyword:
     # benchmark: Ref[41] is single-keyword. Its trapdoor carries exactly one
