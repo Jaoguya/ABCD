@@ -118,19 +118,42 @@ python3 Dataset/prepare_dataset.py --input ./output_full/csv \
 
 Measured: **≈62 encounters per patient** (not the 2–3 that "encounters per patient" suggests), so 18k patients gives ~1.22M encounters. Turning off the FHIR/CCDA/text exporters matters — FHIR JSON is ~10× the CSV size and is never read.
 
-### Frozen corpus — measured 2026-08-04
+### Frozen corpus (v3) — re-frozen 2026-08-28
 
 Synthea `7e08387`, 38,000 patients, seed 20260804.
 
 | | |
 |---|---|
-| Records | 1,141,072 |
-| Keyword universe | 2,006 distinct |
-| Keyword/document pairs | 36,172,487 |
+| Records | 1,143,792 |
+| Keyword universe | 2,023 distinct |
+| Keyword/document pairs | 36,263,865 |
 | `|W_i|` min / median / mean | **5** / 29 / 31.70 |
-| Zipf exponent | 2.7078 |
-| Domains | **285,268 × 4** (exact) |
-| SHA-256 | `fd4b7654e4c20186163f0b8c390c2c50b4bc4f908bdfbca585779b8d0792dc47` |
+| Zipf exponent | 2.741 |
+| Domains | **285,948 × 4** (exact) |
+| SHA-256 | `7a4e683534eff570d042e323c3ee16b1c5ff9d80a7bc2dd54976a79ab090a0f0` |
+
+**Why v3 and not v2.** v2 (`fd4b7654…`, 1,141,072 records, frozen 2026-08-04)
+lived only on an instance that was terminated, and the corpus is git-ignored,
+so it is gone. Regenerating with the documented recipe — same Synthea commit,
+seeds, patient count and export flags — produced this corpus instead, because
+Synthea generates patients across threads: a fixed seed pins the random
+*stream* but not which patient consumes which draw. The recipe is reproducible
+in shape, not in bytes, so regenerating again would yield a *fourth* digest
+rather than recovering v2. **No results existed against v2** (checked on both
+instances before it was lost), so nothing is invalidated. v3 satisfies every
+property v2 was selected for: `synthea`, min `|W_i|` = 5 against the published
+`q=5`, and exactly balanced domains.
+
+**v3 *is* re-derivable**, unlike v2: the raw Synthea CSVs are preserved at
+`~/synthea/output_full/csv` in AMI `ami-0feb3b14b4ea27844`, and re-running
+`prepare_dataset.py` over those fixed CSVs is deterministic — the
+non-determinism is in Synthea's *generation*, not in extraction. Keep that AMI.
+
+**Domain count is a hard limit on Exp. 3.** The corpus carries exactly 4
+domains (real organization boundaries), but §V sweeps `d = 2..10`.
+`CorpusRecordSource` refuses `d > 4` rather than re-bucketing records into a
+synthetic split while still reporting `corpus_type: synthea`. This needs an
+author decision — see §14.
 
 `min_keywords_per_record: 5` comes from the published `q=5` — a record with fewer keywords than the query size can never match a conjunctive query, so it would be index weight that is never returned. Domains are balanced by packing whole organizations largest-first, which keeps them real institutional boundaries while satisfying §V's "uniformly distributed".
 

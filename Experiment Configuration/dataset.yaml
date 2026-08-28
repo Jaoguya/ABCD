@@ -236,7 +236,31 @@ freeze:
   # conjunctive query — and uneven domains (34/21/23/22) contradicting §V's
   # "uniformly distributed". Archived at ~/corpus_v1_archive/ on the
   # experiment host; never used for results.
-  expected_corpus_sha256: fd4b7654e4c20186163f0b8c390c2c50b4bc4f908bdfbca585779b8d0792dc47
-  frozen_on: 2026-08-04
+  # RE-FROZEN 2026-08-28 onto corpus v3.
+  #
+  # v2 (fd4b7654..., 1,141,072 records, frozen 2026-08-04) existed only on an
+  # instance that was terminated, and the corpus is git-ignored, so it is gone.
+  # Regenerating with the documented recipe -- same Synthea commit 7e08387,
+  # same seeds (-s 20260804 -cs 20260804), same 38,000 patients, same export
+  # flags -- produced 7a4e6835..., NOT a byte-identical v2. Synthea generates
+  # patients across threads, so a fixed seed pins the random stream but not
+  # which patient consumes which draw; the recipe is therefore reproducible in
+  # shape but not in bytes. Regenerating again would yield a fourth distinct
+  # digest, not v2, so re-pinning is the only terminating option.
+  #
+  # Nothing is invalidated: no results.csv or run_meta.json was ever produced
+  # against v2 (checked on both instances before it was lost). v3 satisfies
+  # every property v2 was chosen for -- corpus_type synthea, min |W_i| = 5
+  # against the published q=5, and domains balanced exactly (285,948 x 4).
+  # It differs from v2 only in the ways thread interleaving would predict:
+  # 1,143,792 records (v2: 1,141,072), 2,023 keywords (2,006), Zipf 2.741
+  # (2.7078).
+  #
+  # The raw Synthea CSVs are preserved at ~/synthea/output_full/csv in AMI
+  # ami-0feb3b14b4ea27844: re-running prepare_dataset.py over THOSE fixed CSVs
+  # is deterministic (the non-determinism is in Synthea's generation, not in
+  # extraction), so v3 is re-derivable as long as that AMI survives.
+  expected_corpus_sha256: 7a4e683534eff570d042e323c3ee16b1c5ff9d80a7bc2dd54976a79ab090a0f0
+  frozen_on: 2026-08-28
   # Set false only for local development runs against the synthetic corpus.
   require_reportable_corpus: true
