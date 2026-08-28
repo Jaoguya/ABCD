@@ -195,7 +195,14 @@ def reportability(
             "Type-III backend (crypto.yaml: backend_implemented: false)"
         )
 
-    if not ledger_faithful:
+    # Scoped to the experiments whose MEASURED path actually touches the chain,
+    # rather than blanket. Exp. 4 times "Merkle proof, Commit_i* recomputation,
+    # CHAIN CONSISTENCY" and Exp. 6 times IAS through to blockchain anchoring
+    # (README §5, Phase VII Step 7). Exp. 1/2/3/5/7/8 never read or write the
+    # ledger on a timed path, so blocking them on it would be a false blocker --
+    # and a gate that fires when it should not trains readers to ignore it.
+    if experiment in ("exp4_verification_overhead", "exp6_authorization_sync") \
+            and not ledger_faithful:
         # README §1 states the ledger is Hyperledger Fabric v2.5, but the
         # harness runs chain.ledger.InProcessLedger -- whose OWN docstring says
         # it is "NOT a substitute for Fabric once Fog Search Nodes become
