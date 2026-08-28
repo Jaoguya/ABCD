@@ -8,7 +8,19 @@ questions and can legitimately disagree:
                   costs $0.01 per get-cost-and-usage call.
   EC2 describe    what is running right now, hence the burn rate. Free.
 
-Reports only. Never stops, starts, or terminates anything.
+SCOPE — THIS PROJECT ONLY (user instruction, 2026-08-28):
+"Focus on my project only, don't ever touch other instance that not ours."
+
+The account also hosts unrelated projects (BVCRSA, Blockchain_BVCRSA, SSO,
+test-, EKS/ECR). Those are out of scope in every respect and must never be
+stopped, started, terminated, tagged or modified -- not even when obviously
+wasteful, because that is someone else's call. Project membership is defined
+by the tag Project=OJCOMS and by nothing else: not names, not instance types,
+not launch times.
+
+This script reports only. It never stops, starts, or terminates anything, so
+--all-account is a reporting flag and grants no permission to act on what it
+shows.
 """
 
 from __future__ import annotations
@@ -55,9 +67,21 @@ def money(value: float) -> str:
 # ---------------------------------------------------------------------------
 # Live state — free
 # ---------------------------------------------------------------------------
-def instances() -> List[Dict[str, Any]]:
+PROJECT_TAG_KEY = "Project"
+PROJECT_TAG_VALUE = "OJCOMS"
+
+
+def instances(all_account: bool = False) -> List[Dict[str, Any]]:
+    """Project instances by default; the whole account only for reporting.
+
+    Filtering happens SERVER-SIDE so out-of-scope instances are not even
+    retrieved in the default path -- there is then nothing for a later change
+    to accidentally act upon.
+    """
+    filters = ([] if all_account else
+               ["--filters", f"Name=tag:{PROJECT_TAG_KEY},Values={PROJECT_TAG_VALUE}"])
     data = aws_json([
-        "ec2", "describe-instances",
+        "ec2", "describe-instances", *filters,
         "--query",
         "Reservations[*].Instances[*].{Id:InstanceId,Type:InstanceType,"
         "State:State.Name,Name:Tags[?Key=='Name']|[0].Value,"
@@ -105,8 +129,12 @@ def hourly_rate(instance_type: str, region: str = "us-east-1") -> Tuple[float, b
         return FALLBACK_HOURLY.get(instance_type, 0.0), True
 
 
-def report_running(show_storage: bool = True) -> float:
-    rows = instances()
+def report_running(show_storage: bool = True,
+                   all_account: bool = False) -> float:
+    rows = instances(all_account=all_account)
+    scope = "ENTIRE ACCOUNT (reporting only)" if all_account else (
+        f"{PROJECT_TAG_KEY}={PROJECT_TAG_VALUE} only")
+    print(f"scope: {scope}\n")
     running = [i for i in rows if i.get("State") == "running"]
     stopped = [i for i in rows if i.get("State") == "stopped"]
 
@@ -228,6 +256,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--running", action="store_true",
                         help="live state only; makes NO Cost Explorer call "
                              "(free)")
+    parser.add_argument("--all-account", action="store_true",
+                        help="include instances outside Project=OJCOMS. "
+                             "REPORTING ONLY -- they are never to be modified")
     args = parser.parse_args(argv)
 
     if shutil.which("aws") is None:
@@ -239,7 +270,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     print(f"account {json.loads(out).get('Account', '?')}\n")
 
-    burn = report_running()
+    burn = report_running(all_account=args.all_account)
     if not args.running:
         cost_explorer(args.days, args.by_instance)
         if burn > 0:

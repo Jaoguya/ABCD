@@ -7,6 +7,33 @@ description: Report AWS spend for this project's EC2 fleet - total to date, per-
 
 Answers "how much have I spent, and what is costing me money right now."
 
+## SCOPE — this project only. Never touch anything else.
+
+**Hard rule, from the user, 2026-08-28:**
+
+> Focus on my project only, don't ever touch other instance that not our[s].
+
+This AWS account also runs instances belonging to **other, unrelated
+projects** (BVCRSA, Blockchain_BVCRSA, SSO, test-, EKS/ECR resources). They
+are **out of scope in every respect**:
+
+- **Never stop, start, terminate, reboot, resize, tag, or modify them.**
+- **Never create, delete, or modify their volumes, snapshots, AMIs, security
+  groups, or networking.**
+- Do not act on them even when they look obviously wasteful — an idle
+  instance up for a year, or an unattached volume, is still someone else's
+  decision. Report it once if genuinely notable, then leave it alone.
+
+**This project's resources are exactly those tagged `Project=OJCOMS`**
+(instance `OJCOMS` plus the `abcd-worker` fleet). That tag is the single
+source of truth; do not infer membership from names, instance types, or
+launch times.
+
+`aws_cost.py` filters on that tag by default. `--all-account` exists only
+because a billed total is account-wide and cannot be attributed otherwise —
+it is a **reporting** flag and confers no permission to act on anything it
+displays.
+
 Two independent sources, because they answer different questions and can
 legitimately disagree:
 
@@ -26,10 +53,15 @@ python3 .claude/skills/aws-cost/scripts/aws_cost.py             # summary: MTD +
 python3 .claude/skills/aws-cost/scripts/aws_cost.py --days 7    # last 7 days, daily
 python3 .claude/skills/aws-cost/scripts/aws_cost.py --by-instance
 python3 .claude/skills/aws-cost/scripts/aws_cost.py --running   # free: skip Cost Explorer entirely
+python3 .claude/skills/aws-cost/scripts/aws_cost.py --all-account  # reporting only, see SCOPE
 ```
 
 `--running` makes no Cost Explorer call, so it costs nothing — prefer it when
 the question is only "what is billing right now".
+
+Default output covers **only `Project=OJCOMS`**. Anything outside that tag is
+listed solely under `--all-account`, and only so an account-wide bill can be
+explained; it is never a target for action.
 
 ## Reading the output
 
