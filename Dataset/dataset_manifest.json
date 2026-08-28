@@ -2,14 +2,20 @@
   "corpus_version": 1,
   "corpus_type": "synthea",
   "corpus_filename": "corpus.jsonl",
-  "corpus_sha256": "7a4e683534eff570d042e323c3ee16b1c5ff9d80a7bc2dd54976a79ab090a0f0",
+  "corpus_sha256": "e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0",
   "records": 1143792,
-  "domains": 4,
+  "domains": 10,
   "per_domain_counts": {
-    "0": 285948,
-    "1": 285948,
-    "2": 285948,
-    "3": 285948
+    "0": 114380,
+    "1": 114380,
+    "2": 114379,
+    "3": 114379,
+    "4": 114379,
+    "5": 114379,
+    "6": 114379,
+    "7": 114379,
+    "8": 114379,
+    "9": 114379
   },
   "keyword_universe_size": 2023,
   "keyword_document_pairs": 36263865,
@@ -229,15 +235,15 @@
       }
     ]
   },
-  "generated_utc": "2026-08-23T16:58:07+00:00",
-  "git_commit": "d6944a328034a6f60ea087e8d14d9eb1c7d7bcb3",
+  "generated_utc": "2026-08-28T11:01:26+00:00",
+  "git_commit": "d65df6bbf8ed6265ecebf51f7348f46e03050b59",
   "params": {
     "source": "synthea",
     "synthea_version": "7e08387",
     "export_format": "csv",
     "record_unit": "encounter",
     "domain_assignment": "balanced_organizations",
-    "domains": 4,
+    "domains": 10,
     "limit": null,
     "keyword_filter": {
       "min_document_frequency": 5,
@@ -321,9 +327,9 @@
     "generator": "prepare_dataset.py"
   },
   "config_hashes": {
-    "crypto.yaml": "9c9b289fbf9fa2bb105ab556bc815898f22dfdf21c3fd9e631f5feffb5888ae8",
-    "dataset.yaml": "260d3685c5432d5f6ff9668c400ec641db81cbc45c38893b972bba8e529b5ae6",
-    "global.yaml": "154ad34d0c6a5ab98d3bc84059f5ba114776d05c168d6b2291a6453437aa74f9",
+    "crypto.yaml": "2ba5e3713fe3450705216c053437b1b68cfaf9a883061b97a91ec8309c4600d9",
+    "dataset.yaml": "3d136839556214fc7680d122062f030776dd74ba9b4ae38c6d90f49d17d3e155",
+    "global.yaml": "fa5036d3e3e05d986324cbf924dba71e55b28d4ed28778081609ce925dd76090",
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "bfc10dc2f69148f1084b6b78368528f2000ce9c171776d006053e808cd3ce1ca"
   },

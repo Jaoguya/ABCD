@@ -95,7 +95,7 @@ In Exp. 3 the baselines run in native mode: `d` independent trapdoors and `d` se
 | Source | **Synthea** (MITRE), Apache 2.0 — Walonoski *et al.*, *JAMIA* 25(3), 2018, doi: 10.1093/jamia/ocx079 |
 | Record unit | One clinical encounter |
 | Keyword sources | SNOMED conditions/procedures, RxNorm medications, LOINC observations (quantile-binned), CVX immunizations, allergies, devices, care plans, imaging body sites |
-| Domains | 4, derived from `encounters.ORGANIZATION` |
+| Domains | 10, derived from `encounters.ORGANIZATION` (raised from 4 on 2026-08-28 so Exp. 3 can sweep its published `d=2..10`) |
 | Record schema | `W_i` + `(PID_i, VID_i, Dom_i, TS_i)` |
 
 Two corpus types: **`synthea`** (reportable) and **`synthetic`** (`synthetic_generator.py`, a fitted Zipf law with no clinical structure — development only). Both produce identical file formats; the manifest's `corpus_type` distinguishes them.
@@ -118,7 +118,7 @@ python3 Dataset/prepare_dataset.py --input ./output_full/csv \
 
 Measured: **≈62 encounters per patient** (not the 2–3 that "encounters per patient" suggests), so 18k patients gives ~1.22M encounters. Turning off the FHIR/CCDA/text exporters matters — FHIR JSON is ~10× the CSV size and is never read.
 
-### Frozen corpus (v3) — re-frozen 2026-08-28
+### Frozen corpus (v4) — re-frozen 2026-08-28
 
 Synthea `7e08387`, 38,000 patients, seed 20260804.
 
@@ -129,8 +129,23 @@ Synthea `7e08387`, 38,000 patients, seed 20260804.
 | Keyword/document pairs | 36,263,865 |
 | `|W_i|` min / median / mean | **5** / 29 / 31.70 |
 | Zipf exponent | 2.741 |
-| Domains | **285,948 × 4** (exact) |
-| SHA-256 | `7a4e683534eff570d042e323c3ee16b1c5ff9d80a7bc2dd54976a79ab090a0f0` |
+| Domains | **10**, 114,379–114,380 each (0.001% imbalance) |
+| SHA-256 | `e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0` |
+
+**Why 10 domains.** v3 carried 4, but §V sweeps Exp. 3 over `d = 2..10`, so
+three of five sweep points could not run at all. Rebuilt with `--domains 10`.
+This required no Synthea regeneration — only the extraction step re-ran over
+the preserved CSVs, which is deterministic — so records, keyword universe,
+`|W_i|` distribution and Zipf exponent are **identical** to v3; only the
+domain partition changed. The 1,195 distinct organizations pack into 10
+near-exact buckets (largest single org is 74,718 encounters, well under the
+259,338 per-domain ideal), so domains remain real institutional boundaries
+rather than an arbitrary split.
+
+Note `global.yaml defaults.domains` stays at **4** — that is §V's published
+default for Exp. 1/2/4/5/6 and is a different quantity from how many domains
+the corpus can *supply*. The config validator checks coverage
+(`corpus.domains >= max(exp3 sweep)`), not equality.
 
 **Why v3 and not v2.** v2 (`fd4b7654…`, 1,141,072 records, frozen 2026-08-04)
 lived only on an instance that was terminated, and the corpus is git-ignored,

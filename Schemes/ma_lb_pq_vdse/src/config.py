@@ -751,11 +751,36 @@ class Configuration:
         # global.yaml vs dataset.yaml, which owns the corpus range.
         dataset = load_dataset_config()
         dataset_corpus = dataset.get("corpus") or {}
-        if "domains" in dataset_corpus and int(dataset_corpus["domains"]) != self.defaults.domains:
-            raise ConfigError(
-                f"global.yaml domains={self.defaults.domains} but dataset.yaml "
-                f"corpus.domains={dataset_corpus['domains']}"
-            )
+        # These are two DIFFERENT quantities and equality was the wrong test.
+        # `global.yaml defaults.domains` is the published §V default (4,
+        # "four administrative healthcare domains") used by Exp. 1/2/4/5/6.
+        # `dataset.yaml corpus.domains` is how many domains the corpus can
+        # SUPPLY, which must cover the largest d that Exp. 3 sweeps (10). The
+        # corpus was rebuilt with 10 domains on 2026-08-28 precisely so Exp. 3
+        # could run its published range; requiring equality would have forced
+        # the §V default to 10 as well, contradicting the paper and changing
+        # every other experiment's configuration.
+        #
+        # The real constraint is coverage: the corpus must supply at least the
+        # default, and at least the widest sweep point.
+        if "domains" in dataset_corpus:
+            available = int(dataset_corpus["domains"])
+            if available < self.defaults.domains:
+                raise ConfigError(
+                    f"dataset.yaml corpus.domains={available} cannot supply "
+                    f"global.yaml's default domains={self.defaults.domains}"
+                )
+            try:
+                widest = max(int(v) for v in self.experiment("exp3").values)
+            except Exception:  # noqa: BLE001 - exp3 may be absent in a subset config
+                widest = self.defaults.domains
+            if available < widest:
+                raise ConfigError(
+                    f"dataset.yaml corpus.domains={available} cannot supply "
+                    f"exp3's widest sweep point d={widest}. Rebuild the corpus "
+                    f"with --domains {widest} (and re-freeze), or narrow the "
+                    f"exp3 sweep in global.yaml."
+                )
         exp2 = self.experiment("exp2")
         low, high = min(exp2.values), max(exp2.values)
         if "min_records" in dataset_corpus and low < int(dataset_corpus["min_records"]):

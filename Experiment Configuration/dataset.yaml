@@ -20,7 +20,8 @@ corpus:
   min_records: 10000                  # 10^4   — README §4
   max_records: 1000000                # 10^6   — README §4
   default_records: 100000             # 10^5   — README §6 (benchmark choice)
-  domains: 4                          # README §6, Paper §V
+  domains: 10                         # raised from 4 on 2026-08-28 so Exp. 3 can
+                                      # sweep its published d=2..10 range
   domain_split: uniform               # README §4 "Uniform across 4 domains"
 
   # Domain assignment is a deterministic function of the patient identifier,
@@ -260,7 +261,9 @@ freeze:
   # ami-0feb3b14b4ea27844: re-running prepare_dataset.py over THOSE fixed CSVs
   # is deterministic (the non-determinism is in Synthea's generation, not in
   # extraction), so v3 is re-derivable as long as that AMI survives.
-  expected_corpus_sha256: 7a4e683534eff570d042e323c3ee16b1c5ff9d80a7bc2dd54976a79ab090a0f0
+  # SUPERSEDED 2026-08-28 by v4 (10 domains) -- see below.
+  #   v3: 7a4e6835... 4 domains, 285,948 x 4
+  expected_corpus_sha256: e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0
   frozen_on: 2026-08-28
   # Set false only for local development runs against the synthetic corpus.
   require_reportable_corpus: true
