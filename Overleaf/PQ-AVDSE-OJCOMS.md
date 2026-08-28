@@ -1,3 +1,5 @@
+6622770764
+
 ::: keywords
 EHRs, dynamic symmetric searchable encryption, bloom filter,
 post-quantum, blockchain, foreward privacy, backword privacy.
@@ -43,7 +45,7 @@ Learning With Errors (LWE)-based searchable encryption, lattice-based
 cryptographic techniques, and post-quantum secure data-sharing
 frameworks to protect outsourced data against future quantum adversaries
 while preserving secure search and fine-grained access
-control [@ref16; @ref41; @ref52; @ref54; @ref55]. However, these works
+control [@ref16; @ref52; @ref54; @ref55; @ref57]. However, these works
 primarily focus on quantum-resistant cryptographic primitives, secure
 storage, or encrypted query processing, with limited consideration of
 dynamic searchable-index maintenance, multi-authority authorization,
@@ -146,7 +148,8 @@ traversal in continuously evolving multi-domain IoMT environments.
   Deebak and Hwang [@ref51]        $\times$        $\times$        $\times$       $\checkmark$        $\times$          $\times$         $\times$
   Zhuang *et al.* [@ref52]       $\checkmark$      $\times$        $\times$         $\times$          $\times$          $\times$       $\checkmark$
   Chen *et al.* [@ref53]           $\times$        $\times$        $\times$         $\times$          $\times$          $\times$         $\times$
-  Perera and Fugkeaw [@ref54]      $\times$      $\checkmark$      $\times$         $\times$          $\times$          $\times$       $\checkmark$
+  Perera and Fugkeaw [@ref54]      $\times$      $\checkmark$      $\times$       $\checkmark$      $\checkmark$        $\times$       $\checkmark$
+  Feng *et al.* [@ref57]           $\times$        $\times$        $\times$       $\checkmark$        $\times$          $\times$       $\checkmark$
   **Proposed**                   $\checkmark$    $\checkmark$    $\checkmark$     $\checkmark$      $\checkmark$      $\checkmark$     $\checkmark$
   ----------------------------- -------------- ---------------- --------------- ---------------- ------------------- --------------- ----------------
 :::
@@ -178,7 +181,7 @@ al.* [@ref40], while Thingom [@ref41] introduced forward-secure
 searchable encryption. Recent Dynamic Searchable Symmetric Encryption
 (DSSE) schemes have significantly improved dynamic updates,
 forward/backward privacy, expressive queries, and multi-user
-support [@ref29; @ref33; @ref35; @ref36; @ref37; @ref38; @ref42; @ref45].
+support [@ref29; @ref33; @ref34; @ref35; @ref36; @ref37; @ref38; @ref42; @ref45].
 To ensure search correctness, numerous verifiable searchable encryption
 (VSE) schemes have integrated Merkle authentication, authenticated data
 structures, blockchain auditing, and cryptographic
@@ -200,11 +203,16 @@ multi-authority ABE for Industrial IoT. Other studies explored
 certificateless searchable encryption [@ref19], LWE-based multi-writer
 searchable encryption [@ref16], multi-user searchable
 encryption [@ref17], divertible searchable encryption [@ref18], and
-multi-client encrypted search [@ref15]. Despite these advances, existing
-multi-authority schemes primarily concentrate on cryptographic
-authorization and key management, while overlooking dynamic searchable
-encryption over continuously generated IoMT data and intelligent
-workload balancing across distributed fog-cloud infrastructures.
+multi-client encrypted search [@ref15]. Complementary lines of work
+address keyword-level revocation in device--edge--cloud EHR
+sharing [@ref44] and time-controlled revocable keyword search for mobile
+e-health [@ref49], both of which target dynamic authorization but
+without post-quantum guarantees or workload-aware search execution.
+Despite these advances, existing multi-authority schemes primarily
+concentrate on cryptographic authorization and key management, while
+overlooking dynamic searchable encryption over continuously generated
+IoMT data and intelligent workload balancing across distributed
+fog-cloud infrastructures.
 
 Overall, existing research has advanced blockchain-assisted healthcare
 sharing, dynamic and verifiable searchable encryption, and
@@ -227,11 +235,17 @@ Representative DSSE and VDSE schemes [@ref29; @ref35; @ref46] improve
 dynamic updates, search privacy, and retrieval verification, yet
 generally assume centralized search processing and do not provide
 blockchain-backed auditing or quantum-resistant security. Recent
-lattice-/post-quantum approaches [@ref16; @ref41; @ref52; @ref54]
+lattice-/post-quantum approaches [@ref16; @ref52; @ref54; @ref57]
 strengthen cryptographic resilience against quantum adversaries but
 primarily focus on secure searchable-encryption constructions rather
 than scalable authorization management, verifiable retrieval, and
-distributed search orchestration. Blockchain-assisted healthcare
+distributed search orchestration. Notably, Feng *et al*. [@ref57]
+achieve constant-time permission revocation through an on-chain
+revocation list, but support only single-keyword exact matching and
+provide no verifiable retrieval of search results. Thingom *et
+al*. [@ref41], although presented as a post-quantum construction, rest
+on the Decisional Bilinear Diffie--Hellman assumption, which is not
+quantum-resistant. Blockchain-assisted healthcare
 frameworks [@ref47; @ref51] enhance decentralized trust and auditability
 but do not jointly support dynamic searchable encryption and verifiable
 retrieval, while the load-balanced framework of Perera and
@@ -264,7 +278,7 @@ encryption, adaptive load balancing, and blockchain-assisted auditing.
 The system consists of the following entities.
 
 <figure id="fig:system" data-latex-placement="!t">
-<img src="./MA-LB-PQ-VDSE System Model.png" />
+<img src="MA-LB-PQ-VDSE System Model.png" />
 <figcaption>Overall system architecture of the proposed MA-LB-PQ-VDSE
 framework.</figcaption>
 </figure>
@@ -344,7 +358,6 @@ and verifiable retrieval. Table [1](#tab:notation){reference-type="ref"
 reference="tab:notation"} summarizes the primary notations used
 throughout the protocol.
 
-::: {#tab:notation}
   **Symbol**     **Description**
   -------------- -----------------------------------------
   $AA_i$         $i$th Attribute Authority
@@ -364,8 +377,7 @@ throughout the protocol.
   $FSN_j$        $j$th Fog Search Node
   $Score_j$      Load-balancing score of $FSN_j$
 
-  : Summary of Major Notations
-:::
+  : Summary of Major Notations {#tab:notation}
 
 ### **Phase I: System Initialization** {#phase-i-system-initialization .unnumbered}
 
@@ -1663,16 +1675,15 @@ $\square$
 
 This section evaluates the proposed framework through analytical
 computation-cost comparison and experimental performance evaluation.
-Four representative searchable encryption schemes are selected as
+Three representative searchable encryption schemes are selected as
 baselines. Specifically, Guo *et al*. [@ref35] represents verifiable
-dynamic searchable encryption, XB-Muse [@ref36] represents
-state-of-the-art dynamic searchable encryption, Thingom *et
-al*. [@ref41] represents multi-authority attribute-based searchable
-encryption, and Zhuang *et al*. [@ref52] represents lattice-based
-post-quantum searchable encryption. Together, these baselines cover the
-major research directions in searchable encryption, including dynamic
-index maintenance, verifiable retrieval, multi-authority authorization,
-and quantum-resistant cryptographic constructions.
+dynamic searchable encryption, Thingom *et al*. [@ref41] represents
+pairing-based attribute-based searchable encryption, and Perera and
+Fugkeaw [@ref54] represent lattice-based post-quantum searchable
+encryption. Together, these baselines cover the major research
+directions in searchable encryption, including dynamic index
+maintenance, verifiable retrieval, multi-authority authorization, and
+quantum-resistant cryptographic constructions.
 
 ## Computation Cost Analysis
 
@@ -1686,7 +1697,6 @@ synchronization.
 
 The notation used in the analysis is summarized below.
 
-::: {#tab:cost-notation}
   **Notation**           **Description**
   ---------------------- -----------------------------------------------------------
   $q$                    Number of queried keywords
@@ -1709,31 +1719,34 @@ The notation used in the analysis is summarized below.
   $T_{\mathrm{Exp}}$     One modular exponentiation (or scalar multiplication)
   $T_P$                  One bilinear pairing operation
   $T_{\mathrm{Samp}}$    One lattice sampling operation
+  $T_{\mathrm{NTT}}$     One NTT-based polynomial multiplication over $R_q$
   $T_{\mathrm{Basis}}$   One lattice basis delegation/update operation
 
-  : Notation used in the computation-cost analysis.
-:::
+  : Notation used in the computation-cost analysis. {#tab:cost-notation}
 
 ::: table*
-  ---------------------------- ----------------- ------------ ----------------- ------------------ ---------------------
-  **Scheme**                     **Trapdoor**     **Search**     **Keyword**     **Verification**    **Authorization**
-                                **Generation**                   **Update**                         **Synchronization**
-  Guo *et al*. [@ref35]            $O(d)T_P$                                                       
-  $(T_P+T_H)$                                                                                      
-  $(T_P+T_H)$                      $O(x)T_H$         N/A                                           
-  XB-Muse [@ref36]                 $O(d)T_P$                                                       
-  $(T_P+T_E)$                   $O(1)(T_P+T_H)$      N/A             N/A                           
-  Thingom *et al*. [@ref41]                                                                        
-  $(T_H+T_E)+dT_B$                                                                                 
-  $(T_E+T_B)$                         N/A            N/A             N/A                           
-  Zhuang *et al*. [@ref52]        $O(dl)T_S$                                                       
-  $(T_S+T_H)$                   $O(1)(T_S+T_D)$      N/A       $O(1)(T_S+T_D)$                     
-  **Proposed**                     $O(q)T_P$                                                       
-  $+O(n_{\rm eff})(T_F+T_H)$                                                                       
-  $+O(\log n)T_M$                                                                                  
-  $+O(d)T_{Sig}$                                                                                   
-  $+O(\log d)T_M$                                                                                  
-  ---------------------------- ----------------- ------------ ----------------- ------------------ ---------------------
+  ---------------------------------------- -------------------------- ------------ ------------- ------------------------ ---------------------
+  **Scheme**                                      **Trapdoor**         **Search**   **Keyword**      **Verification**       **Authorization**
+                                                 **Generation**                     **Update**                             **Synchronization**
+  Guo *et al*. [@ref35]                            $O(d)T_P$                                                              
+  $(T_P+T_H)$                                                                                                             
+  $(T_P+T_H)$                                      $O(x)T_H$              N/A                                             
+  XB-Muse [@ref36]                                 $O(d)T_P$                                                              
+  $(T_P+T_E)$                                   $O(1)(T_P+T_H)$           N/A           N/A                               
+  Thingom *et al*. [@ref41]                                                                                               
+  $(T_H+T_E)+dT_B$                                                                                                        
+  $(T_E+T_B)$                                         N/A                 N/A           N/A                               
+  Feng *et al*. [@ref57]                                                                                                  
+  $(T_{\mathrm{Samp}}+T_{\mathrm{NTT}})$    $O(N n)T_{\mathrm{Exp}}$      N/A           N/A       $O(1)T_{\mathrm{Sig}}$  
+  Perera and Fugkeaw [@ref54]                $O(q)T_{\mathrm{PRF}}$                                                       
+  $(T_{\mathrm{BF}}+T_H)$                             N/A                                                                 
+  $(T_{\mathrm{MT}}+T_{\mathrm{Sig}})$                N/A                                                                 
+  **Proposed**                                     $O(q)T_P$                                                              
+  $+O(n_{\rm eff})(T_F+T_H)$                                                                                              
+  $+O(\log n)T_M$                                                                                                         
+  $+O(d)T_{Sig}$                                                                                                          
+  $+O(\log d)T_M$                                                                                                         
+  ---------------------------------------- -------------------------- ------------ ------------- ------------------------ ---------------------
 :::
 
 Table [\[tab:cost\]](#tab:cost){reference-type="ref"
@@ -1766,12 +1779,13 @@ authorization-aware, and post-quantum-secure IoMT data sharing.
 ### Experimental Setup
 
 The proposed framework was implemented in Python 3.11 and evaluated on
-Amazon AWS EC2 c6i.xlarge instances, each equipped with 4 vCPUs and 8 GB
-RAM. Four Fog Search Nodes and one cloud server were deployed within an
-AWS Virtual Private Cloud (VPC) to emulate a distributed cross-domain
-IoMT healthcare environment. Each FSN independently maintains
-authorization-aware searchable indexes and performs encrypted search,
-while the cloud server stores encrypted EHRs and blockchain metadata.
+Amazon AWS EC2 m6i.xlarge instances, each equipped with 4 vCPUs and
+16 GB RAM. Four Fog Search Nodes and one cloud server were deployed
+within an AWS Virtual Private Cloud (VPC) to emulate a distributed
+cross-domain IoMT healthcare environment. Each FSN independently
+maintains authorization-aware searchable indexes and performs encrypted
+search, while the cloud server stores encrypted EHRs and blockchain
+metadata.
 
 The framework employs ML-KEM-768 for post-quantum secure key
 establishment, AES-256-GCM for symmetric encryption, SHA-256 for hashing
@@ -1779,39 +1793,57 @@ and Merkle-tree construction, and Hyperledger Fabric v2.5 for
 maintaining authorization commitments and audit records. Search indexes
 are implemented using bitmap-based authorization-aware filtering
 combined with authenticated Merkle trees to support efficient encrypted
-retrieval and verification.
+retrieval and verification. [ Experiments were conducted using the
+Synthea synthetic patient generator [@ref56], from which encrypted
+searchable indexes containing $10^4$--$10^6$ electronic health records
+were generated and uniformly distributed across four administrative
+healthcare domains. Unless otherwise specified, each query contains five
+keywords, and every experiment reports the average of 30 independent
+runs with 95% confidence intervals. ]{style="color: red"} The proposed
+framework was compared with three representative searchable encryption
+schemes: Guo *et al*. [@ref35] (verifiable dynamic searchable
+encryption), Thingom *et al*. [@ref41] (attribute-based searchable
+encryption), and Perera and Fugkeaw [@ref54] (lattice-based post-quantum
+searchable encryption). XB-Muse [@ref36] was omitted: its construction
+executes part of its algorithm inside an Intel SGX enclave and relies on
+SGX attestation, which the benchmark instance does not expose. It could
+therefore only be measured either in simulation---omitting
+enclave-transition and EPC-paging overhead, which would report the
+baseline as faster than any real deployment---or on non-identical
+hardware, breaking the parity requirement that every scheme is measured
+on the same instance type. The omission reflects hardware availability,
+not an unfavourable result. The evaluation focuses on trapdoor
+generation, encrypted search efficiency, cross-domain search
+scalability, keyword update performance, retrieval verification,
+authorization synchronization, and authorization-aware load balancing
+under increasing workloads.
 
-Experiments were conducted using the MIMIC-IV clinical dataset
- [@ref55], from which encrypted searchable indexes containing
-$10^4$--$10^6$ electronic health records were generated and uniformly
-distributed across four administrative healthcare domains. Unless
-otherwise specified, each query contains five keywords, and every
-experiment reports the average of 30 independent runs with 95%
-confidence intervals.
-
-The proposed framework was compared with four representative searchable
-encryption schemes: Guo *et al*. [@ref35] (verifiable dynamic searchable
-encryption), XB-Muse [@ref36] (dynamic searchable encryption), Thingom
-*et al*. [@ref41] (multi-authority searchable encryption), and Zhuang
-*et al*. [@ref52] (lattice-based post-quantum searchable encryption).
-The evaluation focuses on trapdoor generation, encrypted search
-efficiency, cross-domain search scalability, keyword update performance,
-retrieval verification, authorization synchronization, and
-authorization-aware load balancing under increasing workloads.
+Two properties of the Thingom *et al*. [@ref41] baseline are stated
+explicitly so its reported figures are not misread. First, its
+construction performs an unfiltered linear scan in which every candidate
+ciphertext costs $2u{+}1$ bilinear pairings, with no index structure and
+no early termination; the full $10^4$--$10^6$ sweep is therefore
+computationally infeasible within the evaluation budget, and its search
+measurements are reported over a reduced index range, which is a
+property of the published construction rather than of this
+implementation. Second, its per-entry pairing computations were executed
+across two parallel processes on the same instance. This is a
+hardware-utilisation choice that leaves the computation itself
+unchanged---the identical set of pairing operations is performed, and
+results were verified to match a single-threaded reference exactly---but
+the reported latencies should be read as two-core rather than
+single-core figures.
 
 ### **Experiment 1: Trapdoor Generation Latency** {#exp:trapdoor .unnumbered}
 
 This experiment evaluates the trapdoor generation latency as the number
 of queried keywords increases from 1 to 20. The proposed framework is
-compared with Guo *et al*. [@ref35], XB-Muse [@ref36], Thingom *et
-al*. [@ref41], and Zhuang *et al*. [@ref52]. Since ML-KEM is executed
-only during session establishment, only online trapdoor generation is
-measured.
+compared with Guo *et al*. [@ref35], Thingom *et al*. [@ref41], and
+Perera and Fugkeaw [@ref54]. Since ML-KEM is executed only during
+session establishment, only online trapdoor generation is measured.
 
 <figure id="fig:exp1" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp1_trapdoor.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp1_trapdoor.pdf" />
 <figcaption>Trapdoor generation latency versus queried
 keywords.</figcaption>
 </figure>
@@ -1828,13 +1860,11 @@ authorization.
 ### **Experiment 2: Search Latency** {#exp:search .unnumbered}
 
 This experiment evaluates encrypted search latency as the searchable
-index grows from $10^4$ to $10^6$ encrypted records. The same four
+index grows from $10^4$ to $10^6$ encrypted records. The same three
 baseline schemes are used for comparison.
 
 <figure id="fig:exp2" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp2_search.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp2_search.pdf" />
 <figcaption>Encrypted search latency versus dataset size.</figcaption>
 </figure>
 
@@ -1852,9 +1882,7 @@ baseline schemes do not natively support cross-domain search, they
 perform independent searches over each domain and aggregate the results.
 
 <figure id="fig:exp3" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp3_crossdomain.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp3_crossdomain.pdf" />
 <figcaption>Cross-domain search latency versus number of
 domains.</figcaption>
 </figure>
@@ -1873,9 +1901,7 @@ of returned encrypted records increases from 10 to 1000. Since only Guo
 comparison.
 
 <figure id="fig:exp4" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp4_verify.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp4_verify.pdf" />
 <figcaption>Verification latency versus returned search
 results.</figcaption>
 </figure>
@@ -1889,13 +1915,15 @@ search-result integrity.
 
 This experiment measures keyword update latency as the number of updated
 keywords increases from $10^2$ to $10^5$. The proposed framework is
-compared with Guo *et al*. [@ref35], XB-Muse [@ref36], and Zhuang *et
-al*. [@ref52].
+compared with Guo *et al*. [@ref35]. XB-Muse [@ref36] was dropped from
+every sweep (no SGX on the benchmark host; see
+Section [6](#sec:evaluation){reference-type="ref"
+reference="sec:evaluation"}); Perera and Fugkeaw [@ref54] define no
+incremental-update primitive (indexes are rebuilt at their Phase 3, not
+updated), so it is not included here.
 
 <figure id="fig:exp5" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp5_update.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp5_update.pdf" />
 <figcaption>Keyword update latency versus updated keywords.</figcaption>
 </figure>
 
@@ -1908,13 +1936,15 @@ preserving authenticated search indexes.
 
 This experiment evaluates authorization synchronization latency under
 increasing numbers of authorization updates ranging from $10^2$ to
-$10^5$. Zhuang *et al*. [@ref52] is used as the representative baseline
-supporting dynamic membership updates.
+$10^5$. No baseline is included: Guo *et al*. [@ref35] and Thingom *et
+al*. [@ref41] define no authorization-sync primitive, and Perera and
+Fugkeaw [@ref54] self-disclose that they support only coarse,
+whole-epoch key evolution rather than per-update synchronization. This
+experiment is therefore an internal ablation of the proposed IAS
+mechanism, consistent with Experiments 7--8.
 
 <figure id="fig:exp6" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp6_sync.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp6_sync.pdf" />
 <figcaption>Authorization synchronization latency versus authorization
 updates.</figcaption>
 </figure>
@@ -1933,9 +1963,7 @@ Proposed Scheduler. The concurrent search workload increases from 100 to
 5000 requests.
 
 <figure id="fig:exp7" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp7_throughput.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp7_throughput.pdf" />
 <figcaption>Search throughput versus concurrent requests.</figcaption>
 </figure>
 
@@ -1953,9 +1981,7 @@ load-balancing strategies are compared. The standard deviation of node
 utilization is adopted as the load-balance metric.
 
 <figure id="fig:exp8" data-latex-placement="!t">
-<span class="image placeholder"
-data-original-image-src="images/fig_exp8_balance.pdf"
-data-original-image-title="" width="\columnwidth"></span>
+<embed src="images/fig_exp8_balance.pdf" />
 <figcaption>Standard deviation of Fog Search Node
 utilization.</figcaption>
 </figure>
@@ -2229,7 +2255,14 @@ al., "Enabling Puncturable Encrypted Search Over Lattice for
 Privacy-Preserving in Mobile Cloud," IEEE Transactions on Mobile
 Computing, early access, 2026, doi: 10.1109/TMC.2026.3682118.
 
-Johnson, A., Bulgarelli, L., Pollard, T., Gow, B., Moody, B., Horng, S.,
-Celi, L. A., & Mark, R. (2024). MIMIC-IV (version 3.1). PhysioNet.
-RRID:SCR_007345. https://doi.org/10.13026/kpb9-mt58
+J. Walonoski et al., "Synthea: An approach, method, and software
+mechanism for generating synthetic patients and the synthetic electronic
+health care record," Journal of the American Medical Informatics
+Association, vol. 25, no. 3, pp. 230--238, 2018, doi:
+10.1093/jamia/ocx079.
+
+Z. Feng, W. Yang, Y. Hu, Y. Yin, T. Ma, X. Tian, and X. Deng,
+"Blockchain-Enabled Lattice-Based Attribute-Based Searchable Encryp-
+tion with Instant Revocation," Electronics, vol. 15, no. 11, art. 2471,
+2026, doi: 10.3390/electronics15112471.
 :::

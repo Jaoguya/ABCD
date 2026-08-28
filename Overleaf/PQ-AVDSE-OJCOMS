@@ -1790,6 +1790,7 @@ $T_{\mathrm{Sig}}$ & One digital-signature verification \\
 $T_{\mathrm{Exp}}$ & One modular exponentiation (or scalar multiplication) \\
 $T_P$ & One bilinear pairing operation \\
 $T_{\mathrm{Samp}}$ & One lattice sampling operation \\
+$T_{\mathrm{NTT}}$ & One NTT-based polynomial multiplication over $R_q$ \\
 $T_{\mathrm{Basis}}$ & One lattice basis delegation/update operation \\
 \hline
 \end{tabular}
@@ -1856,6 +1857,19 @@ N/A
 N/A
 &
 N/A
+\\
+
+Feng \textit{et al}.~\cite{ref57}
+&
+\makecell{$O(q)$\\$(T_{\mathrm{Samp}}+T_{\mathrm{NTT}})$}
+&
+$O(N n)T_{\mathrm{Exp}}$
+&
+N/A
+&
+N/A
+&
+$O(1)T_{\mathrm{Sig}}$
 \\
 
 Perera and Fugkeaw~\cite{ref54}

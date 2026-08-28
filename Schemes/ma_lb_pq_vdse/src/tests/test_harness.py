@@ -435,6 +435,11 @@ def test_provenance_accepts_a_fully_satisfied_run():
         corpus_sha256=pinned,
         group_faithful=True,
         token_scheme_keyed=True,
+        # Added 2026-08-28 with the ledger-fidelity gate: a "fully satisfied"
+        # run is by definition one where EVERY condition holds, so this must
+        # be set as each new condition is added, or the test quietly stops
+        # asserting that the gate is passable.
+        ledger_faithful=True,
     )
     assert reportable, reasons
 
