@@ -52,3 +52,10 @@ ma_lb_pq_vdse,exp7_8,5000/aass,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+stea
 ma_lb_pq_vdse,exp7_8,5000/rr,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
 ma_lb_pq_vdse,exp7_8,5000/lru,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
 ma_lb_pq_vdse,exp7_8,5000/random,90.0,30,5,35,3150.0,0.88,config,high,ramp30s+steady60s; Exp7&8 share runs
+yue_ge,exp1,ALL,0.0194,30,5,700,981.0,0.27,MEASURED,high,"wall-clock 16m07s for --runs 2 on 2026-08-28; 967s is the one-time untimed index build at the README S6 default N=1e5, +14s for 20 q-points x 35 runs at 19.4ms mean. Sweep is range(1,21) matching guo_vdsse exp1, a superset of global.yaml's [1,5,10,15,20]. Curve is stepped not smooth: KLRev cost tracks each added keyword's deletion count, deterministic across runs"
+yue_ge,build_exp2,10000,92.9,1,0,1,92.9,0.03,MEASURED,high,"peony_plus index build; 0.291ms/kw-doc pair; 0.32M pairs at the measured rate"
+yue_ge,build_exp2,50000,464.7,1,0,1,464.7,0.13,MEASURED,high,"peony_plus index build; 0.291ms/kw-doc pair; 1.60M pairs at the measured rate"
+yue_ge,build_exp2,100000,929.3,1,0,1,929.3,0.26,MEASURED,high,"peony_plus index build; 0.291ms/kw-doc pair; predicted 929s vs 967s observed (+4%), which is what pins confidence=high"
+yue_ge,build_exp2,500000,4646.6,1,0,1,4646.6,1.29,MEASURED,high,"peony_plus index build; 0.291ms/kw-doc pair; 15.97M pairs at the measured rate"
+yue_ge,build_exp2,1000000,9293.2,1,0,1,9293.2,2.58,MEASURED,high,"peony_plus index build; 0.291ms/kw-doc pair; 31.95M pairs at the measured rate"
+yue_ge,build_exp2,SUBTOTAL,15426.7,1,0,1,15426.7,4.29,MEASURED,high,"sum of the five exp2 builds; untimed setup, hoisted out of the run loop (runner.py:92-116) so it is paid once per N not per run"

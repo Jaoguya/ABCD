@@ -60,6 +60,13 @@ SECONDARY_NAMES = ["token_size_bytes", "tokens_issued"]
 # README §5: keywords per query q = 1 -> 20
 VARIABLE_RANGE = list(range(1, 21))
 
+# Index size held at the README §6 default. Exp. 1 sweeps q and holds every
+# other parameter at its default (README §5), and global.yaml declares
+# defaults.index_size: 100000 -- so this is the specified value for a
+# non-swept parameter, not a convenience cut. guo_vdsse/exp1_trapdoor.py
+# pins the same 10^5 for the same reason.
+DEFAULT_N = 100_000
+
 # README §6 default: queries are issued by a mid-level user. Level |L| would see
 # every file and level 1 almost none; the middle level exercises the linked-list
 # walk without degenerating either way.
@@ -80,8 +87,25 @@ def run(
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp1_trapdoor")
 
-    # ---- setup, not timed ----
-    workload = build_workload(records, params)
+    # ---- setup, not timed, but it still has to FINISH ----
+    #
+    # Scoped to DEFAULT_N (README §6 default index size) rather than the whole
+    # corpus. Indexing every record makes index_workload() run MSRE.enc -- a
+    # PRF evaluation per (keyword, document) pair -- across all 1.14M records,
+    # the same work as exp2's largest nested build, in an experiment that does
+    # not sweep index size. Measured: a --runs 2 invocation sat at 100% CPU for
+    # 13 minutes without emitting a point, stuck in prf.eval under
+    # peony_plus.add.
+    #
+    # This does NOT weaken the baseline. token_gen() (peony.py:315) costs one
+    # f_cons() plus batch_count state derivations, and batch_count is
+    # params.update_batches_c = 4 from crypto.yaml -- a fixed constant, NOT a
+    # function of len(records) (workload.py:59). So the measured quantity is
+    # invariant to this scoping; only the untimed setup shrinks. The subset
+    # still has to supply max(VARIABLE_RANGE) distinct keywords with genuine
+    # matches, which select_keywords() enforces against workload.keyword_freq.
+    # Same fix as guo_vdsse/exp1_trapdoor.py, for the identical defect.
+    workload = build_workload(records[: min(DEFAULT_N, len(records))], params)
     state, index, prooflist = peony_plus.setup(params)
     index_workload(state, index, prooflist, workload, variant)
 

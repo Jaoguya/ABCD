@@ -74,6 +74,7 @@ The three novelty claims — PDSI, AASS, IAS — are measured by Exp. 2, Exp. 7�
 | ~~`xb_muse/`~~ | Ref[36] | Jiang *et al.*, IEEE IoT-J 2025 | **DROPPED 2026-08-23** — no SGX on the benchmark host (§14 item 8). Folder removed; the citation remains in related work. |
 | `thingom_pq_abse/` | Ref[41] | Thingom *et al.*, IEEE TCE 2026 | Multi-authority ABSE |
 | `perera_lv_pqabse/` | Ref[54] | Perera and Fugkeaw, IEEE IoT-J 2026 | Lattice-based post-quantum ABSE — **not yet implemented**, replaced Ref[52] on 2026-08-27 |
+| `yue_ge/` | Ref[55] | Ge *et al.*, IEEE IoT-J 2024 | Verifiable multilevel DSSE (Peony/Peony++), forward + Type-II backward privacy — added 2026-08-28 |
 
 Per-scheme experiment lists and run commands are in each `SCHEME.md`. Reference PDFs in [References/](References/).
 
@@ -284,7 +285,7 @@ BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores 
 
 **`Common/` scope.** Primitives a paper *cites* (SHA-256, HMAC, AES-GCM, Merkle, Bloom, Gaussians, pairings, ML-KEM) live here so every scheme measures the same cost. Anything a paper *contributes* (Guo's forward index, Perera & Fugkeaw's hybrid index, Thingom's LSSS encoding, our PDSI/AASS/IAS) stays in its own `src/`. If two schemes seem to need the same construction, one of them is probably being implemented unfaithfully.
 
-Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · Thingom 1,2,3 · Perera & Fugkeaw (Ref[54]) 1,2,3 — the last **not yet implemented**, see their `SCHEME.md` files. Ref[54] does not cover Exp. 5/6 (no incremental-update primitive; self-disclosed no fine-grained revocation, only coarse epoch-based key evolution) — narrower than Zhuang's old slot, deliberately, not copied over. Ref[57] (Feng *et al.*, MDPI) was added on 2026-08-28 and **removed the same day**: the co-author does not accept MDPI as a venue, so only IEEE references may be cited — see `.claude/skills/reference-vetting`. Exp. 6 has no baseline as a result. XB-Muse (Ref[36]) was **dropped on 2026-08-23** — see §14 item 8. Zhuang (Ref[52]) was **dropped and replaced by Ref[54] on 2026-08-27** — see §16.
+Per-scheme experiment coverage: ours 1–8 · Guo 1,2,3,4,5 · Ge (Ref[55]) 1,2,3,4,5 · Thingom 1,2,3 · Perera & Fugkeaw (Ref[54]) 1,2,3 — the last **not yet implemented**, see their `SCHEME.md` files. Ref[54] does not cover Exp. 5/6 (no incremental-update primitive; self-disclosed no fine-grained revocation, only coarse epoch-based key evolution) — narrower than Zhuang's old slot, deliberately, not copied over. Ref[57] (Feng *et al.*, MDPI) was added on 2026-08-28 and **removed the same day**: the co-author does not accept MDPI as a venue, so only IEEE references may be cited — see `.claude/skills/reference-vetting`. Exp. 6 has no baseline as a result. XB-Muse (Ref[36]) was **dropped on 2026-08-23** — see §14 item 8. Zhuang (Ref[52]) was **dropped and replaced by Ref[54] on 2026-08-27** — see §16.
 
 ---
 
