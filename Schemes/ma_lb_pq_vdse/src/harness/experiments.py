@@ -48,6 +48,7 @@ from ..chain import ipfs as ipfs_mod  # noqa: E402
 from ..chain import ledger as ledger_mod  # noqa: E402
 from ..chain import outsourcing as out_mod  # noqa: E402
 from ..fsn import fsn as fsn_mod  # noqa: E402
+from ..fsn import pool as fsn_pool  # noqa: E402
 from ..fsn import search as search_mod  # noqa: E402
 from ..index import commit as commit_mod  # noqa: E402
 from ..index import extract as extract_mod  # noqa: E402
@@ -1063,7 +1064,89 @@ class SchedulerAblation:
     source: SyntheticRecordSource
     variant: str = aass_mod.VARIANT_AASS
 
+    #: Set False only to compare against the legacy single-interpreter path.
+    #: README §1 requires independent FSN processes and
+    #: provenance.reportability() blocks a concurrency result without them.
+    independent_processes: bool = True
+
     def replay(self, deployment: Deployment, requests, concurrency: int) -> _WorkloadOutcome:
+        if self.independent_processes:
+            try:
+                return self._replay_multiprocess(deployment, requests, concurrency)
+            except RuntimeError as exc:
+                # Only fork-unavailability (macOS/Windows dev hosts) falls back.
+                # The run is then correctly NOT reportable, and says why rather
+                # than quietly measuring a different topology.
+                print(f"  FSN pool unavailable ({exc}); falling back to the "
+                      f"single-interpreter path — NOT reportable", flush=True)
+        return self._replay_single_interpreter(deployment, requests, concurrency)
+
+    def _replay_multiprocess(
+        self, deployment: Deployment, requests, concurrency: int
+    ) -> _WorkloadOutcome:
+        """Each FSN in its own OS process, as README §1 requires.
+
+        The scheduler still chooses the node in the parent — that decision IS
+        the thing Exp. 7-8 ablate. What changes is that the chosen node then
+        executes in its own process, so nodes genuinely contend for cores and
+        per-node utilization can actually differ.
+        """
+        scheduler = aass_mod.Scheduler(
+            self.variant, config=self.config, reportable=False
+        )
+        node_ids = [node.node_id for node in deployment.nodes]
+        rejected = 0
+        forwards = 0
+        dispatched = 0
+        latency_starts: Dict[int, int] = {}
+
+        with fsn_pool.FogSearchNodePool(deployment.nodes) as pool:
+            self._worker_pids = pool.worker_pids
+            started = time.perf_counter()
+            for token, decision in requests:
+                request = aass_mod.SearchRequest(
+                    tokens=token.tokens,
+                    authorized=decision.authorized_shards,
+                    vid_u=token.vid_u,
+                )
+                try:
+                    selection = scheduler.select(deployment.nodes, request)
+                except aass_mod.SchedulerError:
+                    rejected += 1
+                    continue
+                latency_starts[dispatched] = time.perf_counter_ns()
+                pool.dispatch(
+                    dispatched, selection.node.node_id,
+                    token.tokens, decision.authorized_shards,
+                )
+                dispatched += 1
+                if not selection.node.serves_domain(request.domains[0]):
+                    forwards += 1
+            outcomes = pool.collect(dispatched)
+            wall = time.perf_counter() - started
+
+        latencies = [o.service_ns / 1e6 for o in outcomes if o.ok]
+        rejected += sum(1 for o in outcomes if not o.ok)
+
+        window_ns = max(1, int(wall * 1e9))
+        util_map = fsn_pool.utilization_by_node(outcomes, node_ids, window_ns)
+        utilizations = list(util_map.values())
+        ordered = sorted(latencies) or [0.0]
+        return _WorkloadOutcome(
+            throughput=(len(latencies) / wall) if wall > 0 else 0.0,
+            p50_ms=ordered[len(ordered) // 2],
+            p95_ms=ordered[min(len(ordered) - 1, int(len(ordered) * 0.95))],
+            rejected=rejected,
+            utilization_stddev=(
+                statistics.pstdev(utilizations) if len(utilizations) > 1 else 0.0
+            ),
+            max_utilization=max(utilizations) if utilizations else 0.0,
+            cross_node_forwards=forwards,
+        )
+
+    def _replay_single_interpreter(
+        self, deployment: Deployment, requests, concurrency: int
+    ) -> _WorkloadOutcome:
         scheduler = aass_mod.Scheduler(
             self.variant, config=self.config, reportable=False
         )

@@ -141,6 +141,7 @@ def reportability(
     group_faithful: bool,
     token_scheme_keyed: Optional[bool],
     ledger_faithful: bool = False,
+    fsn_processes: int = 0,
 ) -> Tuple[bool, List[str]]:
     """Every condition a quotable number must satisfy, and which ones failed.
 
@@ -226,10 +227,17 @@ def reportability(
                 f"AASS weights are {config.scheduler.weights.status!r}; "
                 f"README §14 issue #5 requires the documented hold-out sweep first"
             )
-        if config.topology.independent_processes:
+        # Was an UNCONDITIONAL blocker: the harness had no multi-process path,
+        # so declaring the requirement in global.yaml could only ever fail it.
+        # fsn/pool.py now runs one forked worker per node, so this checks
+        # whether the run ACTUALLY used that path rather than whether the
+        # requirement is declared. Passing fsn_processes=N (N>1) is the
+        # evidence; the runner takes it from the live pool's worker PIDs, so it
+        # cannot be asserted by a caller that did not spawn them.
+        if config.topology.independent_processes and not fsn_processes:
             reasons.append(
-                "README §1 requires each FSN to be an independent process; the "
-                "harness runs them in one interpreter, so a concurrency result "
+                "README §1 requires each FSN to be an independent process; this "
+                "run executed them in one interpreter, so a concurrency result "
                 "would not measure the stated topology"
             )
 
@@ -251,6 +259,7 @@ def build_metadata(
     group_faithful: bool = False,
     token_scheme_keyed: Optional[bool] = None,
     ledger_faithful: bool = False,
+    fsn_processes: int = 0,
     runs: Optional[int] = None,
     warmups: Optional[int] = None,
     notes: Optional[List[str]] = None,
@@ -264,6 +273,7 @@ def build_metadata(
         group_faithful=group_faithful,
         token_scheme_keyed=token_scheme_keyed,
         ledger_faithful=ledger_faithful,
+        fsn_processes=fsn_processes,
     )
     return RunMetadata(
         scheme=SCHEME_NAME,

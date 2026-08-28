@@ -145,6 +145,19 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         group_faithful = False
         log(f"pairing: no faithful Type-III backend ({type(exc).__name__}: {exc})")
 
+    # Evidence for the README §1 topology gate. Independent FSN processes need
+    # fork (fsn/pool.py); on a platform without it the harness falls back to the
+    # single-interpreter path, and reporting a process count here would assert a
+    # topology the run did not use.
+    import multiprocessing as _mp
+
+    if config.topology.independent_processes and "fork" in _mp.get_all_start_methods():
+        fsn_processes = int(config.topology.fog_search_nodes)
+        log(f"topology: {fsn_processes} independent FSN processes (fork)")
+    else:
+        fsn_processes = 0
+        log("topology: single interpreter — Exp. 7-8 will not be reportable")
+
     runs = args.runs if args.runs is not None else config.measurement.repetitions
     warmups = (
         args.warmups if args.warmups is not None else config.measurement.warmup_runs
@@ -161,6 +174,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             corpus_type=source.corpus_type,
             corpus_sha256=source.corpus_sha256,
             group_faithful=group_faithful,
+            fsn_processes=fsn_processes,
             token_scheme_keyed=True,
             runs=runs,
             warmups=warmups,
