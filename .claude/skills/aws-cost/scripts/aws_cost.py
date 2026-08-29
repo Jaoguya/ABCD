@@ -233,12 +233,24 @@ def cost_explorer(days: int, by_instance: bool, all_account: bool = False) -> No
         print("\nCOST EXPLORER returned no data for the window.")
         return
 
+    # With --group-by, per-day totals live under Groups[], and "Total" is an
+    # empty dict. Reading only "Total" therefore sums to zero on a grouped
+    # query and fires the "tag not activated" branch on real, non-zero spend --
+    # a false negative in exactly the direction this check exists to prevent.
     total_probe = 0.0
     for r in results:
-        try:
-            total_probe += float(r["Total"]["UnblendedCost"]["Amount"])
-        except (KeyError, TypeError, ValueError):
-            pass
+        groups = r.get("Groups") or []
+        if groups:
+            for g in groups:
+                try:
+                    total_probe += float(g["Metrics"]["UnblendedCost"]["Amount"])
+                except (KeyError, TypeError, ValueError):
+                    pass
+        else:
+            try:
+                total_probe += float(r["Total"]["UnblendedCost"]["Amount"])
+            except (KeyError, TypeError, ValueError):
+                pass
     if not all_account and total_probe == 0.0:
         print(f"\nBILLED — Project={PROJECT_TAG_VALUE}: $0.00 reported")
         print("-" * 72)

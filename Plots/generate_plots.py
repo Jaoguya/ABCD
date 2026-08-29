@@ -251,7 +251,7 @@ plt.rcParams.update({
 
 
 def render(spec: ExperimentSpec, series_list: Sequence[Series],
-           out_path: Path) -> Tuple[bool, List[str]]:
+           out_path: Path, dpi: Optional[int] = None) -> Tuple[bool, List[str]]:
     """Draw one figure. Returns (written, warnings)."""
     warnings: List[str] = []
     if not series_list:
@@ -315,7 +315,8 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
     ax.legend(frameon=False)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, **({'dpi': dpi} if dpi else {}))
     plt.close(fig)
     return True, warnings
 
@@ -338,7 +339,17 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="refuse to plot any series whose run_meta.json "
                              "is not reportable:true")
     parser.add_argument("--format", default="pdf",
-                        help="output format (default pdf; README §10 wants vector)")
+                        help="output format(s), comma-separated, e.g. 'pdf' or "
+                             "'pdf,png'. README §10 wants vector for the paper, "
+                             "so pdf stays the default. With MORE THAN ONE "
+                             "format each goes in its own subdirectory "
+                             "(<output>/pdf/, <output>/png/) so a raster copy "
+                             "can never be picked up where the vector one "
+                             "belongs; a single format writes to <output>/ "
+                             "directly, unchanged.")
+    parser.add_argument("--png-dpi", type=int, default=200,
+                        help="raster resolution; 200 is legible on a slide and "
+                             "in a review PDF without being enormous")
     args = parser.parse_args(argv)
 
     if args.experiment.strip().lower() == "all":
@@ -374,15 +385,27 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         f"(--require-reportable, reportable={s.reportable})"
                     )
             found = kept
-        name = spec.filename
-        if args.format != "pdf":
-            name = re.sub(r"\.pdf$", f".{args.format}", name)
-        ok, warns = render(spec, found, output_root / name)
-        all_warnings.extend(warns)
-        if ok:
-            written.append(f"{name}  ({len(found)} scheme(s): "
-                           f"{', '.join(sorted(s.scheme for s in found))})")
-        else:
+        fmts = [f.strip().lstrip(".").lower()
+                for f in args.format.split(",") if f.strip()] or ["pdf"]
+        multi = len(fmts) > 1
+        rendered_any = False
+        for fmt in fmts:
+            name = spec.filename if fmt == "pdf" else re.sub(
+                r"\.pdf$", f".{fmt}", spec.filename)
+            target_dir = output_root / fmt if multi else output_root
+            target_dir.mkdir(parents=True, exist_ok=True)
+            ok, warns = render(spec, found, target_dir / name,
+                               dpi=args.png_dpi if fmt == "png" else None)
+            # Warnings describe the DATA, not the format, so collect them once
+            # rather than repeating every reportability warning per format.
+            if not rendered_any:
+                all_warnings.extend(warns)
+            if ok:
+                rendered_any = True
+                rel = f"{fmt}/{name}" if multi else name
+                written.append(f"{rel}  ({len(found)} scheme(s): "
+                               f"{', '.join(sorted(s.scheme for s in found))})")
+        if not rendered_any:
             skipped.append(f"exp{spec.number}")
 
     for warning in all_warnings:
@@ -393,7 +416,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
               f"{line[len(line.split('  ')[0]):]}")
     if skipped:
         print(f"\n  no data, not written: {', '.join(skipped)}")
-    print(f"\n{len(written)}/{len(wanted)} figure(s) written to {output_root}")
+    # `written` counts FILES; with --format pdf,png that is two per experiment,
+    # so reporting it against the experiment count printed "16/8".
+    n_figs = len({w.split("  ")[0].split("/")[-1].rsplit(".", 1)[0] for w in written})
+    extra = f" ({len(written)} files)" if len(written) != n_figs else ""
+    print(f"\n{n_figs}/{len(wanted)} figure(s) written to {output_root}{extra}")
 
     # A missing figure is not an error — partial campaigns are expected while
     # schemes finish on different instances. Exit non-zero only if nothing at

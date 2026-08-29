@@ -68,7 +68,18 @@ def campaign_segment() -> str:
             if burn else f"{DIM}$0{R}")
     results = (f"{GRN}{rep}{R}{DIM}/{res} rep{R}" if res
                else f"{DIM}no results{R}")
-    parts = [fleet, cost, results, f"{DIM}{total} inst{R}"]
+
+    # Spend to date, project-scoped. Distinct from burn rate: burn is what the
+    # fleet costs per hour right now, this is what the campaign has cost so far.
+    spend = d.get("spend")
+    if spend is None:
+        total_spend = f"{DIM}Σ ?{R}"
+    else:
+        # Cost Explorer lags ~24h, so this is a floor, not a live figure.
+        col = RED if spend >= 50 else (YEL if spend >= 20 else GRN)
+        total_spend = f"{col}Σ${spend:.2f}{R}"
+
+    parts = [fleet, cost, total_spend, results, f"{DIM}{total} inst{R}"]
     if stale:
         parts.append(f"{DIM}({int(age/60)}m old){R}")
     return f" {DIM}·{R} ".join(parts)
