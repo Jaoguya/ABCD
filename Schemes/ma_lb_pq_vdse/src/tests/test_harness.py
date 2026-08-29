@@ -635,6 +635,46 @@ def test_exp7_and_exp8_share_one_workload_engine():
     assert exp_mod.Exp8LoadBalance.replay is exp_mod.SchedulerAblation.replay
 
 
+def test_dirty_marker_ignores_a_runs_own_output():
+    """The ``-dirty`` marker must mean "the code changed", not "a run ran".
+
+    Result dirs are git-tracked and not ignored, and fleet.sh deploy restores
+    them onto every node before a run; the run overwrites results.csv and
+    raw_runs.csv and then stamps run_meta.json. So an unscoped
+    `git status --porcelain` was ALWAYS non-empty at stamp time and every fleet
+    run recorded `-dirty` regardless of whether any source changed -- all eight
+    Exp. 7-8 dirs at 0536312 carry it. A marker that is always on cannot do the
+    one job it has.
+    """
+    own_output = [
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/results.csv",
+        "Schemes/ma_lb_pq_vdse/exp8_load_balance__no_lb/raw_runs.csv",
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/run_meta.json",
+        "Plots/output/pdf/fig_exp7_throughput.pdf",
+    ]
+    for path in own_output:
+        assert provenance._is_own_output(path), (
+            f"{path} is a run's own output; counting it makes -dirty fire on "
+            f"every run and stop meaning anything"
+        )
+
+    inputs = [
+        "Schemes/ma_lb_pq_vdse/src/scheduler/aass.py",
+        "Schemes/ma_lb_pq_vdse/src/harness/experiments.py",
+        "Experiment Configuration/global.yaml",
+        "Common/crypto/config.py",
+        "infra/fleet.sh",
+        "README.md",
+        # A result dir holding something OTHER than the three known artifacts
+        # is not recognised output and must still count.
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/patch.py",
+    ]
+    for path in inputs:
+        assert not provenance._is_own_output(path), (
+            f"{path} can change what a run measures and must still mark -dirty"
+        )
+
+
 def test_exp7_and_exp8_record_the_same_arrival_trace():
     """README §5: both experiments replay "the same recorded arrival trace".
 

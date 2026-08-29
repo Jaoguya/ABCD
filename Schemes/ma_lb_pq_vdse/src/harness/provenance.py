@@ -37,13 +37,73 @@ from .. import config as scheme_config  # noqa: E402
 SCHEME_NAME = "ma_lb_pq_vdse"
 
 
+#: Paths a run necessarily rewrites as it produces output, so their being
+#: modified says nothing about whether the CODE was modified.
+#:
+#: This exclusion exists because the unscoped check could never fire usefully.
+#: Result directories are git-TRACKED and not ignored, and ``fleet.sh deploy``
+#: restores them onto every node before a run; the run then overwrites
+#: ``results.csv`` / ``raw_runs.csv`` and stamps ``run_meta.json`` afterwards.
+#: So ``git status --porcelain`` was already non-empty at stamp time and EVERY
+#: fleet run recorded ``-dirty`` by construction -- the eight Exp. 7-8 result
+#: dirs at 0536312 all carry it. A marker that is always on cannot distinguish
+#: a modified scheme from an experiment writing its own output, which is the
+#: one thing it exists to do.
+_OUTPUT_ARTIFACTS = (
+    "results.csv",
+    "raw_runs.csv",
+    "run_meta.json",
+)
+
+
+def _is_own_output(path: str) -> bool:
+    """True for a path that is a run's own output rather than its inputs."""
+    parts = path.split("/")
+    if parts[:1] == ["Plots"] and parts[1:2] == ["output"]:
+        return True
+    # Schemes/<scheme>/<exp-dir>/<artifact>
+    return (
+        len(parts) == 4
+        and parts[0] == "Schemes"
+        and parts[2].startswith("exp")
+        and parts[3] in _OUTPUT_ARTIFACTS
+    )
+
+
+def _dirty_paths() -> List[str]:
+    """Uncommitted paths that could actually change what a run measures.
+
+    ``git status --porcelain`` over the whole repo, minus the run's own output.
+    Anything else still counts -- source, config, dataset, infra -- so a genuinely
+    modified tree is still caught.
+    """
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    dirty = []
+    for line in status.stdout.splitlines():
+        if not line.strip():
+            continue
+        # "XY path" and "XY orig -> path" for renames; take the destination.
+        path = line[3:].strip().split(" -> ")[-1].strip('"')
+        if not _is_own_output(path):
+            dirty.append(path)
+    return dirty
+
+
 def git_commit() -> str:
     """The commit that produced this result, or an explicit marker.
 
     ``unknown`` rather than a guess when git cannot answer: an invented hash in a
     provenance record is worse than an admitted gap. ``-dirty`` is appended when
     the tree has uncommitted changes, because a result from a modified tree cannot
-    be reproduced from the commit alone.
+    be reproduced from the commit alone -- EXCLUDING the run's own output, which
+    every run rewrites and which therefore made the marker fire unconditionally.
+    See :data:`_OUTPUT_ARTIFACTS`.
     """
     try:
         commit = subprocess.run(
@@ -56,14 +116,7 @@ def git_commit() -> str:
         if commit.returncode != 0:
             return "unknown"
         sha = commit.stdout.strip()
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return f"{sha}-dirty" if status.stdout.strip() else sha
+        return f"{sha}-dirty" if _dirty_paths() else sha
     except Exception:
         return "unknown"
 

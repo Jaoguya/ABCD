@@ -1073,9 +1073,13 @@ RAMP_SECONDS = _default_ramp_seconds()
 class SchedulerAblation:
     """The shared engine for Exp. 7 and Exp. 8.
 
-    README §5: "Exp. 7 and Exp. 8 report different metrics from **the same runs**
-    — run the trace once per variant and emit both." So the workload is replayed
-    once here and both experiments read the same outcome.
+    README §5: "Exp. 7 and Exp. 8 report different metrics over **the same
+    recorded arrival trace**, replayed once per experiment per variant." The
+    trace is recorded once in prepare() and both experiments record the same
+    one; they do NOT share a replay. Each runs its own, so the two differ by
+    timing noise and Exp. 8's sigma cannot be paired run-for-run with a
+    specific Exp. 7 throughput. The per-point cross-variant comparison the
+    figures show is unaffected.
 
     **Not reportable, for two reasons beyond the λ sweep.** README §1 requires each
     FSN to be an independent process; this replays in one interpreter, so a
@@ -1335,8 +1339,14 @@ class SchedulerAblation:
     def prepare(self, value: Any) -> Any:
         """Build the deployment, RECORD the arrival trace, then ramp.
 
-        "All 4 variants see byte-identical workloads" — so the request list is
-        materialised here and replayed, not regenerated per variant.
+        All variants and both experiments see the same workload — so the
+        request list is materialised here and replayed, not regenerated per
+        variant. Identical in CONTENT, not in bytes: every SearchToken carries
+        a fresh random nonce, which must vary. Locked by
+        test_exp7_and_exp8_record_the_same_arrival_trace, which digests the
+        trace excluding the nonce, and by
+        test_search_token_nonce_is_fresh_per_token, which pins that the nonce
+        itself is never reproducible.
         """
         concurrency = int(value)
         # README §6 fixes index_size at 10^5 for every experiment that does not

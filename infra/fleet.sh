@@ -94,20 +94,38 @@ cmd_harvest() {
   # three stale ones are also corpus_type=synthea. Set OJCOMS_COMMIT to the
   # commit the re-run was launched from to take only what that commit produced.
   local COMMIT="${OJCOMS_COMMIT:-}"
+  # A `-dirty` stamp means the tree that produced the result had uncommitted
+  # changes to something OTHER than the run's own output (provenance.git_commit
+  # excludes results.csv/raw_runs.csv/run_meta.json/Plots/output, which every run
+  # rewrites). Such a result cannot be reproduced from its commit, so it is NOT
+  # harvested by default and the skip is reported rather than silent -- the old
+  # filter used startswith(), under which "<sha>-dirty" passed as "<sha>".
+  local ALLOW_DIRTY="${OJCOMS_ALLOW_DIRTY:-}"
   mkdir -p "$out"
-  echo "harvesting to $out (provenance-selected${COMMIT:+, git_commit ^$COMMIT})..."
+  echo "harvesting to $out (provenance-selected${COMMIT:+, git_commit ^$COMMIT}\
+${ALLOW_DIRTY:+, ALLOWING -dirty})..."
   for ip in $(ips); do
     ssh "${SSH_OPTS[@]}" "ubuntu@$ip" '
       cd ~/abcd
       dirs=$(for m in Schemes/*/*/run_meta.json; do [ -f "$m" ] || continue
-        WANT_COMMIT="'"$COMMIT"'" python3 -c "
+        WANT_COMMIT="'"$COMMIT"'" ALLOW_DIRTY="'"$ALLOW_DIRTY"'" python3 -c "
 import json,os,sys
 m=json.load(open(\"$m\"))
 if m.get(\"corpus_type\")!=\"synthea\": sys.exit(1)
+c=str(m.get(\"git_commit\",\"\"))
+is_dirty=c.endswith(\"-dirty\")
+sha=c[:-6] if is_dirty else c
 want=os.environ.get(\"WANT_COMMIT\") or \"\"
-sys.exit(0 if not want or str(m.get(\"git_commit\",\"\")).startswith(want) else 1)" 2>/dev/null && dirname "$m"; done)
-      [ -n "$dirs" ] && tar cz $dirs 2>/dev/null' > "$out/$ip.tgz" 2>/dev/null
-    echo "  $ip -> $(tar tzf "$out/$ip.tgz" 2>/dev/null | grep -c run_meta.json) result dir(s)"
+if want and not sha.startswith(want): sys.exit(1)
+sys.exit(3 if is_dirty and os.environ.get(\"ALLOW_DIRTY\")!=\"1\" else 0)" 2>/dev/null
+        case $? in 0) dirname "$m";; 3) echo "DIRTY:$(dirname "$m")" >&2;; esac
+      done)
+      [ -n "$dirs" ] && tar cz $dirs 2>/dev/null' > "$out/$ip.tgz" 2>"$out/$ip.skipped"
+    local nd
+    nd=$(grep -c "^DIRTY:" "$out/$ip.skipped" 2>/dev/null || echo 0)
+    [ "$nd" -eq 0 ] && rm -f "$out/$ip.skipped"
+    echo "  $ip -> $(tar tzf "$out/$ip.tgz" 2>/dev/null | grep -c run_meta.json) result dir(s)$(
+      [ "$nd" -gt 0 ] && echo " -- $nd SKIPPED as -dirty, see $out/$ip.skipped (OJCOMS_ALLOW_DIRTY=1 to override)")"
   done
   echo "unpack with: for f in $out/*.tgz; do tar xzf \$f -C \$(git rev-parse --show-toplevel); done"
 }
