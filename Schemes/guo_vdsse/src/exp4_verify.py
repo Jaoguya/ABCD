@@ -50,6 +50,9 @@ SECONDARY_NAMES = ["proof_size_kb", "proof_elements"]
 # Variable range: returned records
 VARIABLE_RANGE = [10, 20, 50, 100, 200, 500, 1000]
 
+# README §6 default index size, matching exp3_crossdomain.DEFAULT_N.
+DEFAULT_N = 100_000
+
 
 def _find_keyword_with_count(
     records: List[Record], target_count: int
@@ -85,13 +88,30 @@ def run(
     points: Optional[str] = None,
 ) -> None:
     """Run Experiment 4: Verification Overhead."""
-    # Setup — not timed
+    # Setup — not timed, and SCOPED to the README §6 default index size.
+    #
+    # This indexed the ENTIRE corpus (1,143,792 records). Guo's forward index
+    # holds a t-punctured GGM key per document — 50.5 KB at the configured
+    # 64-bit domain and corpus v4's 31.7 keywords/document — so the full corpus
+    # is ~57.8 GB and was OOM-killed (rc=137) on the pinned 16 GiB host in both
+    # the 2026-08-28 and 2026-08-29 campaigns.
+    #
+    # Exp. 4's variable is r, the number of RETURNED results (10..1000), not the
+    # index size; §6 fixes index_size at 10^5 for every experiment that does not
+    # sweep it. The subset only has to be large enough to contain a keyword
+    # matching ~1000 documents, which it is by a wide margin — corpus v4
+    # averages 31.7 keywords per record over a 2,023-keyword universe, so at
+    # N = 10^5 the frequent keywords match tens of thousands of records.
+    #
+    # Same scoping `exp3_crossdomain` already applies via its own DEFAULT_N.
+    subset = records[: min(DEFAULT_N, len(records))]
     state, edb = scheme.setup()
-    for rec in records:
+    for rec in subset:
         scheme.update(state, edb, "add", rec.rid, rec.kw)
 
     # For each target r, find a keyword that produces approximately r
     # results for a single-keyword search, then measure verification.
+    records = subset          # keyword frequencies must match the index
     rng = DeterministicRNG(seed).spawn("exp4_verify")
 
     actual_range = [

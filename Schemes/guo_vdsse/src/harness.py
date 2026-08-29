@@ -227,12 +227,76 @@ def write_results(path: Path, aggregated: List[Dict[str, Any]]) -> None:
 # =====================================================================
 
 
+def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
+    """Every condition a quotable guo_vdsse number must satisfy.
+
+    ADDED 2026-08-29. guo was the ONLY scheme whose run_meta.json carried no
+    `reportable` field at all, so its numbers could not be audited the way the
+    other four can — there was no recorded statement that a run used the pinned
+    host and the frozen corpus. A baseline held to a weaker standard than the
+    proposed scheme biases the comparison in the proposed scheme's favour,
+    which AGENT_RULES "Bias Detection" forbids; this mirrors
+    ma_lb_pq_vdse's provenance.reportability() rather than inventing a looser
+    rule.
+
+    Ref[35] is symmetric-only (SHA-256, HMAC, AES, a GGM punctured PRF), so
+    there is no pairing or post-quantum backend condition to check — that
+    failure mode is structurally absent here, not merely unchecked.
+    """
+    reasons: List[str] = []
+
+    corpus_type = manifest.get("corpus_type", "")
+    if corpus_type != "synthea":
+        reasons.append(
+            f"corpus_type={corpus_type!r} is not reportable; README §4 admits "
+            f"only 'synthea'"
+        )
+
+    actual = manifest.get("corpus_sha256")
+    if not actual:
+        reasons.append(
+            "no corpus SHA-256: the corpus was not loaded and verified against "
+            "the frozen pin"
+        )
+    else:
+        try:
+            from Common.crypto.config import load_dataset_config
+
+            pinned = (load_dataset_config().get("freeze") or {}).get(
+                "expected_corpus_sha256"
+            )
+        except Exception:  # noqa: BLE001 - an unreadable pin must not crash a run
+            pinned = None
+        if pinned and pinned != actual:
+            reasons.append(
+                f"corpus SHA-256 {actual[:12]}... does not match dataset.yaml's "
+                f"frozen pin {pinned[:12]}...; results from a different corpus "
+                f"are not comparable to the campaign (README §13)"
+            )
+
+    try:
+        from Common.crypto.config import verify_experiment_host
+
+        host = verify_experiment_host()
+        if not host["is_pinned_experiment_host"]:
+            reasons.append(
+                f"not running on the pinned AWS experiment host: expected "
+                f"{host['expected_instance_type']!r}, detected "
+                f"{host['detected_instance_type'] or 'not EC2'!r} (README §1)"
+            )
+    except Exception as exc:  # noqa: BLE001 - reported, not swallowed
+        reasons.append(f"could not verify the experiment host: {exc}")
+
+    return reasons
+
+
 def write_run_meta(
     path: Path,
     manifest: Dict[str, Any],
     experiment_name: str,
 ) -> None:
     """Write run_meta.json — provenance per README §7."""
+    reasons = _reportability_blockers(manifest)
     meta = {
         "scheme": "guo_vdsse",
         "experiment": experiment_name,
@@ -245,6 +309,8 @@ def write_run_meta(
             timespec="seconds"
         ),
         "environment": environment_report(),
+        "reportable": not reasons,
+        "not_reportable_because": reasons,
     }
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(meta, indent=2) + "\n", encoding="utf-8")
