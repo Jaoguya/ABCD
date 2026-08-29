@@ -95,6 +95,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="one tiny sweep point and few runs, to exercise the pipeline",
     )
     parser.add_argument(
+        "--variant", default=None,
+        help=(
+            "scheduler variant for Exp. 7-8's four-way ablation: no_lb, "
+            "round_robin, least_loaded, aass, or 'all' to run each in turn. "
+            "Ignored for Exp. 1-6. Defaults to aass, which is what every "
+            "campaign before 2026-08-29 measured -- the other three had no CLI "
+            "route and the ablation README §5 describes had never been run."
+        ),
+    )
+    parser.add_argument(
         "--points", default=None,
         help=(
             "run only these sweep values, so one experiment can be split "
@@ -176,9 +186,33 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     if args.smoke:
         runs, warmups = min(runs, 3), min(warmups, 1)
 
+    from Schemes.ma_lb_pq_vdse.src.scheduler import aass as _aass
+    ALL_VARIANTS = (_aass.VARIANT_NO_LB, _aass.VARIANT_ROUND_ROBIN,
+                    _aass.VARIANT_LEAST_LOADED, _aass.VARIANT_AASS)
+
+    def _variants_for(number: int):
+        """Which scheduler variants to run for this experiment."""
+        if number not in (7, 8):
+            return [None]                 # scheduler is not on their path
+        if args.variant in (None, ""):
+            return [_aass.VARIANT_AASS]   # unchanged default
+        if args.variant.lower() == "all":
+            return list(ALL_VARIANTS)
+        chosen = [v.strip() for v in args.variant.split(",") if v.strip()]
+        unknown = [v for v in chosen if v not in ALL_VARIANTS]
+        if unknown:
+            raise SystemExit(
+                f"unknown scheduler variant(s) {unknown}; "
+                f"valid: {', '.join(ALL_VARIANTS)}, or 'all'"
+            )
+        return chosen
+
     exit_code = 0
     for number in numbers:
-        experiment = experiments_mod.build_experiment(number, config, source)
+      for variant in _variants_for(number):
+        experiment = experiments_mod.build_experiment(
+            number, config, source, variant=variant
+        )
         metadata = provenance.build_metadata(
             config,
             experiment=experiment.name,
@@ -189,6 +223,11 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             token_scheme_keyed=True,
             runs=runs,
             warmups=warmups,
+            # Which scheduler produced these numbers. Exp. 7-8 is a four-way
+            # ablation, so a result that does not name its variant is
+            # unidentifiable the moment the directory is renamed or merged.
+            notes=([f"scheduler_variant={variant}"] if variant and number in (7, 8)
+                   else None),
         )
         if args.require_reportable and not metadata.reportable:
             log(f"REFUSED {experiment.name}: not reportable")
@@ -220,9 +259,13 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         result = runner.run_experiment(
             experiment, metadata, config=config, scheme=SCHEME_NAME, values=values
         )
-        written = runner.write_outputs(
-            result, sweep.shard_dir(output_root / FOLDERS[number], args.points)
-        )
+        # Variant goes in the directory name: four schedulers writing to one
+        # exp7 folder would silently overwrite each other and leave a single
+        # curve labelled as an ablation.
+        out_dir = sweep.shard_dir(output_root / FOLDERS[number], args.points)
+        if variant and number in (7, 8):
+            out_dir = out_dir.parent / f"{out_dir.name}__{variant}"
+        written = runner.write_outputs(result, out_dir)
         for point in result.points:
             log(
                 f"  {experiment.variable}={point.variable_value}: "

@@ -27,6 +27,8 @@ construction rather than by discipline.
 
 from __future__ import annotations
 
+import dataclasses
+
 import statistics
 import sys
 import time
@@ -1302,15 +1304,29 @@ def build_experiment(
     number: int,
     config: scheme_config.Configuration,
     source: Optional[SyntheticRecordSource] = None,
+    variant: Optional[str] = None,
 ):
-    """Instantiate one experiment by its README §5 number."""
+    """Instantiate one experiment by its README §5 number.
+
+    ``variant`` selects the scheduler for Exp. 7-8, which README §5 defines as a
+    four-way ablation (no_lb / round_robin / least_loaded / aass). It was
+    reachable only by editing the dataclass default, so every campaign so far
+    measured `aass` alone and the ablation the paper claims had never been run.
+
+    It is ignored for Exp. 1-6, and deliberately so for Exp. 6: that experiment
+    measures IAS propagation -- commitment recomputation, Merkle path update,
+    selective FSN delivery -- and the scheduler decides which FSN serves a
+    QUERY. It plays no part in propagating an authorization change, so running
+    four variants there would measure the same thing four times.
+    """
     if number not in EXPERIMENTS:
         raise KeyError(
             f"no experiment {number}; README §5 defines 1-8"
         )
-    return EXPERIMENTS[number](
-        config=config, source=source or SyntheticRecordSource()
-    )
+    kwargs = dict(config=config, source=source or SyntheticRecordSource())
+    if variant and "variant" in {f.name for f in dataclasses.fields(EXPERIMENTS[number])}:
+        kwargs["variant"] = variant
+    return EXPERIMENTS[number](**kwargs)
 
 
 __all__ = [

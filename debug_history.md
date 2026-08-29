@@ -335,3 +335,25 @@ Each entry is marked *not fixed* until resolved, then updated to *fixed*.
   - `campaign-doctor` SKILL.md gained "Deploying to the fleet without destroying results" and "Trust provenance, not timestamps".
   - **Also recorded: each scheme writes a DIFFERENT run_meta schema** — `ma_lb_pq_vdse` uses `corpus_sha256`, `guo_vdsse` uses `dataset_sha256`, `thingom_pq_abse` nests corpus data under `dataset`. A uniform audit reported 34 suspect results of which 24 were false positives from schema differences alone. Worth unifying, or every future provenance check has to special-case three shapes.
   - **`infra/merge_points.py` guard made precise**: it rejected guo's Exp. 3 shards purely because an unrelated commit landed between the `d=2..9` run and the `d=10` straggler. It now compares whether code the SCHEME runs changed between those commits, rather than comparing bare hashes — a hash difference alone is not evidence of a methodology difference.
+
+### Exp. 7-8's four-way scheduler ablation had never actually been run
+- **Date:** 2026-08-29
+- **Status:** *fixed* — `--variant` added; the ablation is now runnable
+- **Why it changed:** README §5 defines Exp. 7-8 as a four-variant ablation (`no_lb`, `round_robin`, `least_loaded`, `aass`), `scheduler.yaml` configures all four, and `aass.py` defines all four constants. But the variant was only reachable by editing `Exp7SearchThroughput.variant`'s dataclass default — there was **no CLI route** — so every campaign to date measured `aass` alone. The figures showed a single curve where the paper claims a comparison, and nothing in the output said so.
+- **How it will improve:** the ablation the manuscript describes can now be produced. Cost is trivial: 4 variants x 5 concurrency points x ~60s = **0.33h serial**, or 0.08h across 4 nodes.
+- **What changed:**
+  - `build_experiment(..., variant=)` threads the choice through, and only to experiments that declare the field.
+  - `main.py --variant no_lb|round_robin|least_loaded|aass|all`, comma-separated accepted, unknown values refused by name rather than silently defaulting.
+  - **Output is sharded by variant** (`exp7_search_throughput__points-100__no_lb`). Four schedulers writing to one directory would overwrite each other and leave a single curve labelled as an ablation — the same class of silent loss as the `git reset` incident.
+  - **`run_meta.json` records `scheduler_variant=<name>`.** A result identified only by its directory name loses its identity the moment anything is renamed or merged.
+  - **Exp. 6 deliberately excluded.** It has no scheduler reference at all: it measures IAS propagation (commitment recomputation, Merkle path update, selective FSN delivery), while the scheduler decides which FSN serves a QUERY. Running four variants there would measure the same thing four times and imply a dependency that does not exist.
+  - Verified: all four variants ran and wrote distinct directories with correct provenance.
+- **Also fixed, a test of mine that cried wolf:** `test_revocation_cost_per_update_does_not_grow_with_the_list` compares wall-clock halves against a 2x bound and failed once in a full-suite run while passing 3/3 in isolation — it is sensitive to whatever else the machine is doing. It now retries up to three times and accepts the best attempt. A genuinely O(delta^2) implementation fails every attempt (its ratio is ~3x and grows), so no power is lost against the defect it exists to catch.
+
+### Raising the memory cap: guo can reach N=10^6, thingom cannot
+- **Date:** 2026-08-29
+- **Status:** *analysis; no change made*
+- **Why it changed:** Asked whether a larger instance would let both capped schemes reach the published N = 10^6. The two caps have DIFFERENT causes and only one is fixable with hardware.
+  - **`guo_vdsse` is memory-bound.** 50.5 KB/document of punctured GGM key -> **51.7 GB** at N = 10^6, plus ~2 GB corpus. A >=64 GiB host clears it, and the time is affordable: the incremental build is **11.24 h**. So yes -- more RAM genuinely unlocks guo's full sweep.
+  - **`thingom_pq_abse` is TIME-bound, not memory-bound.** Its search is O(N) pairings with no early termination (as published), measured at 0.373 ms/pairing with 2-process parallelism. `runtime_estimates.csv` already records N = 10^5 at **~39.7 h for that single point**; N = 10^6 extrapolates to **~397 h (16.5 days)**. No amount of RAM changes that -- it is the construction's own cost, and the reason the cap has been reaffirmed three times (2026-08-23, -27, -28).
+- **The constraint that binds:** README §1 requires every scheme on identical hardware, so moving guo to a 64 GiB host means moving all five -- which invalidates the four schemes' completed results. That is the real price, not the instance rate.
