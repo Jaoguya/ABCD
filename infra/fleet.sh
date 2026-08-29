@@ -153,10 +153,38 @@ cmd_status() {
         --query 'length(Reservations[].Instances[])' --output text | tr -d '[:space:]')
   stop=$(aws ec2 describe-instances "${TAG_FILTER[@]}" "Name=instance-state-name,Values=stopped" \
         --query 'length(Reservations[].Instances[])' --output text | tr -d '[:space:]')
+  # Burn is priced PER INSTANCE TYPE, not as running x 0.19. The fleet is no
+  # longer uniform: guo_vdsse and yue_ge were resized to m6i.4xlarge after
+  # exhausting a 15 GB host mid-Exp. 2 (yue_ge's A_c grows ~9.85 GB per million
+  # records and it sweeps to 10^6). A flat rate under-reported the true spend by
+  # 3x the moment that happened, and spend decisions were being made on it.
+  #
   # python3 rather than awk: the nested quoting needed to get a float out of
   # awk through two levels of shell was what broke this the first time.
-  burn=$(python3 -c "print(f'{${run:-0} * 0.19:.2f}')")
+  local types
+  types=$(aws ec2 describe-instances "${TAG_FILTER[@]}" \
+          "Name=instance-state-name,Values=running" \
+          --query 'Reservations[].Instances[].InstanceType' --output text | tr '\t' '\n')
+  burn=$(python3 - <<'PYRATE' "$types"
+import sys
+# us-east-1 on-demand, USD/hr. Unknown types fall back to the xlarge rate and
+# say so, rather than silently pricing them at zero.
+RATES = {"m6i.large": 0.096, "m6i.xlarge": 0.192, "m6i.2xlarge": 0.384,
+         "m6i.4xlarge": 0.768, "m6i.8xlarge": 1.536, "m6i.12xlarge": 2.304,
+         "m6i.16xlarge": 3.072, "m6i.24xlarge": 4.608, "m6i.32xlarge": 6.144}
+total, unknown = 0.0, []
+for t in (sys.argv[1] if len(sys.argv) > 1 else "").split():
+    if t in RATES:
+        total += RATES[t]
+    elif t:
+        unknown.append(t); total += RATES["m6i.xlarge"]
+print(f"{total:.2f}" + (f" (+unpriced: {','.join(sorted(set(unknown)))})" if unknown else ""))
+PYRATE
+)
   echo "running=$run stopped=$stop  burn=\$$burn/hr"
+  if [ -n "$types" ]; then
+    echo "  types: $(echo "$types" | sort | uniq -c | awk '{printf "%sx%s ", $1, $2}')"
+  fi
   for ip in $(ips); do
     echo "  $ip  $(ssh "${SSH_OPTS[@]}" "ubuntu@$ip" \
       "pgrep -f 'src\.main' >/dev/null && echo BUSY || echo idle; " 2>/dev/null | head -1)"
