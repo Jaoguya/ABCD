@@ -200,6 +200,72 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
     return series
 
 
+#: Exp. 7-8 are an ABLATION, not a cross-scheme comparison (README §5): the four
+#: series on those two figures are scheduler variants of one scheme. Order is
+#: fixed here so the legend reads weakest-to-proposed on every regeneration.
+ABLATION_VARIANTS: Tuple[Tuple[str, str], ...] = (
+    ("no_lb", "No load balancing"),
+    ("round_robin", "Round robin"),
+    ("least_loaded", "Least loaded"),
+    ("aass", "AASS (proposed)"),
+)
+
+
+def _variant_of(exp_dir: Path) -> Optional[str]:
+    """Which scheduler produced this directory.
+
+    ``run_meta.json``'s ``scheduler_variant`` note is authoritative; the
+    directory suffix is only the fallback. A result identified solely by its
+    folder name loses its identity the moment anything is renamed or merged,
+    which is why the note is written in the first place.
+    """
+    meta = exp_dir / "run_meta.json"
+    try:
+        notes = json.loads(meta.read_text(encoding="utf-8")).get("notes") or []
+        for note in notes:
+            if str(note).startswith("scheduler_variant="):
+                return str(note).split("=", 1)[1].strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+    suffix = exp_dir.name.rsplit("__", 1)[-1] if "__" in exp_dir.name else ""
+    return suffix or None
+
+
+def collect_ablation(input_root: Path, spec: ExperimentSpec) -> List[Series]:
+    """One series per scheduler variant, for Exp. 7-8.
+
+    ``collect`` takes the FIRST matching ``exp<N>_*`` directory per scheme and
+    stops, which is right for a cross-scheme figure and wrong here: it would
+    draw a single curve labelled with the scheme name where §V claims a
+    four-way comparison, silently choosing whichever variant sorted first.
+    """
+    found: List[Series] = []
+    if not input_root.is_dir():
+        return found
+    by_variant: Dict[str, Path] = {}
+    for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
+        for exp_dir in sorted(scheme_dir.glob(f"exp{spec.number}_*__*")):
+            if not exp_dir.is_dir():
+                continue
+            variant = _variant_of(exp_dir)
+            # Skips the `__points-<N>` sweep shards, which are not variants.
+            if variant in dict(ABLATION_VARIANTS):
+                by_variant.setdefault(variant, exp_dir)
+    for variant, label in ABLATION_VARIANTS:
+        exp_dir = by_variant.get(variant)
+        if exp_dir is None:
+            print(f"  NOTE exp{spec.number}: no directory for variant "
+                  f"{variant!r}; the ablation figure will be incomplete")
+            continue
+        series = read_results(exp_dir / "results.csv", label)
+        if series is None:
+            print(f"  NOTE exp{spec.number}: {exp_dir.name} has no usable "
+                  f"results.csv; {variant!r} omitted")
+            continue
+        found.append(series)
+    return found
+
+
 def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     """Find every scheme's results for one experiment.
 
@@ -207,6 +273,8 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     names its directory slightly differently is still picked up instead of
     silently contributing nothing.
     """
+    if spec.number in (7, 8):
+        return collect_ablation(input_root, spec)
     found: List[Series] = []
     if not input_root.is_dir():
         return found

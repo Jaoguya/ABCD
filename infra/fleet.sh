@@ -88,15 +88,24 @@ PY
 
 cmd_harvest() {
   local out="${1:-./harvest-$(date -u +%Y%m%dT%H%M%SZ)}"
-  mkdir -p "$out"; echo "harvesting to $out (provenance-selected)..."
+  # corpus_type alone is NOT enough when a re-run supersedes results that are
+  # already committed: `deploy` restores the git-tracked old directories onto
+  # every node, so a node that ran ONE variant still carries all four, and the
+  # three stale ones are also corpus_type=synthea. Set OJCOMS_COMMIT to the
+  # commit the re-run was launched from to take only what that commit produced.
+  local COMMIT="${OJCOMS_COMMIT:-}"
+  mkdir -p "$out"
+  echo "harvesting to $out (provenance-selected${COMMIT:+, git_commit ^$COMMIT})..."
   for ip in $(ips); do
     ssh "${SSH_OPTS[@]}" "ubuntu@$ip" '
       cd ~/abcd
       dirs=$(for m in Schemes/*/*/run_meta.json; do [ -f "$m" ] || continue
-        python3 -c "
-import json,sys
+        WANT_COMMIT="'"$COMMIT"'" python3 -c "
+import json,os,sys
 m=json.load(open(\"$m\"))
-sys.exit(0 if m.get(\"corpus_type\")==\"synthea\" else 1)" 2>/dev/null && dirname "$m"; done)
+if m.get(\"corpus_type\")!=\"synthea\": sys.exit(1)
+want=os.environ.get(\"WANT_COMMIT\") or \"\"
+sys.exit(0 if not want or str(m.get(\"git_commit\",\"\")).startswith(want) else 1)" 2>/dev/null && dirname "$m"; done)
       [ -n "$dirs" ] && tar cz $dirs 2>/dev/null' > "$out/$ip.tgz" 2>/dev/null
     echo "  $ip -> $(tar tzf "$out/$ip.tgz" 2>/dev/null | grep -c run_meta.json) result dir(s)"
   done
@@ -134,7 +143,7 @@ usage: infra/fleet.sh {start|deploy|harvest [dir]|stop|status}
   stop     stop every instance (STOP, not terminate -- volumes and results survive)
   status   what is running, what is busy, current burn rate
 
-env: OJCOMS_KEY, OJCOMS_SG, OJCOMS_BRANCH
+env: OJCOMS_KEY, OJCOMS_SG, OJCOMS_BRANCH, OJCOMS_COMMIT (harvest filter)
 USAGE
      exit 1 ;;
 esac
