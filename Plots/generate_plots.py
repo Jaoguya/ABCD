@@ -251,10 +251,27 @@ plt.rcParams.update({
 })
 
 
+def _axis_number(v: float) -> str:
+    """Compact scientific form for a legend note: 200000 -> 2x10^5."""
+    if v <= 0:
+        return str(v)
+    exp = int(math.floor(math.log10(v)))
+    mant = v / (10 ** exp)
+    if exp < 3:
+        return f"{v:g}"
+    # mathtext, so the exponent renders as a superscript in both the PDF and
+    # the PNG rather than as a literal "10^5".
+    return (rf"$10^{{{exp}}}$" if abs(mant - 1) < 1e-9
+            else rf"${mant:g}\times10^{{{exp}}}$")
+
+
 def render(spec: ExperimentSpec, series_list: Sequence[Series],
            out_path: Path, dpi: Optional[int] = None) -> Tuple[bool, List[str]]:
     """Draw one figure. Returns (written, warnings)."""
     warnings: List[str] = []
+    # The furthest point any scheme reached, so a shorter series can be marked.
+    _all_x = [v for s in series_list for v in s.x]
+    max_x = max(_all_x) if _all_x else None
     if not series_list:
         return False, [f"exp{spec.number}: no results.csv found for any scheme"]
 
@@ -263,6 +280,14 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
                          key=lambda s: STYLE_ORDER.index(s.scheme)
                          if s.scheme in STYLE_ORDER else 99):
         label = SCHEME_LABELS.get(series.scheme, series.scheme)
+        # A series that stops short of the sweep is a DISCLOSED CAP, not missing
+        # data -- guo_vdsse's Exp. 2 ends at N=2e5 because its forward index is
+        # 51.7 GB at 10^6 on a 16 GiB host, and thingom_pq_abse ends at 10^4 for
+        # the same class of reason. Unlabelled, a line that simply stops reads
+        # as a failed run; the first question anyone asks of the figure is why
+        # it vanishes. Say so on the curve itself.
+        if series.x and max_x is not None and max(series.x) < max_x:
+            label += f" (to {_axis_number(max(series.x))})"
         ax.errorbar(
             series.x, series.y, yerr=series.yerr,
             label=label, capsize=2, markersize=3.5, linewidth=1.1,
