@@ -66,7 +66,14 @@ cmd_deploy() {
       BK=~/results-safe-\$(date -u +%Y%m%dT%H%M%SZ)
       mkdir -p \$BK && cp -a Schemes \$BK/ 2>/dev/null
       git remote set-url origin git@github.com:Jaoguya/ABCD 2>/dev/null
-      git fetch -q origin && git reset -q --hard origin/$BRANCH
+      # reset --hard alone resets whatever branch happens to be checked out; it
+      # never switches. Nodes were therefore sitting on a local branch named
+      # `final-debug` TRACKING origin/final-debug while their HEAD held
+      # exp78-diagnosis's commit -- correct code under a misleading label, and a
+      # `git pull` on a node would have silently pulled the other branch and
+      # reverted it. checkout -B fixes the name and the upstream together.
+      git fetch -q origin && git reset -q --hard origin/$BRANCH \
+        && git checkout -q -B $BRANCH origin/$BRANCH
       # Restore any result that the reset just clobbered, but ONLY real ones.
       python3 - <<'PY' \$BK
 import json,shutil,sys
