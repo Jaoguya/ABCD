@@ -635,6 +635,67 @@ def test_exp7_and_exp8_share_one_workload_engine():
     assert exp_mod.Exp8LoadBalance.replay is exp_mod.SchedulerAblation.replay
 
 
+def test_exp7_and_exp8_record_the_same_arrival_trace():
+    """README §5: both experiments replay "the same recorded arrival trace".
+
+    They share the engine (above) but each calls prepare() separately, so
+    "the same workload" is a property of prepare() being deterministic, not a
+    consequence of the shared class. Nothing asserted it. Measured here by
+    digesting the trace: same digest for exp7 and exp8, and stable across
+    repeated calls, at two concurrencies.
+
+    The digest deliberately EXCLUDES SearchToken.nonce. Every other field --
+    the keyword tokens, auth_root, vid_u, and the authorization decision -- is
+    the workload; the nonce is fresh randomness per token and MUST vary, which
+    the companion test below pins. So the trace is identical in content and is
+    NOT byte-identical, and only the first of those is what the figures need.
+    """
+    import hashlib
+    import pickle
+
+    def trace_digest(number: int, concurrency: int) -> str:
+        experiment = exp_mod.build_experiment(number, CONFIG, SOURCE)
+        digest = hashlib.sha256()
+        for token, decision in experiment.prepare(concurrency)["requests"]:
+            digest.update(pickle.dumps(token.tokens, protocol=4))
+            digest.update(pickle.dumps(token.auth_root, protocol=4))
+            digest.update(pickle.dumps(token.vid_u, protocol=4))
+            digest.update(pickle.dumps(decision.accepted, protocol=4))
+        return digest.hexdigest()
+
+    for concurrency in (8, 32):
+        first7 = trace_digest(7, concurrency)
+        assert first7 == trace_digest(7, concurrency), (
+            f"exp7's trace is not stable across prepare() calls at "
+            f"concurrency={concurrency}; the ablation arms are then not "
+            f"comparable to each other"
+        )
+        assert first7 == trace_digest(8, concurrency), (
+            f"exp7 and exp8 recorded different traces at "
+            f"concurrency={concurrency}; §V pairs their metrics as one workload"
+        )
+
+
+def test_search_token_nonce_is_fresh_per_token():
+    """The counterpart to the digest above: the nonce must NOT be deterministic.
+
+    The trace test passes trivially if someone makes prepare() reproducible by
+    freezing the nonce, which would be a real cryptographic defect rather than
+    a fix. This fails first if that ever happens.
+    """
+    experiment = exp_mod.build_experiment(7, CONFIG, SOURCE)
+    requests = experiment.prepare(8)["requests"]
+    nonces = [token.nonce for token, _ in requests]
+    assert len(set(nonces)) == len(nonces), (
+        "SearchToken.nonce repeated within one trace"
+    )
+
+    again = experiment.prepare(8)["requests"]
+    assert [t.nonce for t, _ in again] != nonces, (
+        "SearchToken.nonce is reproducible across prepare() calls"
+    )
+
+
 def test_ablation_covers_the_four_variants():
     from Schemes.ma_lb_pq_vdse.src.scheduler import aass as aass_mod
 
