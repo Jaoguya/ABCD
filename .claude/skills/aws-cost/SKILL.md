@@ -1,6 +1,6 @@
 ---
 name: aws-cost
-description: Report AWS spend for this project's EC2 fleet - total to date, per-instance breakdown, current burn rate, and what is running right now. Use when asked how much AWS has cost, what is still billing, whether instances can be stopped, or to check spend before or after an experiment campaign.
+description: Report AWS spend for this project's EC2 fleet - cost so far, cost projected at completion, per-instance breakdown, and what is running right now. Use when asked how much AWS has cost, what it will cost to finish, what is still billing, whether instances can be stopped, or to check spend before or after an experiment campaign.
 ---
 
 # AWS cost for the benchmark fleet
@@ -55,8 +55,8 @@ legitimately disagree:
 - **Cost Explorer** (`aws ce`) — what AWS actually billed. Authoritative, but
   lags by up to ~24h and is not free: **each `get-cost-and-usage` call costs
   $0.01**. Do not poll it in a loop.
-- **Live instance state** (`aws ec2`) — what is running *now* and therefore
-  what the burn rate is. Free, instant, but says nothing about past spend.
+- **Live instance state** (`aws ec2`) — what is running *now*, and therefore
+  what finishing will add. Free, instant, but says nothing about past spend.
 
 Use `scripts/aws_cost.py`. It needs configured credentials (`aws sts
 get-caller-identity` must succeed).
@@ -73,6 +73,42 @@ python3 .claude/skills/aws-cost/scripts/aws_cost.py --all-account  # reporting o
 
 `--running` makes no Cost Explorer call, so it costs nothing — prefer it when
 the question is only "what is billing right now".
+
+### Cost now vs cost to finish
+
+The report ends with a **COST** block: what has been spent, what finishing adds,
+and the total of the two. `--hours` sets the horizon and defaults to 24.
+
+```bash
+python3 .claude/skills/aws-cost/scripts/aws_cost.py --hours 8.3    # cost at completion
+python3 .claude/skills/aws-cost/scripts/aws_cost.py --running --hours 8.3   # same, free
+```
+
+```
+COST
+  now             $24.26   billed, last 30d, Project=OJCOMS
+  + 8.3h          $12.75   2 instance(s) at $1.54/hr
+  ==========
+  projected       $37.01   if the fleet runs 8.3h more
+```
+
+**Pass the experiment's REMAINING hours**, not its total, or the projection
+answers a question nobody asked. Get them from the `runtime-table` skill or from
+observed progress — and prefer observed progress: `runtime_estimates.csv` has
+been wrong by 8x in both directions, including one guo row that claimed a flat
+0.065 s/run at every N against measurements up to 94x higher.
+
+**`now` is not the same quantity in both modes**, which is why it is labelled:
+billed month-to-date (includes EBS, snapshots, transfer, and earlier boots) in
+the default mode; accrued-this-boot only under `--running`. The second is
+narrower and always smaller.
+
+**Why not a burn rate.** This used to headline `BURN RATE $/hr, $/day, $/week`.
+A rate answers "how fast am I spending"; the decision actually in front of the
+reader is "can I afford to finish", which needs a total. The rate is still
+printed once inside the block as the arithmetic basis — a projection nobody can
+check is worse than no projection — but it is no longer the headline, and the
+per-instance lines now show cost accrued rather than $/hr.
 
 Default output covers **only `Project=OJCOMS`**. Anything outside that tag is
 listed solely under `--all-account`, and only so an account-wide bill can be
@@ -97,8 +133,9 @@ Also read-only, and scoped to `Project=OJCOMS` like everything else here.
 
 ## Reading the output
 
-- **Burn rate** is computed from instances in the `running` state only.
-  A `stopped` instance bills **no compute**, but its EBS volume still bills
+- **The projection** is computed from instances in the `running` state only, so
+  it is what *compute* will add. A `stopped` instance bills **no compute**, and
+  a stopped fleet makes the projection zero — but its EBS volume still bills
   (~$0.08/GB-month for gp3), which is why stopping is not the same as
   terminating and why a long-stopped fleet is not free.
 - **Cost Explorer totals include everything** — EBS, snapshots, data transfer,
