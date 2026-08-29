@@ -181,7 +181,22 @@ def report_running(show_storage: bool = True,
 # ---------------------------------------------------------------------------
 # Cost Explorer — $0.01 per call
 # ---------------------------------------------------------------------------
-def cost_explorer(days: int, by_instance: bool) -> None:
+def cost_explorer(days: int, by_instance: bool, all_account: bool = False) -> None:
+    """Billed cost. Scoped to this project unless --all-account is passed.
+
+    THIS USED TO BE ACCOUNT-WIDE ALWAYS, under a header that said
+    "scope: Project=OJCOMS only". That is how a $42 account-wide total got
+    reported as this project's spend when the project had used about $20 --
+    the account carries a ~$14/day baseline from unrelated work (BVCRSA, SSO,
+    EKS), and days when this project's fleet was entirely stopped still billed
+    $12-14. The header is now honest and the query is actually filtered.
+
+    Cost allocation tags must be ACTIVATED in Billing > Cost allocation tags
+    before Cost Explorer can group or filter by them, and activation is not
+    retroactive -- it applies from the day it is switched on. So a tag-filtered
+    query can legitimately return nothing while real spend exists. That case is
+    reported as "tag not activated", never as $0.
+    """
     end = dt.date.today() + dt.timedelta(days=1)
     start = end - dt.timedelta(days=days + 1)
     args = [
@@ -190,6 +205,11 @@ def cost_explorer(days: int, by_instance: bool) -> None:
         "--granularity", "DAILY",
         "--metrics", "UnblendedCost",
     ]
+    if not all_account:
+        args += ["--filter", json.dumps(
+            {"Tags": {"Key": PROJECT_TAG_KEY,
+                      "Values": [PROJECT_TAG_VALUE],
+                      "MatchOptions": ["EQUALS"]}})]
     if by_instance:
         args += ["--group-by", "Type=DIMENSION,Key=SERVICE"]
 
@@ -211,6 +231,22 @@ def cost_explorer(days: int, by_instance: bool) -> None:
     results = (data or {}).get("ResultsByTime", [])
     if not results:
         print("\nCOST EXPLORER returned no data for the window.")
+        return
+
+    total_probe = 0.0
+    for r in results:
+        try:
+            total_probe += float(r["Total"]["UnblendedCost"]["Amount"])
+        except (KeyError, TypeError, ValueError):
+            pass
+    if not all_account and total_probe == 0.0:
+        print(f"\nBILLED — Project={PROJECT_TAG_VALUE}: $0.00 reported")
+        print("-" * 72)
+        print("  A tag-filtered query returned nothing. Usually this means the")
+        print(f"  '{PROJECT_TAG_KEY}' cost allocation tag has not been activated in")
+        print("  Billing > Cost allocation tags (activation is NOT retroactive).")
+        print("  Re-run with --all-account for the account total, but do not")
+        print("  report that as this project's spend.")
         return
 
     total = 0.0
@@ -272,7 +308,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     burn = report_running(all_account=args.all_account)
     if not args.running:
-        cost_explorer(args.days, args.by_instance)
+        cost_explorer(args.days, args.by_instance, args.all_account)
         if burn > 0:
             print(f"\n  At the current burn rate, another 24h adds "
                   f"~{money(burn * 24)} of compute.")

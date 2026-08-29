@@ -1,7 +1,7 @@
 {
   "scheme": "guo_vdsse",
   "experiment": "exp3",
-  "git_commit": "f7458807e1f2fd4f9631241fe790b4ec97a1f29e",
+  "git_commit": "58478e6fcb1a61d4dea96907426606926bce8ed1",
   "python_version": "3.11.15",
   "dataset_sha256": "e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0",
   "corpus_type": "synthea",
@@ -12,7 +12,7 @@
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
   },
-  "utc_start_time": "2026-08-29T12:03:08+00:00",
+  "utc_start_time": "2026-08-29T10:54:52+00:00",
   "environment": {
     "python_version": "3.11.15",
     "python_implementation": "CPython",
@@ -56,16 +56,5 @@
     }
   },
   "reportable": true,
-  "not_reportable_because": [],
-  "merged_from": [
-    "exp3_crossdomain_scalability__points-10",
-    "exp3_crossdomain_scalability__points-2",
-    "exp3_crossdomain_scalability__points-3",
-    "exp3_crossdomain_scalability__points-4",
-    "exp3_crossdomain_scalability__points-5",
-    "exp3_crossdomain_scalability__points-6",
-    "exp3_crossdomain_scalability__points-7",
-    "exp3_crossdomain_scalability__points-8",
-    "exp3_crossdomain_scalability__points-9"
-  ]
+  "not_reportable_because": []
 }

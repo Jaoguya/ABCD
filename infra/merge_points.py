@@ -32,6 +32,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, List
@@ -45,7 +46,7 @@ def _shards(base: Path) -> List[Path]:
     return sorted(base.parent.glob(f"{base.name}__points-*"))
 
 
-def _check_provenance(shards: List[Path]) -> Dict[str, object]:
+def _check_provenance(shards: List[Path], base: Path) -> Dict[str, object]:
     metas = {}
     for shard in shards:
         meta_path = shard / "run_meta.json"
@@ -53,10 +54,12 @@ def _check_provenance(shards: List[Path]) -> Dict[str, object]:
             raise SystemExit(f"{shard.name}: no run_meta.json — cannot merge")
         metas[shard.name] = json.loads(meta_path.read_text())
 
-    keys = ("git_commit", "dataset_sha256", "config_hashes")
     first_name, first = next(iter(metas.items()))
+
+    # Corpus and config must match exactly -- a different corpus or a different
+    # parameter set is a different experiment, full stop.
     for name, meta in metas.items():
-        for key in keys:
+        for key in ("dataset_sha256", "config_hashes"):
             if meta.get(key) != first.get(key):
                 raise SystemExit(
                     f"shards disagree on {key!r}:\n"
@@ -65,6 +68,54 @@ def _check_provenance(shards: List[Path]) -> Dict[str, object]:
                     "These shards did not come from the same system; merging "
                     "them would produce a figure mixing two campaigns."
                 )
+
+    # git_commit is checked differently, on purpose. A bare hash comparison
+    # rejects shards that ran IDENTICAL code merely because an unrelated commit
+    # landed in between -- which happens whenever one straggler point is
+    # relaunched. What actually matters is whether the code THIS SCHEME
+    # executes differs. So compare the hashes, and when they differ, ask git
+    # whether anything the scheme runs changed between them.
+    commits = {m.get("git_commit") for m in metas.values()}
+    if len(commits) > 1:
+        scheme = first.get("scheme") or ""
+        paths = [f"Schemes/{scheme}", "Common", "Experiment Configuration"]
+        # A change to a DIFFERENT experiment's runner is irrelevant here: it
+        # cannot affect what this one measured. Without this, one straggler
+        # point relaunched after an unrelated experiment was edited blocks the
+        # merge forever. Shared code (scheme.py, harness.py, config) has no
+        # experiment number in its path and is therefore never excluded.
+        import re as _re
+        m = _re.search(r"exp(\d+)", base.name)
+        this_exp = m.group(1) if m else None
+        ordered = sorted(c for c in commits if c)
+        drift = []
+        for other in ordered[1:]:
+            out = subprocess.run(
+                ["git", "diff", "--name-only", f"{ordered[0]}..{other}", "--"]
+                + paths,
+                capture_output=True, text=True, cwd=REPO_ROOT)
+            if out.returncode != 0:
+                raise SystemExit(
+                    f"shards span commits {ordered} and git could not compare "
+                    f"them ({out.stderr.strip()[:120]}). Refusing to merge."
+                )
+            for ln in out.stdout.split():
+                if not ln:
+                    continue
+                other_exp = _re.search(r"exp(\d+)", ln)
+                if this_exp and other_exp and other_exp.group(1) != this_exp:
+                    continue  # another experiment's runner
+                drift.append(ln)
+        if drift:
+            raise SystemExit(
+                f"shards span commits {ordered}, and code this scheme runs "
+                f"changed between them:\n  "
+                + "\n  ".join(sorted(set(drift))[:8])
+                + "\nMerging them would mix two versions of the experiment. "
+                "Re-run the older shards at the newer commit."
+            )
+        print(f"  note: shards span {len(commits)} commits, but nothing under "
+              f"{', '.join(paths)} differs between them — merging.")
     return first
 
 
@@ -73,7 +124,7 @@ def merge(base: Path, *, dry_run: bool = False) -> int:
     if not shards:
         raise SystemExit(f"no shards found matching {base.name}__points-*")
 
-    meta = _check_provenance(shards)
+    meta = _check_provenance(shards, base)
 
     rows: List[Dict[str, str]] = []
     seen: Dict[str, str] = {}

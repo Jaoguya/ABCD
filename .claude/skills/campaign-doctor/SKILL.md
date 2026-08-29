@@ -91,6 +91,37 @@ parameters touch everything.
   (40.5 predicted vs 42.3 measured ms/record) while memory was never modelled
   at all. `runtime_estimates.csv` still has no memory column.
 
+## Deploying to the fleet without destroying results
+
+**Result files are git-tracked** (`Schemes/*/exp*/results.csv`, `raw_runs.csv`,
+`run_meta.json` — 64 of them). So `git reset --hard` on a node **restores the
+committed versions over fresh ones**. That is not a merge conflict or a warning;
+it is silent data loss. It destroyed guo's Exp. 1, 2 and 4 after they had
+completed successfully, and the loss only surfaced when a provenance audit
+found `corpus_type: synthetic` on files that should have said `synthea`.
+
+Before any deploy that resets the working tree:
+
+```bash
+BK=~/results-safe-$(date -u +%Y%m%dT%H%M%SZ); mkdir -p $BK
+cp -a Schemes/<scheme> $BK/          # archive first
+git fetch -q origin && git reset -q --hard origin/<branch>
+```
+
+Harvest results **before** redeploying, not after.
+
+## Trust provenance, not timestamps
+
+Select results by what `run_meta.json` says, never by file mtime. A
+`git reset` rewrites mtimes, so a stale file can look newer than a real one.
+The check that matters is `corpus_type == "synthea"` and
+`dataset_sha256`/`corpus_sha256` equal to `dataset.yaml`'s frozen pin.
+
+**Each scheme writes a different run_meta schema** — `ma_lb_pq_vdse` uses
+`corpus_sha256`, `guo_vdsse` uses `dataset_sha256`, `thingom_pq_abse` nests it
+under `dataset`. A naive audit therefore reports false positives on two schemes
+and can miss real staleness on a third. Read the schema per scheme.
+
 ## Cost discipline
 
 Money is a constraint, and idle instances are the usual leak.

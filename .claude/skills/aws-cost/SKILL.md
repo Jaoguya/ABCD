@@ -34,6 +34,21 @@ because a billed total is account-wide and cannot be attributed otherwise —
 it is a **reporting** flag and confers no permission to act on anything it
 displays.
 
+**Billed cost is now filtered to `Project=OJCOMS` by default** (fixed
+2026-08-29). It previously queried the whole account while printing
+`scope: Project=OJCOMS only` above the result — which reported **$42.57** as
+this project's spend when the project had actually used about **$12**. The
+account carries a ~$14/day baseline from unrelated work (BVCRSA, SSO, EKS), and
+days on which this project's fleet was entirely stopped still billed $12–14.
+Anyone reading that header would have attributed all of it here.
+
+Tag filtering depends on the `Project` cost allocation tag being **activated**
+in Billing → Cost allocation tags, and activation is **not retroactive** — it
+applies only from the day it is switched on. A filtered query can therefore
+return nothing while real spend exists, so that case prints
+"tag not activated" rather than `$0.00`. `--all-account` still gives the
+account total, clearly labelled as such.
+
 Two independent sources, because they answer different questions and can
 legitimately disagree:
 
