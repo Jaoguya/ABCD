@@ -85,7 +85,7 @@ the Phase IV/VI token relation (settled as Option D) and Phase VIII Step 2's
 - **Exp. 4** — Verification is client-side: Merkle proof check, `Commit_i*` recomputation, and blockchain-consistency check. IPFS fetch and decryption are **excluded**.
 - **Exp. 5** — Measure incremental update only. A global index rebuild indicates a Phase VII implementation bug.
 - **Exp. 6** — Measure IAS end-to-end: authority commitment recomputation → Merkle path update → IAS message → selective FSN propagation, until all affected FSNs report the new `VID`. Report FSNs touched.
-- **Exp. 7–8** — Closed-loop load generator with fixed concurrency and a recorded arrival trace. All 4 variants see byte-identical workloads. Utilization sampled every 100 ms.
+- **Exp. 7–8** — Closed-loop load generator with fixed concurrency and a recorded arrival trace, which all 4 variants replay. The trace is identical in *content* — keyword tokens, authorization root, user id, AIM decision — and deliberately NOT byte-identical, since every `SearchToken` carries a fresh random nonce that must vary. Utilization sampled every 100 ms.
 
 ### Scheduler Ablation (Exp. 7 & 8)
 
