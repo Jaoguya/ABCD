@@ -192,6 +192,15 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
 
     def _variants_for(number: int):
         """Which scheduler variants to run for this experiment."""
+        if number == 6 and args.variant:
+            # Exp. 6 measures IAS propagation and the scheduler decides which
+            # FSN serves a QUERY, so the four variants should be
+            # indistinguishable here. Run them anyway when asked: an ablation
+            # that shows no effect is a result, and asserting independence is
+            # weaker than measuring it.
+            if args.variant.lower() == "all":
+                return list(ALL_VARIANTS)
+            return [v.strip() for v in args.variant.split(",") if v.strip()]
         if number not in (7, 8):
             return [None]                 # scheduler is not on their path
         if args.variant in (None, ""):
@@ -226,7 +235,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             # Which scheduler produced these numbers. Exp. 7-8 is a four-way
             # ablation, so a result that does not name its variant is
             # unidentifiable the moment the directory is renamed or merged.
-            notes=([f"scheduler_variant={variant}"] if variant and number in (7, 8)
+            notes=([f"scheduler_variant={variant}"] if variant and number in (6, 7, 8)
                    else None),
         )
         if args.require_reportable and not metadata.reportable:
@@ -263,7 +272,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         # exp7 folder would silently overwrite each other and leave a single
         # curve labelled as an ablation.
         out_dir = sweep.shard_dir(output_root / FOLDERS[number], args.points)
-        if variant and number in (7, 8):
+        if variant and number in (6, 7, 8):
             out_dir = out_dir.parent / f"{out_dir.name}__{variant}"
         written = runner.write_outputs(result, out_dir)
         for point in result.points:

@@ -38,6 +38,8 @@ analytical shortcut that README §13 forbids.
 
 from __future__ import annotations
 
+import os
+
 import multiprocessing as mp
 import random
 from dataclasses import dataclass
@@ -78,7 +80,20 @@ _MP_PLAN: Any = None
 # reference, exact pairing counts and match sets identical) vs. 4-process
 # 1.90x -- *worse* than 2-process, because this is compute-bound work and the
 # extra hyperthreads add pool overhead without adding real compute capacity.
-_SEARCH_PROCESSES = 2
+# Overridable so the published N = 10^6 point is reachable. Ref[41]'s search is
+# embarrassingly parallel over candidate records: the SAME q*N*(2u+1) pairings
+# are computed, just spread across workers. No batching, no early termination,
+# no index -- the construction is untouched, which is the line that must not be
+# crossed (see scheme.py::search_with_plan).
+#
+# 2 is right on the pinned m6i.xlarge: its "4 vCPU" is 2 physical cores plus
+# hyperthreading, and 4 processes measured SLOWER on this compute-bound work.
+# On a wider host, set THINGOM_SEARCH_PROCESSES to the physical core count.
+# Measured cost at N = 10^6, 35 runs: 380.8h at 2 procs, 23.8h at 32, 11.9h at 64.
+#
+# §V MUST STATE the process count: reported latency is aggregate work divided
+# across P workers, not a single-core figure.
+_SEARCH_PROCESSES = int(os.environ.get("THINGOM_SEARCH_PROCESSES", "2"))
 
 # Used only by the feasibility guard, never in a reported number. Held below
 # the 1.94-1.95x actually measured so the guard errs toward attempting a point
