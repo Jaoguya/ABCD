@@ -98,7 +98,7 @@ def run(
     rng = DeterministicRNG(seed).spawn("exp5_update")
 
     # Filter variable range to feasible values
-    actual_range = VARIABLE_RANGE
+    actual_range = sweep.select(VARIABLE_RANGE, points)
 
     # Pre-generate update batches for each k value — same batches across
     # all runs for consistency.  We generate warmup + runs batches per k.
@@ -142,7 +142,7 @@ def run(
             },
         )
 
-    sweep_values = sweep.select(actual_range, points)
+    sweep_values = actual_range
 
     results = run_experiment(
 

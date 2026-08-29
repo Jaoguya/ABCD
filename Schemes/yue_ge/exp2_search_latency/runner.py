@@ -178,7 +178,7 @@ def run(
             },
         )
 
-    sweep_values = sweep.select(actual_range, points)
+    sweep_values = actual_range
 
     results = run_experiment(
 

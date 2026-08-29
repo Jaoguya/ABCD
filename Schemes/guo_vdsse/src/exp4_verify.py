@@ -117,6 +117,7 @@ def run(
     actual_range = [
         r for r in VARIABLE_RANGE if r <= len(records)
     ]
+    actual_range = sweep.select(actual_range, points)
     if not actual_range:
         actual_range = [min(VARIABLE_RANGE)]
 
@@ -171,7 +172,7 @@ def run(
             },
         )
 
-    sweep_values = sweep.select(actual_range, points)
+    sweep_values = actual_range
 
     results = run_experiment(
 

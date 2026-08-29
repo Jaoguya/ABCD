@@ -65,20 +65,21 @@ def run(
     points: Optional[str] = None,
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp1_trapdoor")
+    actual_range = sweep.select(VARIABLE_RANGE, points)
     subset = list(records[: min(INDEX_SIZE, len(records))])
 
     keys = scheme.setup(params, with_abe=False)
     freq = keyword_frequency(subset)
 
     pools: Dict[int, list] = {}
-    for q in VARIABLE_RANGE:
+    for q in actual_range:
         pools[q] = [
             select_keywords(freq, rng, q) for _ in range(warmup + runs)
         ]
         if not pools[q][0]:
             raise RuntimeError(f"no eligible query keywords at q={q}")
 
-    counter = {q: 0 for q in VARIABLE_RANGE}
+    counter = {q: 0 for q in actual_range}
 
     def runner(q: int) -> RunResult:
         i = counter[q]
@@ -93,8 +94,7 @@ def run(
                 "prf_evaluations": len(td.tokens),
             },
         )
-
-    sweep_values = sweep.select(VARIABLE_RANGE, points)
+    sweep_values = actual_range
 
     results = run_experiment(
 

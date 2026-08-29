@@ -76,12 +76,19 @@ def run(
     """Run Experiment 3: Cross-Domain Scalability."""
     rng = DeterministicRNG(seed).spawn("exp3_crossdomain")
 
+    # Selection is applied HERE, not at the run_experiment call, because the
+    # pre-build below allocates a full sharded EDB set per d. Filtering only the
+    # measurement loop left `--points 2` still building all nine d values --
+    # 9 x 10^5 records of punctured GGM keys, ~45 GB -- and every guo Exp. 3
+    # shard was OOM-killed in the 2026-08-29 campaign because of it.
+    actual_range = sweep.select(VARIABLE_RANGE, points)
+
     # Use at most DEFAULT_N records
     subset = records[:min(DEFAULT_N, len(records))]
 
     # Pre-build per-d sharded EDBs — not timed
     per_d_setups: Dict[int, List[Tuple[Any, Any]]] = {}
-    for d in VARIABLE_RANGE:
+    for d in actual_range:
         shards = _shard_records(subset, d)
         shard_setups = []
         for shard in shards:
@@ -102,7 +109,7 @@ def run(
         )
         query_sets.append(selected)
 
-    iteration_counter: Dict[int, int] = {d: 0 for d in VARIABLE_RANGE}
+    iteration_counter: Dict[int, int] = {d: 0 for d in actual_range}
 
     def runner(d: int) -> RunResult:
         idx = iteration_counter[d]
@@ -129,11 +136,9 @@ def run(
             },
         )
 
-    sweep_values = sweep.select(VARIABLE_RANGE, points)
 
     results = run_experiment(
-
-        sweep_values, runner, runs=runs, warmup=warmup)
+        actual_range, runner, runs=runs, warmup=warmup)
 
     # Write outputs
     exp_dir = sweep.shard_dir(output_dir / "exp3_crossdomain_scalability", points)

@@ -72,6 +72,7 @@ def run(
     points: Optional[str] = None,
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp3_crossdomain")
+    actual_range = sweep.select(VARIABLE_RANGE, points)
     subset = list(records[: min(TOTAL_INDEX_SIZE, len(records))])
     if len(subset) < TOTAL_INDEX_SIZE:
         print(
@@ -110,7 +111,7 @@ def run(
               f"total, {postings:,} postings total")
         return nodes
 
-    counter = {d: 0 for d in VARIABLE_RANGE}
+    counter = {d: 0 for d in actual_range}
 
     def runner(d: int) -> RunResult:
         i = counter[d]
@@ -140,8 +141,7 @@ def run(
                 "results_returned": len(merged),
             },
         )
-
-    sweep_values = sweep.select(VARIABLE_RANGE, points)
+    sweep_values = actual_range
 
     results = run_experiment(
 
