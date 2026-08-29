@@ -1,9 +1,9 @@
 {
   "confidence": 0.95,
   "config_hashes": {
-    "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+    "crypto.yaml": "2ba5e3713fe3450705216c053437b1b68cfaf9a883061b97a91ec8309c4600d9",
     "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-    "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+    "global.yaml": "fa5036d3e3e05d986324cbf924dba71e55b28d4ed28778081609ce925dd76090",
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21",
     "workload/exp78_sweep_holdout.yaml": "716c19ccacb1f1854f01d42f9d7740e77f87666736ff612c3b3829274c864fae",
@@ -19,9 +19,9 @@
       "OPENBLAS_NUM_THREADS": "UNSET"
     },
     "config_hashes": {
-      "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+      "crypto.yaml": "2ba5e3713fe3450705216c053437b1b68cfaf9a883061b97a91ec8309c4600d9",
       "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-      "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+      "global.yaml": "fa5036d3e3e05d986324cbf924dba71e55b28d4ed28778081609ce925dd76090",
       "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
       "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
     },
@@ -33,7 +33,7 @@
       "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
     },
     "kem_backends_available": {
-      "cryptography": true,
+      "cryptography": false,
       "kyber_py": false,
       "liboqs": true
     },
@@ -55,8 +55,8 @@
   },
   "dataset_records": null,
   "experiment": "exp5_keyword_update",
-  "finished_utc": "2026-08-29T01:50:37.867139+00:00",
-  "git_commit": "55aa3c8289e616b90c7741b18d3ccb4c6f18cd23-dirty",
+  "finished_utc": "2026-08-28T12:28:16.870295+00:00",
+  "git_commit": "d65df6bbf8ed6265ecebf51f7348f46e03050b59-dirty",
   "instance_type": "m6i.xlarge",
   "libraries": {
     "bitarray": "3.10.1",
@@ -73,7 +73,7 @@
   "reportable": true,
   "runs": 30,
   "scheme": "ma_lb_pq_vdse",
-  "started_utc": "2026-08-29T01:49:22.799745+00:00",
+  "started_utc": "2026-08-28T12:27:01.511842+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": null,
     "NUMEXPR_NUM_THREADS": null,
