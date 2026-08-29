@@ -635,6 +635,42 @@ def test_exp7_and_exp8_share_one_workload_engine():
     assert exp_mod.Exp8LoadBalance.replay is exp_mod.SchedulerAblation.replay
 
 
+def test_superseded_results_are_caught_at_read_time():
+    """Stale Exp. 7-8 results must be refused without rewriting their record.
+
+    exp7_search_throughput/ and exp8_load_balance/ carry git_commit 55aa3c8 with
+    reportable:true -- written before 5cf65f9 fixed the shared costing overhead,
+    the dead queue loop and the 32-record index. They sit under the canonical
+    names main.py writes to, so a name-based reader would quote pre-fix numbers.
+
+    The judgement is DERIVED from the commit the record already carries.
+    Rewriting run_meta.json to say reportable:false would violate this module's
+    contract that provenance is measured and never supplied -- the record would
+    then state a belief rather than what ran.
+    """
+    boundary = provenance.SUPERSEDED_BEFORE[7]
+
+    stale = provenance.superseded_reason(7, "55aa3c828e0e0e6d18b30d1e35a3c6a4b0e8f7a1")
+    assert stale and "predates" in stale, (
+        "a pre-5cf65f9 Exp. 7 result must be refused"
+    )
+
+    # The boundary commit itself is the first GOOD one, not the last bad one.
+    assert provenance.superseded_reason(7, boundary) is None
+    assert provenance.superseded_reason(8, boundary) is None
+
+    # Dirtiness is a separate question; the suffix must not defeat the test.
+    assert provenance.superseded_reason(7, "55aa3c828e0e0e6d18b30d1e35a3c6a4b0e8f7a1-dirty")
+
+    # Exp. 1-6 have no boundary and must not be swept up.
+    for n in (1, 2, 3, 4, 5, 6):
+        assert provenance.superseded_reason(n, "55aa3c828e0e0e6d18b30d1e35a3c6a4b0e8f7a1") is None
+
+    # An unknown or unresolvable commit fails CLOSED, never silently open.
+    assert provenance.superseded_reason(7, "unknown")
+    assert provenance.superseded_reason(7, "0" * 40)
+
+
 def test_dirty_marker_ignores_a_runs_own_output():
     """The ``-dirty`` marker must mean "the code changed", not "a run ran".
 

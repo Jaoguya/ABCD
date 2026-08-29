@@ -194,6 +194,77 @@ def _expected_corpus_sha256() -> Optional[str]:
         return None
 
 
+#: A result is superseded when the code that produced it is known to have had a
+#: defect that changes what the experiment measures. This is a fact about this
+#: repo's history, not a tunable, which is why it lives here rather than in
+#: config: 5cf65f9 fixed three such defects in Exp. 7-8 -- every arm paid AASS's
+#: cost vector, the queue feedback loop was dead so `least_loaded` collapsed onto
+#: `no_lb`, and prepare() built 32 records against README §6's 10^5. Numbers from
+#: before it are not comparable with numbers from after it.
+#:
+#: Judged at READ time from the commit the record already carries. A stamped
+#: run_meta.json is never rewritten -- this module's contract is that provenance
+#: is measured, never supplied, and editing a record to say what we now believe
+#: would make it a statement of belief. So the record keeps saying what it said,
+#: and the reader derives the consequence.
+SUPERSEDED_BEFORE: Dict[int, str] = {
+    7: "5cf65f9b8c0323252f604dd3ae2f8f0a599435b1",
+    8: "5cf65f9b8c0323252f604dd3ae2f8f0a599435b1",
+}
+
+
+def _is_ancestor(older: str, newer: str) -> Optional[bool]:
+    """True if ``older`` is an ancestor of ``newer``; None if git cannot say.
+
+    None rather than False when the answer is unknown -- a shallow clone or a
+    missing object must not silently downgrade to "not superseded".
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", older, newer],
+            cwd=REPO_ROOT, capture_output=True, timeout=10,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    if proc.returncode == 0:
+        return True
+    if proc.returncode == 1:
+        return False
+    return None  # 128: unknown revision, shallow clone, not a repo
+
+
+def superseded_reason(experiment_number: int, git_commit: str) -> Optional[str]:
+    """Why an already-written result should not be quoted, or None.
+
+    ``git_commit`` is taken verbatim from a run_meta.json, so it may carry the
+    ``-dirty`` suffix; the suffix is stripped before the ancestry test because
+    dirtiness is a separate question from staleness.
+    """
+    boundary = SUPERSEDED_BEFORE.get(experiment_number)
+    if not boundary or not git_commit:
+        return None
+    sha = git_commit[:-len("-dirty")] if git_commit.endswith("-dirty") else git_commit
+    if sha == "unknown":
+        return (
+            f"Exp. {experiment_number}: the producing commit is unknown, so it "
+            f"cannot be shown to postdate {boundary[:9]}"
+        )
+    older = _is_ancestor(sha, boundary)
+    if older is None:
+        return (
+            f"Exp. {experiment_number}: cannot determine whether {sha[:9]} "
+            f"predates {boundary[:9]} (commit not present in this clone)"
+        )
+    if older and sha != boundary:
+        return (
+            f"Exp. {experiment_number}: produced at {sha[:9]}, which predates "
+            f"{boundary[:9]} -- that commit fixed the shared costing overhead, "
+            f"the dead queue loop and the 32-record index, so this result does "
+            f"not measure what the experiment now measures"
+        )
+    return None
+
+
 def reportability(
     config: scheme_config.Configuration,
     *,
