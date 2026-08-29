@@ -651,6 +651,9 @@ def test_dirty_marker_ignores_a_runs_own_output():
         "Schemes/ma_lb_pq_vdse/exp8_load_balance__no_lb/raw_runs.csv",
         "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/run_meta.json",
         "Plots/output/pdf/fig_exp7_throughput.pdf",
+        # lambda_sweep.py writes this into exp7_search_throughput/; it is run
+        # output, so regenerating it must not mark the tree dirty.
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput/lambda_sweep.csv",
     ]
     for path in own_output:
         assert provenance._is_own_output(path), (

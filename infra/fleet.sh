@@ -77,7 +77,7 @@ from pathlib import Path
 # on the fleet: four runner.py files came back as blob b18fabc (commit ddc324e),
 # not HEAD's 23edee5, silently dropping sweep.select/--points support. Every run
 # after such a deploy executed stale code for any scheme that had results here.
-ARTIFACTS={'results.csv','raw_runs.csv','run_meta.json'}
+ARTIFACTS={'results.csv','raw_runs.csv','run_meta.json','lambda_sweep.csv'}
 bk=Path(sys.argv[1])/'Schemes'; live=Path('Schemes'); n=0
 for meta in bk.glob('*/*/run_meta.json'):
     try: m=json.loads(meta.read_text())

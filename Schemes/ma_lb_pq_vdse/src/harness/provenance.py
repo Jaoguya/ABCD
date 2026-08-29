@@ -53,6 +53,11 @@ _OUTPUT_ARTIFACTS = (
     "results.csv",
     "raw_runs.csv",
     "run_meta.json",
+    # Written by harness/lambda_sweep.py into exp7_search_throughput/. It is a
+    # run's output like any other, so regenerating it must not mark the tree
+    # dirty -- and infra/fleet.sh's deploy-restore must preserve it for the same
+    # reason. Keep the two lists in step.
+    "lambda_sweep.csv",
 )
 
 
