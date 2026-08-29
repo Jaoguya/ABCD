@@ -635,6 +635,63 @@ def test_exp7_and_exp8_share_one_workload_engine():
     assert exp_mod.Exp8LoadBalance.replay is exp_mod.SchedulerAblation.replay
 
 
+def test_merge_points_refuses_to_overwrite_newer_results():
+    """infra/merge_points.py must not replace fresh results with stale shards.
+
+    Covered here because that script has no suite of its own and the failure is
+    a harness-level one: merge() rewrites <base>/results.csv and raw_runs.csv
+    from the shards, which is correct when the shards ARE the run and
+    destructive when the base was since re-run unsharded and the shards are
+    leftovers `fleet.sh deploy` restored from an older campaign.
+
+    Live example: on the fleet, perera_lv_pqabse/exp3_crossdomain_scalability
+    was rewritten today at 6c97ee9 with the full 9-point sweep while its
+    __points-2..10 siblings still carry 55aa3c8. Merging would have reported
+    success while replacing good data with old data.
+    """
+    import importlib.util
+    import json as _json
+    import subprocess as _sp
+    import tempfile
+
+    spec = importlib.util.spec_from_file_location(
+        "merge_points", str(REPO_ROOT / "infra" / "merge_points.py"))
+    mp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mp)
+
+    def sha(rev):
+        return _sp.run(["git", "rev-parse", rev], capture_output=True,
+                       text=True, cwd=REPO_ROOT).stdout.strip()
+
+    old, new_ = sha("55aa3c8"), sha("HEAD")
+    if not old or not new_:
+        return  # shallow clone: nothing to assert against
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp) / "exp3_crossdomain_scalability"
+        base.mkdir()
+        meta = base / "run_meta.json"
+
+        meta.write_text(_json.dumps({"git_commit": new_}))
+        try:
+            mp._refuse_if_base_is_newer(base, old)
+            raise AssertionError("merging older shards over a newer base must refuse")
+        except SystemExit as exc:
+            assert "NEWER" in str(exc)
+
+        # The normal case must still pass: shards newer than the base.
+        meta.write_text(_json.dumps({"git_commit": old}))
+        mp._refuse_if_base_is_newer(base, new_)
+
+        # Unresolvable provenance fails CLOSED, never silently open.
+        meta.write_text(_json.dumps({"git_commit": "0" * 40}))
+        try:
+            mp._refuse_if_base_is_newer(base, new_)
+            raise AssertionError("an unresolvable commit must refuse, not pass")
+        except SystemExit:
+            pass
+
+
 def test_superseded_results_are_caught_at_read_time():
     """Stale Exp. 7-8 results must be refused without rewriting their record.
 

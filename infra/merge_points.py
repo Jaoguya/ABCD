@@ -25,6 +25,11 @@ produce a figure whose points came from different systems.
 
 Duplicate sweep values across shards are also an error: it means two instances
 ran the same point, so the merged file would double-count it.
+
+It also refuses when the base directory already holds results from a commit
+NEWER than the shards. The merge overwrites the base, and stale shards left
+behind by ``fleet.sh deploy`` would otherwise silently replace a good unsharded
+re-run with an older campaign's data.
 """
 
 from __future__ import annotations
@@ -119,12 +124,69 @@ def _check_provenance(shards: List[Path], base: Path) -> Dict[str, object]:
     return first
 
 
+def _sha(commit: str) -> str:
+    """A run_meta git_commit with any ``-dirty`` suffix stripped."""
+    return commit[:-len("-dirty")] if commit.endswith("-dirty") else commit
+
+
+def _refuse_if_base_is_newer(base: Path, shard_commit: str) -> None:
+    """Refuse to overwrite a base directory that already holds NEWER results.
+
+    merge() rewrites <base>/results.csv and raw_runs.csv from the shards. That
+    is right when the shards ARE the run. It is destructive when the base was
+    since re-run unsharded and the shards are leftovers from an older campaign
+    that `fleet.sh deploy` restored onto the node.
+
+    Real case this guards: perera_lv_pqabse/exp3_crossdomain_scalability holds a
+    fresh full 9-point sweep, while its __points-2..10 siblings are stale
+    restores. Merging would have replaced good data with old data and reported
+    success.
+
+    Fails CLOSED -- if git cannot place the two commits relative to each other,
+    that is a refusal, not a pass.
+    """
+    meta_path = base / "run_meta.json"
+    if not meta_path.exists():
+        return
+    try:
+        base_commit = _sha(str(json.loads(meta_path.read_text()).get("git_commit", "")))
+    except Exception:  # noqa: BLE001 - unreadable provenance is not a licence
+        raise SystemExit(
+            f"{base.name}/run_meta.json is unreadable; refusing to overwrite it."
+        )
+    shard_commit = _sha(shard_commit)
+    if not base_commit or not shard_commit or base_commit == shard_commit:
+        return
+
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", shard_commit, base_commit],
+        capture_output=True, cwd=REPO_ROOT,
+    )
+    if proc.returncode == 1:
+        return  # shards are NEWER than the base: the normal, intended case
+    if proc.returncode != 0:
+        raise SystemExit(
+            f"cannot place shard commit {shard_commit[:9]} relative to "
+            f"{base.name}'s {base_commit[:9]}. Refusing to merge rather than "
+            f"risk overwriting newer results with older ones."
+        )
+    raise SystemExit(
+        f"{base.name} already holds results from {base_commit[:9]}, which is "
+        f"NEWER than the shards' {shard_commit[:9]}.\n"
+        f"Merging would overwrite good data with an older campaign's shards -- "
+        f"most likely leftovers restored by `fleet.sh deploy`.\n"
+        f"If the shards really are what you want, delete {base.name}/"
+        f"results.csv and raw_runs.csv first, deliberately."
+    )
+
+
 def merge(base: Path, *, dry_run: bool = False) -> int:
     shards = _shards(base)
     if not shards:
         raise SystemExit(f"no shards found matching {base.name}__points-*")
 
     meta = _check_provenance(shards, base)
+    _refuse_if_base_is_newer(base, str(meta.get("git_commit", "")))
 
     rows: List[Dict[str, str]] = []
     seen: Dict[str, str] = {}
