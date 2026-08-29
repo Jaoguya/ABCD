@@ -40,7 +40,29 @@ EXPERIMENT_NAME = "exp2"
 SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio"]
 
 # Index sizes — log scale from 10^4 to 10^6 (README §5)
-VARIABLE_RANGE = [10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000]
+# CAPPED at 2*10^5 on 2026-08-29 -- a hardware limit, disclosed, not a choice.
+#
+# Guo's forward index stores a t-punctured GGM key per document, sized
+# O(|W_id| * log|X|). At the configured 64-bit domain and corpus v4's 31.7
+# keywords/document that is 50.5 KB per document, measured:
+#
+#     N = 10^5  ->  5.2 GB      N = 5*10^5  ->  25.9 GB
+#     N = 2*10^5 -> 10.3 GB     N = 10^6    ->  51.7 GB
+#
+# global.yaml pins a 16 GiB host and the materialised corpus takes ~2 GB, so
+# 2*10^5 is the largest point that fits. The 2026-08-28 campaign proved the
+# rest: at the previous 128-bit domain every guo experiment was OOM-killed
+# (rc=137, anon-rss 15.67 GB).
+#
+# This is not peculiar to our implementation. Ref[35]'s own evaluation ran on
+# 112 GB of memory over a dataset averaging 3.85 keywords/document; corpus v4
+# averages 31.70, and this index is linear in that. At our density N = 10^6
+# needs 51.7 GB, which the paper's own machine could hold but the pinned
+# benchmark host cannot.
+#
+# §V MUST STATE the cap and its reason -- hardware and corpus density, not an
+# unfavourable result. Same treatment Ref[41]'s N = 10^4 cap already carries.
+VARIABLE_RANGE = [10_000, 20_000, 50_000, 100_000, 200_000]
 
 # Default query size (README §6: "each query contains five keywords")
 DEFAULT_Q = 5

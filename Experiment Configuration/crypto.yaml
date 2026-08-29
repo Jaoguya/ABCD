@@ -142,7 +142,50 @@ guo_vdsse:
     # functions of the GGM tree (left=SHA256, right=Blake2b).
     left_hmac: hmac-sha256
     right_hmac: hmac-blake2b
-    domain_bits: 128                  # benchmark: GGM tree depth = |X| in bits
+    # benchmark: the GGM domain |X|. CHANGED 128 -> 64 on 2026-08-29.
+    # [results-affecting for guo_vdsse Exp. 2, 4, 5]
+    #
+    # NOT PUBLISHED. Ref[35] defines the t-Pun-PRF abstractly -- "Ft: K x X ->
+    # Y ... Ft.Punc(k, S) where S subset of X" (Ref[35].txt:370-382) -- and
+    # never fixes |X| anywhere. The only numeric parameters it publishes are
+    # lambda = 128 and a 192-bit hash output (:1763-1764). The "height L = 32"
+    # on the same line belongs to the COMPARED VBTree scheme, not to Guo's own
+    # (README §3 already flags that trap).
+    #
+    # 128 came from reading "GGM tree depth = |X| in bits" off lambda = 128.
+    # That conflates two different quantities: lambda is the KEY length, |X| is
+    # the DOMAIN the punctured points live in. The domain only has to hold
+    # F2(w) for the distinct keywords -- 2,023 in corpus v4 -- for which a
+    # 64-bit domain gives a collision bound of ~1e-13.
+    #
+    # The repo's own precedent settles the sizing rule: yue_ge's MSRE derives
+    # its GGM domain from the space it actually addresses
+    # (msre.domain_bits_for(array_bits) = 15 bits for a 19,171-bit Bloom
+    # filter) and its docstring says so explicitly -- "not some wider fixed
+    # domain ... instead of paying for a tree covering an address space the
+    # scheme never touches". guo at 128 was the sole outlier, 8.5x deeper than
+    # the only other punctured-PRF scheme here, while addressing a SMALLER
+    # space. 64 is still 4x deeper than yue_ge's, i.e. deliberately conservative.
+    #
+    # WHY IT MATTERS, measured on the pinned host: guo's forward index stores a
+    # punctured key per document, sized O(|W_id| * log|X|). At 128 bits and
+    # corpus v4's 31.7 keywords/document that is 138.2 KB per document --
+    # 14.15 GB at N = 10^5, which OOM-killed every guo experiment in the
+    # 2026-08-28 campaign (rc=137, anon-rss 15.67 GB on a 16 GiB host). At 64
+    # bits it is 50.5 KB/document, 5.17 GB at N = 10^5.
+    #
+    # CONTEXT FROM THE PAPER'S OWN EVALUATION: Ref[35] ran on "8 cores and
+    # 112 GB of memory" (:1754) over a dataset of 517,399 files / 1,989,805
+    # keyword-document pairs -- 3.85 keywords per document. Corpus v4 has
+    # 31.70, i.e. 8.2x denser per document, and this index is linear in that.
+    # At our density even the paper's own 112 GB machine could not have held
+    # N = 10^6 at 128 bits (141 GB).
+    #
+    # DISCLOSE IN §V: guo's punctured-PRF domain is sized to the keyword
+    # universe rather than to lambda, as Ref[55]'s is; this makes guo FASTER on
+    # Exp. 2/4/5 than a 128-bit domain would. The decision was taken on the
+    # grounds above, before any cross-scheme result was known.
+    domain_bits: 64
     output_bits: 192                  # published: matches hash_output_bits
   symmetric_encryption: aes-256-gcm   # benchmark: paper says "SE", unspecified
   verification_tag_bits: 256           # benchmark: F2/F3 output = full HMAC-SHA256
