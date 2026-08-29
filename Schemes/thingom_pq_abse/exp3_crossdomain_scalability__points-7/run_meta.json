@@ -1,0 +1,99 @@
+{
+  "scheme": "thingom_pq_abse",
+  "experiment": "exp3",
+  "started_utc": "2026-08-29T01:41:07.761352+00:00",
+  "git_commit": "55aa3c8289e616b90c7741b18d3ccb4c6f18cd23",
+  "reportable": true,
+  "reportable_blockers": [],
+  "parameters": {
+    "repetitions": 30,
+    "warmups_discarded": 5,
+    "q_default": 5,
+    "attribute_count_u": 10,
+    "pairing_backend": "charm_ss512",
+    "pairing_type": "type-1",
+    "seed": 20260804,
+    "keyword_universe_size": 2023,
+    "max_seconds_per_run": 1800.0,
+    "multi_keyword_mode": "native: q independent trapdoors + q independent searches, client-side intersection (Ref[41] is single-keyword)",
+    "exp2_search_processes": 2,
+    "exp3_search_processes": 1,
+    "exp2_index_sizes": [
+      10000
+    ],
+    "exp3_total_index_size": 2000,
+    "exp3_domain_counts": [
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ],
+    "columns": {
+      "variable": "d (domains)",
+      "primary": "crossdomain_latency_ms",
+      "secondary_1": "trapdoors_issued",
+      "secondary_2": "cross_node_messages"
+    }
+  },
+  "config_hashes": {
+    "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+    "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
+    "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+    "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
+    "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
+  },
+  "environment": {
+    "python_version": "3.11.15",
+    "python_implementation": "CPython",
+    "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
+    "cpu_count": 4,
+    "blas_thread_env": {
+      "OMP_NUM_THREADS": "UNSET",
+      "OPENBLAS_NUM_THREADS": "UNSET",
+      "MKL_NUM_THREADS": "UNSET",
+      "NUMEXPR_NUM_THREADS": "UNSET"
+    },
+    "libraries": {
+      "cryptography": "50.0.0",
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "mmh3": "unknown",
+      "yaml": "6.0.3"
+    },
+    "pairing_backends_available": {
+      "charm_ss512": true,
+      "charm_type3": true,
+      "petrelic_bn254": false
+    },
+    "kem_backends_available": {
+      "cryptography": true,
+      "liboqs": true,
+      "kyber_py": false
+    },
+    "config_hashes": {
+      "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+      "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
+      "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+      "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
+      "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
+    },
+    "experiment_host": {
+      "expected_instance_type": "m6i.xlarge",
+      "detected_instance_type": "m6i.xlarge",
+      "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
+      "is_pinned_experiment_host": true
+    }
+  },
+  "dataset": {
+    "corpus_type": "synthea",
+    "corpus_sha256": "e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0",
+    "records": 1143792,
+    "keyword_universe_size": 2023,
+    "domains": 10
+  }
+}

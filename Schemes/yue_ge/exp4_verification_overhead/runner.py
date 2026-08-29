@@ -99,8 +99,7 @@ def run(
     keyword = candidates[0]
     matching = [rec for rec in records if keyword in rec.kw]
 
-    actual_range = sweep.select(
-        [r for r in VARIABLE_RANGE if r <= len(matching)], points)
+    actual_range = [r for r in VARIABLE_RANGE if r <= len(matching)]
     if not actual_range:
         actual_range = [len(matching)]
     if actual_range != VARIABLE_RANGE:
@@ -194,7 +193,7 @@ def run(
             },
         )
 
-    sweep_values = actual_range
+    sweep_values = sweep.select(actual_range, points)
 
     results = run_experiment(
 

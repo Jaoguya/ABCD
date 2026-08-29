@@ -1,0 +1,2 @@
+variable_value,primary_mean,primary_ci95,secondary_1_mean,secondary_1_ci95,secondary_2_mean,secondary_2_ci95,n_runs
+1000,0.060917,0.001565,0.144806,0.004197,1000.000000,0.000000,30

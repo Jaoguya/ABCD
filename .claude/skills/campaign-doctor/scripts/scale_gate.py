@@ -42,7 +42,7 @@ import sys
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = Path(__file__).resolve().parents[4]  # .../<repo>/.claude/skills/<skill>/scripts/x.py
 
 # Largest point each scheme will actually run, and the experiment that runs it.
 # Kept here rather than derived, so the gate states its own scope explicitly.
