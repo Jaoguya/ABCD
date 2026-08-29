@@ -647,6 +647,76 @@ def test_ablation_covers_the_four_variants():
         assert sample.primary >= 0.0
 
 
+def test_scheduler_ablation_ramps_before_measuring(monkeypatch):
+    """README §7: "Exp. 7-8 warm after a 30 s ramp."
+
+    The ramp belongs in prepare(), which run_point() calls once per point and
+    excludes from every timing. Putting it in measure() would ramp 30 times per
+    point and time a warm-up as if it were the measurement. This asserts the
+    ramp actually replays, and that it does so in prepare and not in measure --
+    conftest zeroes RAMP_SECONDS for every other test, so without this the
+    feature would be entirely uncovered.
+    """
+    monkeypatch.setattr(exp_mod, "RAMP_SECONDS", 0.05)
+    experiment = exp_mod.Exp7Throughput(config=CONFIG, source=SOURCE)
+
+    calls = []
+    original = type(experiment).replay
+    monkeypatch.setattr(
+        type(experiment), "replay",
+        lambda self, d, r, c, _o=original: (calls.append(1), _o(self, d, r, c))[1],
+    )
+
+    prepared = experiment.prepare(20)
+    ramped = len(calls)
+    assert ramped >= 1, "prepare() must ramp before the point is measured"
+
+    experiment.measure(prepared)
+    assert len(calls) == ramped + 1, "measure() must replay once, never ramp"
+
+
+def test_cross_node_forwards_is_scheduler_invariant_at_one_domain_per_node():
+    """A flat metric must be known to be flat before it is ever plotted.
+
+    README §1's default topology is d = m = 4, and assign_domains_to_fsns then
+    gives each FSN exactly one domain. _candidates() already restricts the
+    choice to nodes serving an authorized domain, so the chosen node serves
+    exactly ONE of the k domains a request is authorized for, whichever node
+    that is -- and the forward count is k-1 under every variant. No scheduler
+    can move it. §V's "minimizes unnecessary cross-node communication" is
+    therefore not testable on this topology, and this test exists so that fact
+    fails loudly if the topology or the candidate rule ever changes to make it
+    testable.
+    """
+    from Schemes.ma_lb_pq_vdse.src.scheduler import aass as aass_mod
+
+    experiment = exp_mod.Exp7Throughput(config=CONFIG, source=SOURCE)
+    prepared = experiment.prepare(40)
+    deployment, requests = prepared["deployment"], prepared["requests"]
+    assert all(len(node.domains) == 1 for node in deployment.nodes)
+
+    counts = set()
+    for variant in aass_mod.VARIANTS:
+        scheduler = aass_mod.Scheduler(variant, config=CONFIG, reportable=False)
+        forwards = 0
+        for token, decision in requests:
+            request = aass_mod.SearchRequest(
+                tokens=token.tokens,
+                authorized=decision.authorized_shards,
+                vid_u=token.vid_u,
+            )
+            node = scheduler.select(deployment.nodes, request).node
+            served = sum(1 for d in request.domains if node.serves_domain(d))
+            assert served == 1
+            forwards += len(request.domains) - served
+        counts.add(forwards)
+    assert len(counts) == 1, (
+        f"cross_node_forwards differed across variants ({counts}); the topology "
+        f"now permits a scheduling choice, so the metric has become meaningful "
+        f"and Exp. 8 should report it"
+    )
+
+
 def test_injected_stub_group_is_never_reportable():
     """An explicitly injected stand-in must propagate into the context.
 

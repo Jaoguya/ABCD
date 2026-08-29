@@ -150,6 +150,12 @@ class Selection:
     ``costs`` is retained so Exp. 7-8 can report *why* a node was chosen, not
     only which. A scheduler that cannot show its reasoning cannot be audited
     against the claim that it "predicts the expected cryptographic workload".
+
+    **Empty for the three authorization-oblivious variants.** ``no_lb``,
+    ``round_robin`` and ``least_loaded`` decide from a cursor or a queue depth
+    and never consult ``SC_j``; costing them anyway would both charge a baseline
+    for work its published construction does not do and imply evidence it never
+    read. ``aass`` alone carries a vector per candidate.
     """
 
     node: FogSearchNode
@@ -342,22 +348,13 @@ class Scheduler:
             raise SchedulerError("no Fog Search Nodes to schedule across")
         candidates = self._candidates(nodes, request)
 
-        raw = tuple(estimate_costs(node, request) for node in candidates)
-        normalized = normalize(
-            raw,
-            degenerate_value=self.config.scheduler.degenerate_term_value,
-            epsilon=self.config.scheduler.epsilon,
-        )
-        costs = tuple(
-            NodeCost(
-                node_id=node.node_id,
-                raw=raw_vector,
-                normalized=norm_vector,
-                score=norm_vector.score(self._weights),
-            )
-            for node, raw_vector, norm_vector in zip(candidates, raw, normalized)
-        )
-
+        # Each variant pays for its OWN rule and nothing else. Costing every
+        # node before the branch charged `no_lb` 22.42us/query against `aass`'s
+        # 23.26us (measured, 4 nodes) for a cost vector it never reads: a
+        # constant overhead common to all four arms, 4x the 5.34us
+        # execute_search() being scheduled, which swamped the very difference
+        # Exp. 7-8 exist to measure. It also weakened three baselines below
+        # their published construction, which AGENT_RULES forbids.
         if self.variant == VARIANT_NO_LB:
             chosen = candidates[0]
         elif self.variant == VARIANT_ROUND_ROBIN:
@@ -368,14 +365,40 @@ class Scheduler:
                 candidates, key=lambda node: (node.queue_length, node.node_id)
             )
         else:
+            costs = self.score(candidates, request)
             # arg min SC_j, node_id breaking ties so the choice is deterministic
             # and a rerun of one trace reproduces it.
             chosen = min(
                 zip(candidates, costs),
                 key=lambda pair: (pair[1].score, pair[1].node_id),
             )[0]
+            return Selection(node=chosen, variant=self.variant, costs=costs)
 
-        return Selection(node=chosen, variant=self.variant, costs=costs)
+        # The three authorization-oblivious arms have no cost vector to show:
+        # their rule reads a cursor or a queue depth, not SC_j. An empty tuple
+        # says that honestly; a populated one would imply they consulted costs
+        # they are defined not to consult.
+        return Selection(node=chosen, variant=self.variant, costs=())
+
+    def score(
+        self, candidates: Sequence[FogSearchNode], request: SearchRequest
+    ) -> Tuple[NodeCost, ...]:
+        """The five weighted terms for each candidate — AASS's rule, alone."""
+        raw = tuple(estimate_costs(node, request) for node in candidates)
+        normalized = normalize(
+            raw,
+            degenerate_value=self.config.scheduler.degenerate_term_value,
+            epsilon=self.config.scheduler.epsilon,
+        )
+        return tuple(
+            NodeCost(
+                node_id=node.node_id,
+                raw=raw_vector,
+                normalized=norm_vector,
+                score=norm_vector.score(self._weights),
+            )
+            for node, raw_vector, norm_vector in zip(candidates, raw, normalized)
+        )
 
     def __repr__(self) -> str:
         return (

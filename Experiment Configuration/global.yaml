@@ -109,6 +109,17 @@ experiments:
     # README §5: Exp. 7 and Exp. 8 are DERIVED FROM THE SAME RUNS. Run the
     # trace once per variant and emit both metric sets.
     shares_runs_with: exp7_search_throughput
+    secondaries: [max_node_utilization, max_queue_depth]
+    # `cross_node_forwards` was the second secondary and was dropped 2026-08-30.
+    # At d = m = 4 each FSN holds one domain and the scheduler only considers
+    # nodes serving an authorized domain, so the chosen node serves exactly one
+    # of a request's k domains whichever node it is -- the count is k-1 under
+    # every variant (measured 600 for all four arms over 400 requests). Peak
+    # queue depth replaces it: it measures congestion, which is what the Exp. 8
+    # claim is about, and the FSN queue is now fed by the dispatch path.
+    # Exp. 7-8 ramp, README §7 "warm after a 30 s ramp" -- applied once per
+    # sweep point in setup, which run_point() excludes from every timing.
+    ramp_seconds: 30
 
 # -----------------------------------------------------------------------------
 # Topology — README §1. Four FSNs + one cloud server, one VPC/AZ.
