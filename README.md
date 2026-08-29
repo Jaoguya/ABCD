@@ -213,7 +213,7 @@ Internal ablation, not a cross-scheme comparison. Four variants over one workloa
 | `least_loaded` | min queue length, authorization-oblivious |
 | `aass` | `arg min SC_j`, `SC_j = λ₁C^auth + λ₂C^index + λ₃C^verify + λ₄C^sync + λ₅C^queue` |
 
-Exp. 7 and 8 report different metrics from **the same runs** — run the trace once per variant and emit both. Throughput alone can hide congestion: a scheduler can post good aggregate numbers while pinning one node at saturation, which is what Exp. 8 exists to expose.
+Exp. 7 and 8 report different metrics over **the same recorded arrival trace**, replayed once per experiment per variant. The trace is built deterministically in setup, so both experiments see a byte-identical workload — verified by digesting it: `exp7` and `exp8` produce the same trace hash, stable across repeated calls. They are not the same *replays*: each experiment runs its own, so the two differ by timing noise and Exp. 8's σ cannot be paired run-for-run with a specific Exp. 7 throughput. Aggregate per-point comparison across variants, which is what the figures show, is unaffected. Throughput alone can hide congestion: a scheduler can post good aggregate numbers while pinning one node at saturation, which is what Exp. 8 exists to expose.
 
 ### Measurement boundaries
 

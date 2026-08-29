@@ -3,7 +3,7 @@
   "config_hashes": {
     "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
     "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-    "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+    "global.yaml": "8172f55ef8baffc1cf8bfe5314d600f0a34144972a431ab84fb9f097ed66088a",
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21",
     "workload/exp78_sweep_holdout.yaml": "716c19ccacb1f1854f01d42f9d7740e77f87666736ff612c3b3829274c864fae",
@@ -21,7 +21,7 @@
     "config_hashes": {
       "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
       "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-      "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+      "global.yaml": "8172f55ef8baffc1cf8bfe5314d600f0a34144972a431ab84fb9f097ed66088a",
       "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
       "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
     },
@@ -55,8 +55,8 @@
   },
   "dataset_records": null,
   "experiment": "exp8_load_balance",
-  "finished_utc": "2026-08-29T16:41:24.160542+00:00",
-  "git_commit": "9f3ea00890686e39789107dbffc69e21f3f008e6-dirty",
+  "finished_utc": "2026-08-29T18:14:00.330964+00:00",
+  "git_commit": "5cf65f9b8c0323252f604dd3ae2f8f0a599435b1-dirty",
   "instance_type": "m6i.xlarge",
   "libraries": {
     "bitarray": "3.10.1",
@@ -75,7 +75,7 @@
   "reportable": true,
   "runs": 30,
   "scheme": "ma_lb_pq_vdse",
-  "started_utc": "2026-08-29T16:40:51.147530+00:00",
+  "started_utc": "2026-08-29T18:09:14.586302+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": null,
     "NUMEXPR_NUM_THREADS": null,
