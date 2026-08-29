@@ -40,11 +40,14 @@ from .scheme import GuoVDSSE
 from infra import sweep
 
 EXPERIMENT_NAME = "exp5"
-SECONDARY_NAMES = ["entries_rewritten"]
+SECONDARY_NAMES = ["entries_rewritten", "index_entries_before"]
 
 # Variable range: total (keyword, document) pairs added
 VARIABLE_RANGE = [100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000,
                   50_000, 100_000]
+
+# README §6 default index size, matching exp3_crossdomain.DEFAULT_N.
+DEFAULT_N = 100_000
 
 
 def _generate_update_batch(
@@ -113,15 +116,42 @@ def run(
 
     iteration_counter: Dict[int, int] = {k: 0 for k in actual_range}
 
+    # ---- base index: built ONCE, over the README §6 default N. Untimed. ----
+    #
+    # This used to be rebuilt INSIDE runner(), over the ENTIRE corpus, on every
+    # run: 35 runs x 4 k-values = 140 rebuilds of 1,143,792 records. Two
+    # separate deviations, neither of them deliberate:
+    #
+    #   1. Rebuilding per run contradicts this repo's own reference standard --
+    #      ma_lb_pq_vdse's harness/runner.py computes `prepared` ONCE and calls
+    #      measure(prepared) for every warm-up and run, and yue_ge's Exp. 5
+    #      builds its base index once and adds a batch per run. guo was the only
+    #      scheme rebuilding per repetition (debug_history 2026-08-27 records
+    #      "prepare() once, measure() x reps" as the standard all baselines were
+    #      asked to match for fairness).
+    #   2. Indexing the whole corpus ignores §6, which fixes index_size at 10^5
+    #      for every experiment that does not sweep it. exp3_crossdomain has
+    #      always scoped itself that way and exp4_verify now does too.
+    #
+    # Together they cost ~57.8 GB per rebuild (guo stores a t-punctured GGM key
+    # per document) and ~9h x 140. Exp. 5 was OOM-killed in both campaigns.
+    #
+    # CONSEQUENCE, stated rather than hidden: successive runs now add to the
+    # same index, so run n+1 starts from a slightly larger one than run n. That
+    # is the same shape yue_ge's Exp. 5 already has, and it is second-order
+    # here -- the per-pair update cost depends on |W_id| and the PRF domain, not
+    # on how many entries the hash tables already hold (insert is amortised
+    # O(1)). `index_entries_before` is reported per run so the drift is visible
+    # and checkable in raw_runs.csv rather than assumed away.
+    base = records[: min(DEFAULT_N, len(records))]
+    state, edb = scheme.setup()
+    for rec in base:
+        scheme.update(state, edb, "add", rec.rid, rec.kw)
+
     def runner(k: int) -> RunResult:
         idx = iteration_counter[k]
         iteration_counter[k] += 1
         batch = batches[k][idx]
-
-        # Pre-build a fresh EDB from the base corpus — not timed
-        state, edb = scheme.setup()
-        for rec in records:
-            scheme.update(state, edb, "add", rec.rid, rec.kw)
         pre_count = edb.total_entry_count
 
         # Measure ONLY the incremental updates
@@ -139,6 +169,7 @@ def run(
             primary_metric=elapsed_ms,
             secondary_metrics={
                 "entries_rewritten": entries_written,
+                "index_entries_before": pre_count,
             },
         )
 
