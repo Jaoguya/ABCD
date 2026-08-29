@@ -77,8 +77,12 @@ def _dirty_paths() -> List[str]:
     Anything else still counts -- source, config, dataset, infra -- so a genuinely
     modified tree is still caught.
     """
+    # -uall: without it git collapses an untracked directory to a single
+    # "Schemes/<scheme>/<exp-dir>/" entry, which _is_own_output cannot classify
+    # (it has no filename) and which therefore counted as dirty. Measured on the
+    # fleet: an untracked exp6 result dir marked a host dirty on its own.
     status = subprocess.run(
-        ["git", "status", "--porcelain"],
+        ["git", "status", "--porcelain", "-uall"],
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,

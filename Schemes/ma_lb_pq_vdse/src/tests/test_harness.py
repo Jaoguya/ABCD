@@ -675,6 +675,28 @@ def test_dirty_marker_ignores_a_runs_own_output():
         )
 
 
+def test_dirty_paths_asks_git_for_untracked_files_not_directories():
+    """``-uall``, or an untracked result dir counts as dirty on its own.
+
+    Plain ``--porcelain`` collapses an untracked directory to one entry ending
+    in "/", with no filename for _is_own_output to classify -- so a fresh result
+    directory marked the tree dirty by itself. Measured on a fleet host: an
+    untracked exp6 result dir was the ONLY thing making that host dirty.
+    """
+    import inspect
+
+    src = inspect.getsource(provenance._dirty_paths)
+    assert '"-uall"' in src, (
+        "_dirty_paths must pass -uall so untracked results appear as files"
+    )
+    assert not provenance._is_own_output(
+        "Schemes/ma_lb_pq_vdse/exp6_authorization_sync__no_lb/"
+    ), "a bare directory has no filename and must not be classified as output"
+    assert provenance._is_own_output(
+        "Schemes/ma_lb_pq_vdse/exp6_authorization_sync__no_lb/results.csv"
+    ), "the files inside it are output and must not count"
+
+
 def test_exp7_and_exp8_record_the_same_arrival_trace():
     """README §5: both experiments replay "the same recorded arrival trace".
 

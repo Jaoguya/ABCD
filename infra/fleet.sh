@@ -71,6 +71,13 @@ cmd_deploy() {
       python3 - <<'PY' \$BK
 import json,shutil,sys
 from pathlib import Path
+# ONLY these three. runner.py and __init__.py live in the SAME directory as the
+# results, so copying the whole directory back -- which this did -- reverted
+# scheme SOURCE over the tree `git reset --hard` had just made correct. Measured
+# on the fleet: four runner.py files came back as blob b18fabc (commit ddc324e),
+# not HEAD's 23edee5, silently dropping sweep.select/--points support. Every run
+# after such a deploy executed stale code for any scheme that had results here.
+ARTIFACTS={'results.csv','raw_runs.csv','run_meta.json'}
 bk=Path(sys.argv[1])/'Schemes'; live=Path('Schemes'); n=0
 for meta in bk.glob('*/*/run_meta.json'):
     try: m=json.loads(meta.read_text())
@@ -78,7 +85,7 @@ for meta in bk.glob('*/*/run_meta.json'):
     if m.get('corpus_type')!='synthea': continue
     dst=live/meta.parent.relative_to(bk); dst.mkdir(parents=True,exist_ok=True)
     for f in meta.parent.iterdir():
-        if f.is_file(): shutil.copy2(f,dst/f.name)
+        if f.is_file() and f.name in ARTIFACTS: shutil.copy2(f,dst/f.name)
     n+=1
 print(f'  restored {n} result dir(s)')
 PY
