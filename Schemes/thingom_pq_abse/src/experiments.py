@@ -48,7 +48,9 @@ from typing import Any, List, Optional, Sequence, Tuple
 from Common.crypto.pairing import PairingBackend
 
 from . import scheme
-from .harness import ExperimentResult, Measurement, Run, Timer, measure_point
+from .harness import (
+    CpuTimer, ExperimentResult, Measurement, Run, Timer, measure_point,
+)
 from .lsss import and_gate_policy
 
 SCHEME_NAME = "thingom_pq_abse"
@@ -283,6 +285,7 @@ def experiment_2(
 
     primary      search latency, ms
     secondary_1  entries traversed
+    secondary_1  wall-clock ms at P workers (primary is aggregate CPU ms)
     secondary_2  pairings computed
     """
     result = ExperimentResult(
@@ -290,8 +293,18 @@ def experiment_2(
         experiment="exp2",
         columns={
             "variable": "N (index size)",
-            "primary": "search_latency_ms",
-            "secondary_1": "entries_traversed",
+            # CPU time, not wall-clock: the scan is parallelised, so wall-clock
+            # would divide aggregate work by the worker count and make the
+            # published figure a function of the host's core count. The other
+            # four schemes run Exp. 2 single-process, where wall-clock and CPU
+            # time coincide, so this is what makes the column comparable across
+            # schemes rather than what makes it different.
+            "primary": "search_cpu_time_ms",
+            # Replaces `entries_traversed`, which restated the variable column
+            # (a full scan traverses exactly N). Wall-clock is the useful thing
+            # to carry here: it keeps the parallel speedup visible instead of
+            # hiding it inside the primary.
+            "secondary_1": "wall_clock_ms",
             "secondary_2": "pairings_computed",
         },
     )
@@ -316,7 +329,13 @@ def experiment_2(
                 for word in selected
             ]
             pairings = 0
-            with Timer() as timer:
+            # CPU time, not wall-clock. The scan is spread across a fork pool,
+            # so a wall-clock span would report aggregate work divided by the
+            # worker count -- i.e. a number that moves with the core count of
+            # whatever host was rented, for a BASELINE scheme. See
+            # harness.CpuTimer. Wall-clock is still captured and reported as a
+            # secondary so the parallel speedup stays visible rather than hidden.
+            with CpuTimer() as timer:
                 # Native mode: q independent scans, client-side intersection.
                 matches: Optional[set] = None
                 for token in tokens:
@@ -333,8 +352,8 @@ def experiment_2(
                     pairings += token_pairings
                     matches = hits if matches is None else (matches & hits)
             return Measurement(
-                primary=timer.elapsed_ms,
-                secondary_1=float(size),
+                primary=timer.elapsed_ms,          # aggregate CPU ms
+                secondary_1=timer.wall_ms,         # wall-clock at P workers
                 secondary_2=float(pairings),
             )
 

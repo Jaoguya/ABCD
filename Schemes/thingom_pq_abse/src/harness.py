@@ -158,6 +158,51 @@ class Timer:
         self.elapsed_ms = (time.perf_counter_ns() - self._start) / 1e6
 
 
+class CpuTimer:
+    """Aggregate CPU time across this process AND its reaped children, in ms.
+
+    Exp. 2 parallelises the candidate scan across a fork pool, so a wall-clock
+    span reports aggregate work DIVIDED BY the worker count -- making the
+    published latency a function of how many cores the run happened to rent
+    rather than a property of the scheme. At P=64 the same point would read ~32x
+    faster than at P=2, and since this scheme is a BASELINE that would report it
+    as faster than it is, which is strengthening a baseline.
+
+    Aggregate CPU time removes P from the result: cores buy wall-clock, and the
+    number reported is the single-core-equivalent cost of the scan. Identical
+    pairings, identical match set -- only the clock changes.
+
+    ``RUSAGE_CHILDREN`` counts only children that have been REAPED, so the pool
+    must be closed inside the measured span; ``multiprocessing.Pool`` as a
+    context manager terminates and joins its workers on exit, which satisfies
+    that. The parent's own share is ``process_time`` (user+system, excluding
+    sleep), covering trapdoor generation, query planning and result assembly.
+    """
+
+    __slots__ = ("_start_self", "_start_children", "elapsed_ms", "wall_ms", "_wall")
+
+    @staticmethod
+    def _children_seconds() -> float:
+        try:
+            import resource
+            ru = resource.getrusage(resource.RUSAGE_CHILDREN)
+            return ru.ru_utime + ru.ru_stime
+        except Exception:  # noqa: BLE001 - not available on every platform
+            return 0.0
+
+    def __enter__(self) -> "CpuTimer":
+        self._start_self = time.process_time()
+        self._start_children = self._children_seconds()
+        self._wall = time.perf_counter_ns()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        cpu = ((time.process_time() - self._start_self)
+               + (self._children_seconds() - self._start_children))
+        self.elapsed_ms = cpu * 1e3
+        self.wall_ms = (time.perf_counter_ns() - self._wall) / 1e6
+
+
 # ---------------------------------------------------------------------------
 # Output — README §9
 # ---------------------------------------------------------------------------
