@@ -486,6 +486,35 @@ construction, one of them is probably being implemented unfaithfully.
 
 ---
 
+## 12b. The agent team
+
+Three agents in `.claude/agents/`, split by what the work actually needs rather
+than by convenience:
+
+| Agent | Model | For |
+|---|---|---|
+| `bench-coder` | Opus | Writing and changing code — schemes, runners, harnesses, plots, infra |
+| `bench-investigator` | Opus | Finding root cause — OOMs, crashes, wrong-looking numbers, cost surprises |
+| `bench-hand` | **Sonnet** | Git, fleet start/stop/deploy/harvest, running tests, regenerating figures |
+
+**Why the split.** The failures on this project were never syntax errors — they
+were an estimate measured on the wrong data shape, a filter applied at the wrong
+place, a `git reset` that ate results. That is judgement work, so coding and
+diagnosis stay on Opus. The mechanical half — git, fleet ops, unpacking,
+plotting — has known-correct recipes and runs on Sonnet, which is faster and
+cheaper for exactly that.
+
+Each carries the traps that have already cost this project time: `bench-coder`
+knows results are git-tracked and that sweep filters belong at the range
+definition; `bench-investigator` knows `ru_maxrss` is a high-water mark and that
+the dev corpus has the wrong keyword density to extrapolate from; `bench-hand`
+knows never to `git reset --hard` on a node and never to terminate an instance.
+
+`bench-hand` is told to stop and escalate rather than improvise — a cheap model
+guessing at an unfamiliar failure is how results get quietly destroyed.
+
+Agent teams need `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+
 ## 13. If you are about to change something
 
 - **Changed a measured code path?** Re-derive its runtime rows and re-run
