@@ -309,6 +309,42 @@ Schemes without `--dataset` read the corpus from its configured location.
 
 ---
 
+## 7b. Restarting and updating the fleet
+
+Use `infra/fleet.sh` rather than doing it by hand — the manual procedure has
+already destroyed completed results.
+
+```bash
+./infra/fleet.sh status              # what is running, what is busy, burn rate
+./infra/fleet.sh start               # start all, authorise your IP, wait for sshd
+./infra/fleet.sh deploy              # archive results, update code, restore results
+./infra/fleet.sh harvest ./out       # pull results, selected by provenance
+./infra/fleet.sh stop                # stop all (STOP, not terminate)
+```
+
+`OJCOMS_BRANCH` picks the branch (default `main`); `OJCOMS_KEY` and `OJCOMS_SG`
+override the key and security group.
+
+**Why `deploy` is not just `git pull`.** Result files are **git-tracked**, so
+`git reset --hard` restores the committed versions over fresh ones, silently.
+That is how `guo_vdsse`'s completed Exp. 1, 2 and 4 were lost. `deploy`
+archives `Schemes/` first, resets, then restores every result whose
+`run_meta.json` says `corpus_type: synthea` — real results come back, stale
+committed ones do not.
+
+**Why `harvest` ignores timestamps.** A reset rewrites mtimes, so a stale file
+can look newer than a real one. Selection is by `run_meta.json` provenance, never
+by `find -newermt`.
+
+**If every host times out at once**, it is almost certainly your egress IP
+rotating, not dead nodes — it changed three times in one session. `start` and
+`status` re-authorise the current address automatically; otherwise:
+
+```bash
+aws ec2 authorize-security-group-ingress --group-id sg-0dea7cf940668cddb \
+  --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$(curl -s https://checkip.amazonaws.com)/32}]"
+```
+
 ## 8. Running it in parallel
 
 A campaign's wall-clock is bounded by its **largest indivisible unit of work**, not
