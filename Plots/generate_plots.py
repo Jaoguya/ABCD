@@ -34,6 +34,7 @@ a development figure cannot be mistaken for a submission one.
 from __future__ import annotations
 
 import argparse
+import math
 import csv
 import json
 import re
@@ -312,9 +313,36 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
     ax.grid(True, which="major", linewidth=0.3, alpha=0.5)
     if spec.log_x or spec.log_y:
         ax.grid(True, which="minor", linewidth=0.2, alpha=0.3)
-    ax.legend(frameon=False)
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
+    # HEADROOM. These curves span up to six decades (0.08 ms for the proposed
+    # scheme against 150,000 ms for Ref[41] in Exp. 3), and matplotlib fits the
+    # axis tightly to the data. The legend then sits ON the topmost series and
+    # everything reads as squeezed into the lower half. Add room above the data
+    # for the legend, and a little below so the lowest series is not on the
+    # frame. Done by extending the LIMITS, never by clipping: no point moves and
+    # nothing is hidden.
+    if ax.get_yscale() == "log":
+        lo, hi = ax.get_ylim()
+        if lo > 0 and hi > lo:
+            ax.set_ylim(10 ** (math.log10(lo) - 0.25),
+                        10 ** (math.log10(hi) + 0.25))
+    else:
+        ax.margins(y=0.12)
+
+    # Legend ABOVE the axes, not inside them. With five series spanning six
+    # decades there is no free corner: an in-axes legend lands on whichever
+    # series is topmost (Ref[41] at ~150,000 ms in Exp. 3) and hides the very
+    # curve it is labelling. Placing it outside costs a little height and keeps
+    # the whole plot area for data.
+    # Two columns, not three: the proposed scheme's label is the longest by far
+    # ("Proposed (MA-LB-PQ-VDSE)") and at three columns it runs into the next
+    # entry's marker. Two columns gives every entry room at any figure width.
+    ncol = 2 if len(series_list) >= 3 else 1
+    ax.legend(frameon=False, ncol=ncol,
+              loc="lower left", bbox_to_anchor=(0.0, 1.01, 1.0, 0.18),
+              mode="expand", borderaxespad=0.0,
+              columnspacing=1.0, handlelength=1.6)
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, **({'dpi': dpi} if dpi else {}))
     plt.close(fig)
@@ -347,10 +375,19 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                              "can never be picked up where the vector one "
                              "belongs; a single format writes to <output>/ "
                              "directly, unchanged.")
+    parser.add_argument("--scale", type=float, default=1.0,
+                        help="multiply the figure size. The default 3.5x2.6in "
+                             "is IEEE single-column and is what the paper needs; "
+                             "use e.g. --scale 1.8 for a copy that is readable "
+                             "on screen without changing the paper figures.")
     parser.add_argument("--png-dpi", type=int, default=200,
                         help="raster resolution; 200 is legible on a slide and "
                              "in a review PDF without being enormous")
     args = parser.parse_args(argv)
+
+    if args.scale != 1.0:
+        w, h = plt.rcParams["figure.figsize"]
+        plt.rcParams["figure.figsize"] = (w * args.scale, h * args.scale)
 
     if args.experiment.strip().lower() == "all":
         wanted = {spec.number for spec in EXPERIMENTS}
