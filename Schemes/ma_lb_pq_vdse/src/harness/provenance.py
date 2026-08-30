@@ -285,7 +285,7 @@ def reportability(
     reasons: List[str] = []
 
     host = verify_experiment_host()
-    if not host["is_pinned_experiment_host"]:
+    if not host["host_check_satisfied"]:
         reasons.append(
             f"not running on the pinned AWS experiment host: expected "
             f"{host['expected_instance_type']!r}, detected "

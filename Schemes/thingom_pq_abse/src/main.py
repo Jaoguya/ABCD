@@ -27,10 +27,13 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from Common.crypto import pairing
-from Common.crypto.config import REPO_ROOT, ConfigError, get, verify_experiment_host
+from Common.crypto.config import (
+    REPO_ROOT, ConfigError, assert_config_unchanged, get,
+    snapshot_config_state, verify_experiment_host,
+)
 
 from . import experiments
-from .harness import write_all
+from .harness import write_all, write_raw_runs, write_results
 
 from infra import sweep
 
@@ -142,12 +145,26 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument(
         "--max-seconds-per-run",
         type=float,
-        default=1800.0,
+        default=7200.0,
         help=(
             "per-point wall-clock budget. Points whose estimated cost exceeds "
             "it are recorded as status=failed rather than attempted."
         ),
     )
+    # RAISED 1800 -> 7200 on 2026-08-30. At 1800 the sweep could not reach the
+    # range it is supposed to measure: a live run recorded N=50,000 as
+    # `budget_exceeded_est2157s_budget1800s` and stopped with two rows in
+    # raw_runs.csv, so 10^5, 5x10^5 and 10^6 were never attempted. Projected
+    # per-run cost at 10^6 is ~9256 s at P=8 and ~1157 s at P=64, from the one
+    # measured point (N=10^4, P=8, 740,464 ms aggregate CPU).
+    #
+    # 7200 regardless of P: at P=64 that is ~6.2x headroom, where 1800 gave
+    # 1.55x -- and the estimator this budget is compared against is itself a
+    # linear extrapolation from a single measurement, so thin margin converts
+    # a real point into status=failed on estimator error alone.
+    #
+    # This changes no measured quantity. A timeout decides whether a run
+    # finishes, never what it reports.
     return parser.parse_args(argv)
 
 
@@ -281,6 +298,10 @@ def attribute_count() -> int:
 
 
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    # Freeze the configuration this run is measured under, before anything is
+    # measured. assert_config_unchanged() re-checks at every sweep-point
+    # boundary and aborts if it moved.
+    snapshot_config_state()
     args = parse_args(argv)
     selected = resolve_experiments(args.experiment)
 
@@ -299,7 +320,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     host = verify_experiment_host()
     host_blockers: List[str] = []
-    if not host["is_pinned_experiment_host"]:
+    if not host["host_check_satisfied"]:
         host_blockers.append(
             f"not running on the pinned AWS experiment host: expected "
             f"{host['expected_instance_type']!r}, detected "
@@ -349,8 +370,28 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     _print_banner(reportable, blockers, parameters)
 
     for number in selected:
-        result = _run_one(number, workload, args)
+        # Resolved BEFORE the run so the per-point flush has a destination.
         directory = sweep.shard_dir(output_root / OUTPUT_DIRS[number], args.points)
+
+        def _flush(size: int, partial, _dir: Path = directory) -> None:
+            """Persist completed points. Fired between points, never in a span."""
+            # Abort rather than measure later points under changed parameters.
+            assert_config_unchanged()
+            _dir.mkdir(parents=True, exist_ok=True)
+            write_raw_runs(_dir / "raw_runs.csv", partial)
+            write_results(_dir / "results.csv", partial)
+            # run_meta.json is written only on completion, so its absence is
+            # the incomplete signal. This says how far the sweep actually got.
+            (_dir / "PARTIAL").write_text(
+                f"in progress -- completed through N={size}\n"
+                f"{len(partial.runs)} runs recorded so far\n"
+                "run_meta.json is absent until the sweep finishes; if it is "
+                "missing this directory is INCOMPLETE and not reportable.\n",
+                encoding="utf-8",
+            )
+            print(f"  [flush] wrote partial results through N={size}", flush=True)
+
+        result = _run_one(number, workload, args, on_point_complete=_flush)
         write_all(
             directory,
             result,
@@ -360,6 +401,9 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             reportable=reportable,
             reportable_blockers=blockers,
         )
+        # run_meta.json now exists, so the sweep completed and the marker
+        # would misreport it. Cleared after, never before.
+        (directory / "PARTIAL").unlink(missing_ok=True)
         ok = sum(1 for run in result.runs if run.status == "ok")
         try:
             shown = directory.relative_to(REPO_ROOT)
@@ -370,7 +414,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     return 0
 
 
-def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespace):
+def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespace,
+             *, on_point_complete=None):
     points = getattr(args, "points", None)
     if number == "1":
         return experiments.experiment_1(
@@ -387,6 +432,7 @@ def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespa
             repetitions=args.runs,
             warmups=args.warmups,
             max_seconds_per_run=args.max_seconds_per_run,
+            on_point_complete=on_point_complete,
         )
     return experiments.experiment_3(
         workload,

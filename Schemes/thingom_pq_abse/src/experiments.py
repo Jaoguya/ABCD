@@ -43,7 +43,7 @@ import os
 import multiprocessing as mp
 import random
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Callable, List, Optional, Sequence, Tuple
 
 from Common.crypto.pairing import PairingBackend
 
@@ -293,6 +293,7 @@ def experiment_2(
     repetitions: int,
     warmups: int,
     max_seconds_per_run: float,
+    on_point_complete: Optional[Callable[[int, "ExperimentResult"], None]] = None,
 ) -> ExperimentResult:
     """Full online search path over an index of N entries.
 
@@ -327,6 +328,23 @@ def experiment_2(
         },
     )
 
+    # Fired after each sweep point so the caller can persist what is finished.
+    # The 10^6 point is most of this experiment's wall-clock, so without it a
+    # crash or a stop late in the sweep discards every completed point before
+    # it as well. Between points only -- never inside a CpuTimer span -- so the
+    # flush I/O cannot land in a measurement.
+    def _point_done(size: int) -> None:
+        if on_point_complete is None:
+            return
+        try:
+            on_point_complete(size, result)
+        except Exception as exc:  # noqa: BLE001 - a failed flush is never fatal
+            print(
+                f"  [warn] partial-result flush failed at N={size}: "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
+
     for size in index_sizes:
         keyword = workload.keywords[0]
         estimate = _estimated_seconds(workload, size, q, parallel=True)
@@ -334,6 +352,9 @@ def experiment_2(
             result.runs.extend(
                 _budget_exceeded_runs(size, repetitions, estimate, max_seconds_per_run)
             )
+            # Flushed like any other point: a budget-exceeded row is a recorded
+            # outcome, not an absence, and a reader needs to see it.
+            _point_done(size)
             continue
 
         index = build_index(workload, keyword, size)
@@ -383,6 +404,7 @@ def experiment_2(
                 warmups=warmups,
             )
         )
+        _point_done(size)
     return result
 
 

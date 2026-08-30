@@ -19,6 +19,7 @@ import gc
 from pathlib import Path
 from typing import Optional, Any, Dict, List
 
+from Common.crypto import config as crypto_config
 from Common.crypto.rng import DeterministicRNG
 from Dataset.corpus import Record
 
@@ -183,9 +184,24 @@ def run(
     built_to = [0]
     state, edb = scheme.setup()
 
+    # Bytes/record measured byte-exact from the EDB's own dicts at real corpus
+    # density (b51d2cb): 51,675 for Tf plus 1,773 for Ti, stable to under 3%.
+    # Not an RSS reading, which would also count the corpus and the allocator.
+    _BYTES_PER_RECORD = 51_675 + 1_773
+    _CORPUS_OVERHEAD = 2 * 2**30  # materialised corpus, roughly, on top
+
     def _ensure_built(n: int) -> None:
         if built_to[0] >= n:
             return
+        # Refuse a point that cannot fit BEFORE spending an hour building it.
+        # An OOM kill is SIGKILL: no traceback, no partial results, nothing in
+        # the log. That is how the 2026-08-28 campaign died (rc=137, anon-rss
+        # 15.67 GB) and the cause had to be reconstructed from instance metrics
+        # afterwards. The index only ever grows -- nothing is evicted -- so the
+        # projection for n is the steady-state ceiling, not a transient.
+        crypto_config.assert_memory_for(
+            n * _BYTES_PER_RECORD + _CORPUS_OVERHEAD, f"exp2 index at N={n:,}"
+        )
         for rec in records[built_to[0]:n]:
             scheme.update(state, edb, "add", rec.rid, rec.kw)
         built_to[0] = n
@@ -237,14 +253,48 @@ def run(
 
     sweep_values = actual_range
 
-    results = run_experiment(
+    # Resolved BEFORE the sweep, not after, so the per-point flush below has
+    # somewhere to write. The final write still happens at the end and is
+    # authoritative; the flush only guarantees that an interruption leaves the
+    # completed points on disk instead of losing them with the unfinished one.
+    exp_dir = sweep.shard_dir(output_dir / "exp2_search_latency", points)
 
-        sweep_values, runner, runs=runs, warmup=warmup)
+    def _flush(value: Any, done: List[RunResult]) -> None:
+        """Persist every point completed so far. Called between points."""
+        # Abort rather than measure the remaining points under parameters that
+        # are no longer the ones the earlier points were measured under. The
+        # config directory was emptied mid-session three times on 2026-08-30.
+        crypto_config.assert_config_unchanged()
+        write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, done,
+                       SECONDARY_NAMES)
+        write_results(exp_dir / "results.csv",
+                      aggregate_results(done, SECONDARY_NAMES))
+        # PARTIAL is the whole point of the marker: a reader that finds
+        # raw_runs.csv without run_meta.json must be able to tell "still
+        # running or died mid-sweep" from "finished". run_meta.json is written
+        # ONLY on completion, so its absence is the incomplete signal, and this
+        # file says how far it got.
+        (exp_dir / "PARTIAL").write_text(
+            f"in progress -- completed through variable_value={value}\n"
+            f"{len(done)} retained runs so far\n"
+            "run_meta.json is absent until the sweep finishes; if it is "
+            "missing this directory is INCOMPLETE and not reportable.\n",
+            encoding="utf-8",
+        )
+        print(f"  [flush] wrote partial results through N={value}", flush=True)
+
+    results = run_experiment(
+        sweep_values, runner, runs=runs, warmup=warmup,
+        on_point_complete=_flush)
 
     # Write outputs
-    exp_dir = sweep.shard_dir(output_dir / "exp2_search_latency", points)
     write_raw_runs(exp_dir / "raw_runs.csv", EXPERIMENT_NAME, results,
                    SECONDARY_NAMES)
     aggregated = aggregate_results(results, SECONDARY_NAMES)
     write_results(exp_dir / "results.csv", aggregated)
     write_run_meta(exp_dir / "run_meta.json", manifest, EXPERIMENT_NAME)
+    # run_meta.json now exists, so the sweep is complete and the marker would
+    # be a lie. Written last and cleared last, in that order: a crash between
+    # the two leaves the marker standing, which errs toward "incomplete" --
+    # the safe direction for a reportability check.
+    (exp_dir / "PARTIAL").unlink(missing_ok=True)

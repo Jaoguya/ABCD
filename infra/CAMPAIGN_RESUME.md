@@ -105,8 +105,15 @@ dance (PUT for a token, then GET with the header), and both instances had
 `HttpEndpoint=enabled`, `HttpTokens=required`, hop limit 2. The leading
 explanation is its **0.3 s timeout** (`Common/crypto/config.py:95`, applied
 twice) expiring under index-build load — guo was at 14.1 GB RSS and 100% CPU when
-probed. Fix the probe before spending anything on re-runs: re-pinning could buy
-85 re-runs that still record `pinned=false`.
+probed.
+
+**FIXED — this paragraph is history, not a task.** `54c9507` replaced the
+0.3 s/2-attempt probe with 2.0 s and 3 attempts, `lru_cache`d it, and added
+`metadata_reachable` so "could not ask" is no longer indistinguishable from
+"asked, got the wrong answer". This file previously said *fix the probe before
+spending anything on re-runs*; that instruction is spent and has been struck, so
+nobody schedules work against a closed bug. Still worth confirming a live node
+records `pinned=True` before a long run — as verification, not as work.
 
 Three decisions were with the user when work stopped: the host question above,
 whether ma_lb's 20 dirty-tree results get re-run, and the Exp. 2 estimand

@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import hashlib
 import functools
+import os
 import platform
+import shutil
+import tempfile
 import threading
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -162,21 +165,51 @@ def verify_experiment_host(*, require: bool = False) -> Dict[str, Any]:
     non-reportable dev runs, where seeing *why* a run does not count matters
     as much as the reportable ones.
     """
-    expected = str(get("environment", "instance_type", path=GLOBAL_CONFIG_PATH))
+    # THE PIN IS NOW OPTIONAL. global.yaml's environment.instance_type was
+    # dropped on the user's instruction so guo and thingom can run on hosts
+    # sized for their actual memory and core needs; §V discloses the hosts
+    # instead of claiming one type. get() raises on a missing key, and every
+    # scheme calls this, so an absent pin must be a STATE rather than an error
+    # -- deleting the line without this would brick all five harnesses.
+    #
+    # Three states, kept distinct because they mean different things:
+    #   no pin configured   -> nothing to violate; the host is not evidence
+    #                          for or against a run
+    #   pinned and matched  -> as before
+    #   pinned and mismatch -> as before, still condemns the run
+    try:
+        raw = get("environment", "instance_type", path=GLOBAL_CONFIG_PATH)
+    except ConfigError:
+        raw = None
+    expected = (
+        None
+        if raw is None or str(raw).strip().lower() in ("", "none", "null", "~")
+        else str(raw)
+    )
+    pin_configured = expected is not None
     detected = _detect_aws_instance_type()
-    is_pinned_host = detected == expected
+    # False when unpinned: there is no pinned host, so nothing can BE it.
+    # Truth here would read as "we verified the host" to anyone skimming.
+    is_pinned_host = pin_configured and detected == expected
     report: Dict[str, Any] = {
         "expected_instance_type": expected,
         "detected_instance_type": detected,
         "platform": platform.platform(),
+        "pin_configured": pin_configured,
         "is_pinned_experiment_host": is_pinned_host,
+        # What reportability should gate on, and the ONLY field that changed
+        # meaning: "no host rule was broken". Unpinned runs satisfy it
+        # vacuously; pinned ones satisfy it only by matching. Callers that
+        # gated on is_pinned_experiment_host would now reject every run under
+        # an unpinned config, which is not what dropping the pin meant.
+        "host_check_satisfied": (not pin_configured) or is_pinned_host,
         # "could not ask" and "asked, wrong answer" both produced
         # is_pinned_experiment_host=False and were indistinguishable in the
         # record. They mean opposite things: the first says nothing about the
         # host, the second condemns it. Record which one happened.
         "metadata_reachable": detected is not None,
     }
-    if require and not is_pinned_host:
+    if require and not report["host_check_satisfied"]:
         raise ConfigError(
             f"not running on the pinned experiment host: expected AWS "
             f"{expected!r}, detected {detected or 'no EC2 metadata service reachable'!r} "
@@ -184,6 +217,101 @@ def verify_experiment_host(*, require: bool = False) -> Dict[str, Any]:
             f"produces reportable results."
         )
     return report
+
+
+def _all_config_files() -> List[Path]:
+    """Every file under CONFIG_DIR, not just the top-level ``*.yaml``.
+
+    ``config_hashes()`` globs ``*.yaml`` and so covers four of the eight files;
+    it feeds run_meta.json and its coverage is deliberately left alone here so
+    recorded provenance hashes do not change meaning. The GUARD below wants
+    everything, including ``planning/runtime_estimates.csv`` and the two
+    ``workload/*.yaml`` files.
+    """
+    return sorted(p for p in CONFIG_DIR.rglob("*") if p.is_file())
+
+
+_CONFIG_BASELINE: Optional[Dict[str, str]] = None
+_CONFIG_SNAPSHOT_DIR: Optional[Path] = None
+
+
+def snapshot_config_state() -> Dict[str, str]:
+    """Hash every config file and copy it OUTSIDE the repo. Idempotent.
+
+    Called once at process start. The copy exists so a run that trips the
+    guard can be diagnosed -- and recovered -- against what it actually
+    started with, rather than against whatever the tree holds afterwards.
+
+    Why this exists: the whole ``Experiment Configuration`` directory was
+    emptied mid-session on 2026-08-30 while a campaign was being prepared, and
+    it had happened twice earlier the same day. global.yaml carries the sweep
+    values, the query width and the thread count, so a long run that continued
+    across a change to it would silently produce points measured under two
+    different configurations with nothing in the record to say so.
+    """
+    global _CONFIG_BASELINE, _CONFIG_SNAPSHOT_DIR
+    if _CONFIG_BASELINE is not None:
+        return _CONFIG_BASELINE
+
+    baseline: Dict[str, str] = {}
+    dest = Path(tempfile.gettempdir()) / f"ojcoms-config-snapshot-{os.getpid()}"
+    for path in _all_config_files():
+        rel = path.relative_to(CONFIG_DIR).as_posix()
+        baseline[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+        try:
+            target = dest / rel
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+        except OSError:
+            # A snapshot we cannot write is not a reason to refuse to run --
+            # the hashes are what enforce the guard, the copy only aids
+            # recovery. Degrade rather than block.
+            pass
+    _CONFIG_BASELINE = baseline
+    _CONFIG_SNAPSHOT_DIR = dest
+    return baseline
+
+
+def assert_config_unchanged() -> None:
+    """Raise if any config file changed, appeared or vanished since start.
+
+    Call at sweep-point boundaries. Aborting a run at hour six is expensive;
+    finishing one whose later points were measured under different parameters,
+    and not knowing which, is worse -- that produces a figure nobody can
+    defend and no way to tell which points are affected.
+
+    A no-op before ``snapshot_config_state()`` has run, so importing this
+    module never imposes the check on callers that did not ask for it.
+    """
+    if _CONFIG_BASELINE is None:
+        return
+    current = {
+        p.relative_to(CONFIG_DIR).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in _all_config_files()
+    }
+    problems: List[str] = []
+    for rel, digest in sorted(_CONFIG_BASELINE.items()):
+        if rel not in current:
+            problems.append(f"{rel}: DELETED since the run started")
+        elif current[rel] != digest:
+            problems.append(
+                f"{rel}: MODIFIED since the run started "
+                f"({digest[:12]} -> {current[rel][:12]})"
+            )
+    for rel in sorted(set(current) - set(_CONFIG_BASELINE)):
+        problems.append(f"{rel}: APPEARED after the run started")
+    if problems:
+        raise ConfigError(
+            "experiment configuration changed mid-run; aborting so that no "
+            "figure mixes points measured under different parameters:\n  "
+            + "\n  ".join(problems)
+            + (
+                f"\nthe configuration this run started with was copied to "
+                f"{_CONFIG_SNAPSHOT_DIR}"
+                if _CONFIG_SNAPSHOT_DIR is not None
+                else ""
+            )
+        )
 
 
 def config_hashes() -> Dict[str, str]:
@@ -198,3 +326,58 @@ def config_hashes() -> Dict[str, str]:
     for path in sorted(CONFIG_DIR.glob("*.yaml")):
         hashes[path.name] = hashlib.sha256(path.read_bytes()).hexdigest()
     return hashes
+
+
+def available_memory_bytes() -> Optional[int]:
+    """Bytes of memory actually available to a new allocation, or None.
+
+    ``MemAvailable`` on Linux, which is the kernel's own estimate of what a
+    workload can claim without swapping -- not ``MemFree``, which excludes
+    reclaimable page cache and would understate headroom by tens of GB on a
+    box that has just written a corpus.
+
+    Returns None rather than guessing when it cannot tell (macOS, a container
+    with no /proc). A guard that cannot measure must not block a run; every
+    caller treats None as "unknown, proceed".
+    """
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError):
+        pass
+    try:  # POSIX fallback: free pages only, so this UNDERSTATES availability
+        return os.sysconf("SC_AVPHYS_PAGES") * os.sysconf("SC_PAGE_SIZE")
+    except (ValueError, OSError, AttributeError):
+        return None
+
+
+def assert_memory_for(projected_bytes: float, label: str, *, margin: float = 1.25) -> None:
+    """Refuse to start a point that will not fit, instead of being OOM-killed.
+
+    An OOM kill arrives as SIGKILL: no traceback, no partial results, no line
+    in the log saying what happened. The 2026-08-28 campaign died exactly that
+    way (rc=137, anon-rss 15.67 GB) and the cause had to be reconstructed
+    afterwards from instance metrics. Failing here instead costs one clear
+    message before any time is spent on the point.
+
+    ``margin`` is headroom over the projection, not over the measurement --
+    these projections come from bytes-per-record figures that are themselves
+    extrapolations, so 1.25 covers ordinary error, not a wrong model.
+
+    Unknown availability proceeds: see ``available_memory_bytes``.
+    """
+    available = available_memory_bytes()
+    if available is None:
+        return
+    needed = projected_bytes * margin
+    if available < needed:
+        raise ConfigError(
+            f"refusing to start {label}: projects "
+            f"{projected_bytes / 2**30:.1f} GiB, needs "
+            f"{needed / 2**30:.1f} GiB with a {margin:.2f}x margin, but only "
+            f"{available / 2**30:.1f} GiB is available. Use a larger host or "
+            f"drop this point -- proceeding would be OOM-killed with no "
+            f"partial results and no traceback."
+        )

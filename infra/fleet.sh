@@ -125,18 +125,37 @@ ${ALLOW_DIRTY:+, ALLOWING -dirty})..."
         WANT_COMMIT="'"$COMMIT"'" ALLOW_DIRTY="'"$ALLOW_DIRTY"'" python3 -c "
 import json,os,sys
 m=json.load(open(\"$m\"))
-if m.get(\"corpus_type\")!=\"synthea\": sys.exit(1)
+# corpus_type lives top-level for guo/perera but NESTED under dataset for
+# thingom. This checked top-level only, so thingom scored None, exited 1, and
+# 1 had no branch in the case below -- every thingom result was dropped
+# SILENTLY, logged nowhere, on every harvest this repo has ever run. Its exp1
+# was never rescuable and nobody could see why. Check both spellings.
+ds=m.get(\"dataset\") or {}
+ct=m.get(\"corpus_type\") or (ds.get(\"corpus_type\") if isinstance(ds,dict) else None)
+if ct!=\"synthea\": sys.exit(4)
 c=str(m.get(\"git_commit\",\"\"))
 is_dirty=c.endswith(\"-dirty\")
 sha=c[:-6] if is_dirty else c
 want=os.environ.get(\"WANT_COMMIT\") or \"\"
 if want and not sha.startswith(want): sys.exit(1)
 sys.exit(3 if is_dirty and os.environ.get(\"ALLOW_DIRTY\")!=\"1\" else 0)" 2>/dev/null
-        case $? in 0) dirname "$m";; 3) echo "DIRTY:$(dirname "$m")" >&2;; esac
+        # EVERY non-zero code gets a branch. The bug above hid behind a
+        # missing one: an unmatched status silently vanished. A skip must
+        # always be visible in the .skipped manifest, whatever its reason.
+        case $? in
+          0) dirname "$m";;
+          3) echo "DIRTY:$(dirname "$m")" >&2;;
+          4) echo "NOTSYNTHEA:$(dirname "$m")" >&2;;
+          *) echo "UNREADABLE:$(dirname "$m")" >&2;;
+        esac
       done)
       [ -n "$dirs" ] && tar cz $dirs 2>/dev/null' > "$out/$ip.tgz" 2>"$out/$ip.skipped"
     local nd
-    nd=$(grep -c "^DIRTY:" "$out/$ip.skipped" 2>/dev/null || echo 0)
+    # `grep -c` on a missing file yields an empty string, not 0, and the
+    # arithmetic tests below then fail with "integer expression expected".
+    # Strip to digits and default, so no .skipped file means 0 rather than noise.
+    nd=$(grep -c "^DIRTY:" "$out/$ip.skipped" 2>/dev/null || true)
+    nd=${nd//[!0-9]/}; nd=${nd:-0}
     [ "$nd" -eq 0 ] && rm -f "$out/$ip.skipped"
     echo "  $ip -> $(tar tzf "$out/$ip.tgz" 2>/dev/null | grep -c run_meta.json) result dir(s)$(
       [ "$nd" -gt 0 ] && echo " -- $nd SKIPPED as -dirty, see $out/$ip.skipped (OJCOMS_ALLOW_DIRTY=1 to override)")"

@@ -291,7 +291,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
         from Common.crypto.config import verify_experiment_host
 
         host = verify_experiment_host()
-        if not host["is_pinned_experiment_host"]:
+        if not host["host_check_satisfied"]:
             reasons.append(
                 f"not running on the pinned AWS experiment host: expected "
                 f"{host['expected_instance_type']!r}, detected "

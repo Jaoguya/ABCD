@@ -72,6 +72,7 @@ def run_experiment(
     *,
     runs: int = 30,
     warmup: int = 5,
+    on_point_complete: Optional[Callable[[Any, List[RunResult]], None]] = None,
 ) -> List[RunResult]:
     """Execute one experiment over a sweep of variable values.
 
@@ -85,6 +86,20 @@ def run_experiment(
 
     The warm-up / retained split follows README §7:
       "30 runs per point after 5 discarded warm-ups."
+
+    ``on_point_complete(value, results_so_far)`` fires after each sweep point
+    finishes, so a caller can persist partial results instead of holding the
+    whole sweep in memory until the end. Exp. 2's largest point is hours long
+    and the process previously wrote NOTHING until every point had finished --
+    an interruption at any time threw away everything before it too. That is
+    not hypothetical: the 2026-08-29/30 campaign lost ~1 h/node to exactly this
+    when guo and yue_ge were stopped mid-build, and a `git reset --hard` on a
+    node destroyed guo's completed Exp. 1, 2 and 4 before that.
+
+    It fires BETWEEN points, never inside the timed region -- ``runner_fn`` has
+    already returned every run for this value by then -- so the flush I/O
+    cannot land in a measurement. Same calls, same order, same retained runs:
+    this changes when results reach disk, not what they are.
     """
     all_results: List[RunResult] = []
     for val in variable_values:
@@ -95,6 +110,18 @@ def run_experiment(
             result.variable_value = val
             result.run_id = iteration - warmup
             all_results.append(result)
+        if on_point_complete is not None:
+            # A failed flush must not destroy a sweep that is otherwise fine --
+            # the in-memory results are still good and the final write at the
+            # end of run() is still coming. Report and carry on.
+            try:
+                on_point_complete(val, all_results)
+            except Exception as exc:  # noqa: BLE001 - never fatal
+                print(
+                    f"  [warn] partial-result flush failed at {val}: "
+                    f"{type(exc).__name__}: {exc}",
+                    flush=True,
+                )
     return all_results
 
 
@@ -278,7 +305,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
         from Common.crypto.config import verify_experiment_host
 
         host = verify_experiment_host()
-        if not host["is_pinned_experiment_host"]:
+        if not host["host_check_satisfied"]:
             reasons.append(
                 f"not running on the pinned AWS experiment host: expected "
                 f"{host['expected_instance_type']!r}, detected "
