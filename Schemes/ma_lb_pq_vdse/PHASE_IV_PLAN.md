@@ -46,7 +46,7 @@ Phase VI Step 4           R = { (CID_i, PID_i, VID_i) | T_Q → I_i }     matchi
 The matching relation is written `T_Q → I_i` — **an arrow, never defined**. So the
 paper does not actually claim `T_Q = T_j`; it leaves the predicate unspecified. The
 discrepancy is therefore a *gap in the construction*, not an inconsistency to be
-patched, and closing it is an author decision (AGENT_RULES §2).
+patched, and closing it is an author decision.
 
 ### 1.2 Why the obvious reading is impossible
 
@@ -295,7 +295,7 @@ Phase IV is the first phase that reads the corpus, and it cannot run yet.
 (`d991c695…`, 1,206,159 records) while `dataset.yaml` pins v2 (`fd4b7654…`,
 1,141,072 records). `Dataset/corpus.py::verify_against_pin` correctly raises
 `CorpusMismatchError`, so `load_verified_corpus()` refuses to load anything —
-logged in `debug_history.md` on 2026-08-08 and committed as `334c34c`.
+committed as `334c34c` on 2026-08-08.
 
 **The v2 manifest must be committed from the experiment host before Step IV.1 can
 be tested against real data.** Steps IV.2-IV.5 are testable on synthetic records

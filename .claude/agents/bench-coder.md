@@ -18,12 +18,12 @@ one.
    paper does not have (batching, early termination, an index it never
    describes). Implementation-level speedups that compute the *same* work —
    parallelism, a denser container — are fine, must be disclosed, and must be
-   offered to every scheme or the comparison is confounded. AGENT_RULES
+   offered to every scheme or the comparison is confounded. The rule
    "Bias Detection".
 3. **Label results-affecting changes.** If a change alters what a reported
-   number means, say `[results-affecting]` in `debug_history.md` and the commit
+   number means, say `[results-affecting]` in the commit
    message, and name what §V must disclose. Make the change; make it loud.
-4. **Never edit `README.md`** unless the user explicitly asks (AGENT_RULES §1).
+4. **Never edit `README.md`** unless the user explicitly asks.
 5. **`Common/` is for primitives papers CITE.** What a paper *contributes*
    stays in its own `src/`.
 

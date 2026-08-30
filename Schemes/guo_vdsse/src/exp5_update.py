@@ -126,9 +126,9 @@ def run(
     #      ma_lb_pq_vdse's harness/runner.py computes `prepared` ONCE and calls
     #      measure(prepared) for every warm-up and run, and yue_ge's Exp. 5
     #      builds its base index once and adds a batch per run. guo was the only
-    #      scheme rebuilding per repetition (debug_history 2026-08-27 records
-    #      "prepare() once, measure() x reps" as the standard all baselines were
-    #      asked to match for fairness).
+    #      scheme rebuilding per repetition ("prepare() once, measure() x reps"
+    #      is the standard all baselines were asked to match for fairness,
+    #      fixed 2026-08-27).
     #   2. Indexing the whole corpus ignores §6, which fixes index_size at 10^5
     #      for every experiment that does not sweep it. exp3_crossdomain has
     #      always scoped itself that way and exp4_verify now does too.

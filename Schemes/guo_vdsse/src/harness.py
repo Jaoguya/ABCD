@@ -235,7 +235,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
     other four can — there was no recorded statement that a run used the pinned
     host and the frozen corpus. A baseline held to a weaker standard than the
     proposed scheme biases the comparison in the proposed scheme's favour,
-    which AGENT_RULES "Bias Detection" forbids; this mirrors
+    which is a bias defect; this mirrors
     ma_lb_pq_vdse's provenance.reportability() rather than inventing a looser
     rule.
 

@@ -115,7 +115,7 @@ SK_U = ∪_{i=1..N_U} SK_{U,i}
 **BLOCKED — the manuscript gives `KeyGen` as an interface only.** It fixes
 `MSK_i = (α_i, β_i)` and `PK_i = (g_1, g_2, e(g_1,g_2)^{α_i}, g_1^{β_i})`
 (Phase I Step 2) but never defines the structure of `SK_{U,i}` — no key
-components, no randomisation, no attribute embedding. AGENT_RULES §2 forbids
+components, no randomisation, no attribute embedding. It is forbidden to
 guessing a construction, so this needs a decision before the module is written.
 
 The published `(MSK_i, PK_i)` shape is the Rouselakis-Waters (RW15) decentralised

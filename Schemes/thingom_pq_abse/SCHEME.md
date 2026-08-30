@@ -36,7 +36,7 @@ The search relation was verified symbolically before implementation â€” the `Oâ‚
 
 ## Decisions fixed for this baseline
 
-Both are recorded in `crypto.yaml` so they are covered by the config hash in every `run_meta.json`, and both are logged in [debug_history.md](../../debug_history.md).
+Both are recorded in `crypto.yaml` so they are covered by the config hash in every `run_meta.json`, and both are recorded in the commit history.
 
 | Decision | Value | Why |
 |---|---|---|

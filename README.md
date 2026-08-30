@@ -268,7 +268,7 @@ BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores 
 ## 8. Repository Structure
 
 ```
-├── README.md · AGENT_RULES.md · debug_history.md · requirements.txt
+├── README.md
 ├── Common/crypto/          # Shared primitives (see scope note below)
 │   ├── config.py hashes.py rng.py symmetric.py prf.py
 │   ├── merkle.py bloom.py lattice.py pairing.py kem.py
@@ -408,7 +408,7 @@ Short version: the benchmark tests the paper's claims rather than confirming the
 
 **Keep this file current.** If you change a parameter, timer boundary, metric name, file layout, or the dataset, update the relevant section and add a Change Log line in the same commit. Mark anything that invalidates existing results. A section describing behavior that isn't built yet should say so.
 
-**For AI agents.** Read `AGENT_RULES.md` and `debug_history.md` before starting; log debugging there as you go. Ask rather than guess on scheme constructions, parameter values, or anything affecting reported numbers. Edit this README only when asked to.
+**For AI agents.** Ask rather than guess on scheme constructions, parameter values, or anything affecting reported numbers. Edit this README only when asked to.
 
 ---
 
@@ -458,7 +458,7 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 | Date | Change |
 |------|--------|
 | 2026-08-02 | Initial specification: environment, phases, 4 baselines, 8 experiments, defaults, methodology, structure, output format, figures. |
-| 2026-08-03 | Split per-scheme detail into `SCHEME.md`; added `AGENT_RULES.md`, `debug_history.md`, `requirements.txt`, cross-platform run instructions. |
+| 2026-08-03 | Split per-scheme detail into `SCHEME.md`; added cross-platform run instructions. |
 | 2026-08-03 | Added `Common/crypto/` (hashes, RNG, AES-GCM, PRF + t-Pun-PRF, Merkle, Bloom, lattice toolkit, pairing, ML-KEM) and `crypto.yaml`/`dataset.yaml` with per-value provenance. Added `test_primitives.py` and `.gitignore`. |
 | 2026-08-03 | Corrected `requirements.txt`: Ref[41] is itself pairing-based (Type-I, DBDH), so a pairing library is needed for a **baseline**, not just ours. Flagged the unverified ML-KEM attribution. |
 | 2026-08-03 | Instance `c6i.xlarge` → **`m6i.xlarge`**: same CPU, 8 → 16 GiB, because Ref[52]'s per-attribute 381 MB trapdoor puts 8 GiB near saturation and contaminates latency. **[results-affecting]** |

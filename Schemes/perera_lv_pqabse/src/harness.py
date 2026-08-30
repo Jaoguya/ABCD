@@ -234,7 +234,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
     Deliberately mirrors ma_lb_pq_vdse's provenance.reportability() rather
     than inventing a looser rule -- a baseline held to a weaker standard than
     the proposed scheme would bias the comparison in the proposed scheme's
-    favour, which AGENT_RULES "Bias Detection" forbids.
+    favour, which is a bias defect.
 
     Ref[54] uses no pairing (LWE CP-ABE + ML-KEM-768 + ML-DSA-65), so the
     Ref[41] pairing-backend condition is structurally absent rather than merely

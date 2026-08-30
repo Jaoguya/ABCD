@@ -10,7 +10,7 @@ environment, never supplied by a caller** — a provenance record that could be
 passed the commit it claims would record what someone believed rather than what
 ran.
 
-:func:`reportability` collects the conditions AGENT_RULES requires for a result to
+:func:`reportability` collects the conditions required for a result to
 be quotable. It returns the failing reasons rather than a bool, because
 ``run_meta.json`` records *why* a run was not reportable, and "reportable: false"
 with no reason is not provenance.

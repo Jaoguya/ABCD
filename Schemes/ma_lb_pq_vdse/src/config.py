@@ -639,7 +639,7 @@ class Configuration:
         if self.scheduler.allow_per_experiment_override:
             raise ConfigError(
                 "scheduler.yaml allows a per-experiment weight override; "
-                "AGENT_RULES fixes the weights across Exp. 7-8"
+                "the weights are fixed across Exp. 7-8"
             )
         raw_scheduler = load_raw(SCHEDULER_CONFIG_PATH)
         if (raw_scheduler.get("weights") or {}).get("sum_to_one"):

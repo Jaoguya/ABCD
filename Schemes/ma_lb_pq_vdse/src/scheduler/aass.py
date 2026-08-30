@@ -354,7 +354,7 @@ class Scheduler:
         # constant overhead common to all four arms, 4x the 5.34us
         # execute_search() being scheduled, which swamped the very difference
         # Exp. 7-8 exist to measure. It also weakened three baselines below
-        # their published construction, which AGENT_RULES forbids.
+        # their published construction, which is forbidden.
         if self.variant == VARIANT_NO_LB:
             chosen = candidates[0]
         elif self.variant == VARIANT_ROUND_ROBIN:

@@ -10,8 +10,8 @@ Everything else is reference.
 **Related documents.** [`README.md`](README.md) is the benchmark *specification*
 and the source of truth for what the experiments are. This file is the *operator's
 guide*: how the thing is actually configured and run.
-[`AGENT_RULES.md`](AGENT_RULES.md) is the working agreement.
-[`debug_history.md`](debug_history.md) is the append-only record of every defect
+This file is the working agreement.
+Git history is the record of every defect
 found and what was done about it.
 
 ---
@@ -71,7 +71,7 @@ in-process hash chain, not the Hyperledger Fabric deployment the specification
 names. The runs complete and `run_meta.json` says so. The Fabric adapter is not
 written yet.
 
-**10. Never edit `README.md` casually.** `AGENT_RULES.md` §1 makes it the
+**10. Never edit `README.md` casually.** It is the
 specification's source of truth.
 
 ---
@@ -462,8 +462,6 @@ scheme's tests, which is what makes the omission honest rather than convenient.
 ```
 README.md                     specification — source of truth, do not edit casually
 SystemConfiguration.md        this file — operator's guide
-AGENT_RULES.md                working agreement
-debug_history.md              append-only defect record; read it before re-debugging
 
 Common/crypto/                primitives every scheme shares, so all pay the same cost
                               hashes, PRF, AES-GCM, Merkle, Bloom, lattice, pairing,
@@ -528,5 +526,5 @@ Agent teams need `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
   necessary, but they must be disclosed, and if the proposed scheme gets an
   optimisation the baselines need it too or the comparison is confounded. An
   optimisation on the *measured* path needs a §V note; one on untimed setup does not.
-- **Found a defect?** Append to `debug_history.md`: what changed, why, and what it
+- **Found a defect?** Say in the commit message: what changed, why, and what it
   means. That file is why the same bug has not been fixed twice.

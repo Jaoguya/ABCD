@@ -90,7 +90,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
 # a pairing-based baseline, so a linear y-axis would collapse every curve but
 # the slowest into the x-axis. log_y is set above for the experiments where
 # that is true; it is NOT a presentational choice made per-figure to flatter a
-# result (AGENT_RULES "Bias Detection"), it is set once here for all runs.
+# result (a bias defect), it is set once here for all runs.
 
 
 # Display names. Anything not listed falls back to the directory name, so a

@@ -164,7 +164,7 @@ def test_ci_is_zero_for_a_constant_metric():
 
 
 def test_plausibility_flags_a_timing_with_zero_variance():
-    """AGENT_RULES: zero variance "indicates a bug or fabrication"."""
+    """Zero variance indicates a bug or fabrication."""
     summary = stats.summarise([2.5] * 30)
     warning = stats.check_plausibility(summary, metric="latency", is_timing=True)
     assert warning is not None and "zero variance" in warning
