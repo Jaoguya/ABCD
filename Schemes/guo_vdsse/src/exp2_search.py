@@ -132,9 +132,29 @@ def run(
     """Run Experiment 2: Search Latency vs. Index Size."""
     rng = DeterministicRNG(seed).spawn("exp2_search")
 
-    # Filter variable range to available records
+    # --points MUST filter the sweep, not just name the output directory.
+    #
+    # This was the ONE experiment in this scheme that ignored it: exp1, exp3,
+    # exp4 and exp5 all call sweep.select, exp2 did not, and `points` reached
+    # only sweep.shard_dir below. So `--points 50000` ran the WHOLE five-point
+    # sweep -- including the 49.8 GB build at 10^6 -- and wrote it to a
+    # directory named `__points-50000`.
+    #
+    # That is worse than slow. global.yaml's fleet block sets
+    # granularity: sweep_point, so sharding Exp. 2 across instances would have
+    # given every node the entire sweep, each ~12.4 h instead of its share, and
+    # then merge_points.py would have concatenated five copies of the same full
+    # sweep as though they were disjoint shards -- 5x the runs at every point,
+    # a confidence interval computed over duplicated samples, and nothing
+    # anywhere saying so. Caught 2026-08-30 when two "single-point" runs both
+    # reported flushing N=10000 and sat at identical RSS.
+    #
+    # Selected BEFORE the corpus cap so an unknown point raises
+    # SweepSelectionError naming the real sweep, rather than being silently
+    # filtered out by a short corpus and reported as "does not sweep".
+    selected = sweep.select(VARIABLE_RANGE, points)
     max_available = len(records)
-    actual_range = [n for n in VARIABLE_RANGE if n <= max_available]
+    actual_range = [n for n in selected if n <= max_available]
     if not actual_range:
         actual_range = [max_available]
 
