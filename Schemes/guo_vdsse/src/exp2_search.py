@@ -143,10 +143,25 @@ def run(
     # harness change only: no scheme code, no call order, no parameter differs.
     # `test_exp2_incremental_build_matches_a_fresh_build` pins that.
     #
-    # It also bounds memory at the LARGEST index rather than the largest plus
-    # whatever is being built next — ~9.5 GB at N = 10^6, measured, against
-    # global.yaml's 16 GiB host. The previous build-all-then-hold version needed
-    # ~18 GB and could not complete at all.
+    # The saving is TIME, not peak memory. An earlier version of this comment
+    # claimed "~9.5 GB at N = 10^6, measured", which is wrong by ~5.4x and would
+    # have made the 2*10^5 cap below look unnecessary. Re-measured byte-exact
+    # from the EDB's own dicts, on synthetic records whose per-document keyword
+    # count is drawn to match dataset_manifest.json's real distribution
+    # (mean 31.70): 51,675 bytes/record for Tf plus 1,773 for Ti, stable to
+    # under 3% across N = 200..2000. That extrapolates to 10.7 GB at 2*10^5 and
+    # 53.5 GB at 10^6, agreeing with line 50 above and with crypto.yaml's
+    # independently derived 50.5 KB/document.
+    #
+    # It cannot be otherwise: index.py's EncryptedDatabase is plain dicts that
+    # only ever insert. Nothing is evicted or compacted, so peak memory is the
+    # largest index, whichever way it was built.
+    #
+    # What growing one EDB does avoid is the TRANSIENT: rebuilding per point
+    # briefly held the old index and the new one at once during the handover.
+    # That is a real gain at the margin and is why the previous
+    # build-all-then-hold version could not complete, but it does not lower the
+    # steady-state ceiling that sets the cap below.
     #
     # One deliberate consequence: a single `setup()` means one key set across
     # the whole sweep, where rebuilding drew fresh keys per point. That removes
