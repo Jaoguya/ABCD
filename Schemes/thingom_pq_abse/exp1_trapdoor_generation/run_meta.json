@@ -1,8 +1,8 @@
 {
   "scheme": "thingom_pq_abse",
   "experiment": "exp1",
-  "started_utc": "2026-08-29T06:38:59.339268+00:00",
-  "git_commit": "55aa3c8289e616b90c7741b18d3ccb4c6f18cd23",
+  "started_utc": "2026-08-29T19:53:52.772440+00:00",
+  "git_commit": "6c97ee92a3d5a11fa21f98d0178a3836ba447c3c",
   "reportable": true,
   "reportable_blockers": [],
   "parameters": {
@@ -41,9 +41,9 @@
     }
   },
   "config_hashes": {
-    "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+    "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
     "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-    "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+    "global.yaml": "8172f55ef8baffc1cf8bfe5314d600f0a34144972a431ab84fb9f097ed66088a",
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
   },
@@ -76,9 +76,9 @@
       "kyber_py": false
     },
     "config_hashes": {
-      "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+      "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
       "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-      "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+      "global.yaml": "8172f55ef8baffc1cf8bfe5314d600f0a34144972a431ab84fb9f097ed66088a",
       "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
       "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
     },
