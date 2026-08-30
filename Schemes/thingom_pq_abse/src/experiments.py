@@ -91,7 +91,11 @@ _MP_PLAN: Any = None
 # 2 is right on the pinned m6i.xlarge: its "4 vCPU" is 2 physical cores plus
 # hyperthreading, and 4 processes measured SLOWER on this compute-bound work.
 # On a wider host, set THINGOM_SEARCH_PROCESSES to the physical core count.
-# Measured cost at N = 10^6, 35 runs: 380.8h at 2 procs, 23.8h at 32, 11.9h at 64.
+# Measured cost at N = 10^6, 35 runs: 380.8h at 2 procs. The 23.8h-at-32 and
+# 11.9h-at-64 figures once recorded here were NOT reachable: chunksize was a
+# constant 8 chunks, so those pools ran 8 workers and idled the rest. Fixed
+# below. Exp. 2 now runs at n=1 for this scheme, which is what makes the full
+# 10^4-10^6 sweep affordable at all (~4.7h on 8 workers vs ~165h at n=35).
 #
 # §V MUST STATE the process count: reported latency is aggregate work divided
 # across P workers, not a single-core figure.
@@ -137,9 +141,23 @@ def _parallel_search(
         )
     ctx = mp.get_context("fork")
     with ctx.Pool(processes=_SEARCH_PROCESSES) as pool:
+        # Chunk count must follow the POOL, not a constant. This was
+        # `len(index) // 8`, which yields exactly 8 chunks at any N >= 8
+        # regardless of _SEARCH_PROCESSES -- so a 32- or 64-process pool handed
+        # work to 8 workers and left the rest idle, capping speedup at 8x however
+        # wide the host. Measured by counting distinct worker PIDs: 32 procs ->
+        # 8 used, 24 idle; 64 procs -> 8 used, 56 idle. The 23.8h-at-32 and
+        # 11.9h-at-64 figures in the comment above are not reachable by that
+        # code, and the real floor was 380.8h/8 ~= 47.6h.
+        #
+        # Four chunks per worker rather than one: the scan is uniform, but an
+        # exact 1:1 split makes the whole map wait on whichever worker draws the
+        # slowest core, and finer chunks cost nothing here because the payload
+        # is one int.
+        chunks = max(1, _SEARCH_PROCESSES * 4)
         results = pool.map(
             _mp_search_worker, range(len(index)),
-            chunksize=max(1, len(index) // 8),
+            chunksize=max(1, len(index) // chunks),
         )
     hits: set = set()
     pairings = 0

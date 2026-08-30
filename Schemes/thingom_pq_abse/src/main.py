@@ -64,14 +64,30 @@ EXP1_Q_VALUES = list(range(1, 21))
 # At these values: Exp.2 ~7.94h + Exp.3 ~12.51h = ~20.45h, ~3.55h margin.
 # EXP3_TOTAL_INDEX_SIZE=4_000 was considered and rejected: it lands at
 # ~22.2h, only ~1.8h of margin.
-# N MUST be a point global.yaml's exp2_search_latency.values actually sweeps
-# ([10000, 50000, 100000, 500000, 1000000]). A brief 2026-08-28 change to
-# 20_000 -- taken because the parallel speedup made it affordable -- aligned
-# with NO other scheme's measurements: Plots/generate_plots.py draws every
-# scheme on one axis, so Ref[41] would have been a lone point at 2x10^4 with
-# nothing to compare it against, defeating the purpose of the figure.
-# Affordability is not the constraint that sets this value; comparability is.
-EXP2_INDEX_SIZES = [10**4]
+# N MUST be a point global.yaml's exp2_search_latency.values actually sweeps.
+# A brief 2026-08-28 change to 20_000 -- taken because the parallel speedup made
+# it affordable -- aligned with NO other scheme's measurements: generate_plots.py
+# draws every scheme on one axis, so Ref[41] would have been a lone point at
+# 2x10^4 with nothing to compare it against. Affordability never sets this
+# value; comparability does.
+#
+# Now the FULL sweep, matching global.yaml exactly, so Ref[41] spans the same
+# 10^4-10^6 axis as ma_lb, perera and yue_ge rather than sitting at one point.
+#
+# What made that affordable is NOT a faster scheme -- the pairing count per
+# candidate is untouched. Two things changed:
+#   1. experiments.py's chunksize was `len(index) // 8`, a constant 8 chunks at
+#      any process count, so speedup capped at 8x however wide the host. It now
+#      follows _SEARCH_PROCESSES.
+#   2. Exp. 2 runs at n=1 for this scheme, not the usual 30 + 5 warm-ups. At
+#      n=35 the sweep is ~165h; at n=1 it is ~4.7h on 8 workers.
+#
+# n=1 is a REAL cost and must be disclosed, not hidden: this scheme's Exp. 2
+# points carry no confidence interval and no error bar, while every other
+# scheme's do. A single run cannot be distinguished from an outlier. It is the
+# honest trade for measuring the published 10^4-10^6 range at all, and §V has to
+# say so.
+EXP2_INDEX_SIZES = [10**4, 5 * 10**4, 10**5, 5 * 10**5, 10**6]
 EXP3_DOMAIN_COUNTS = list(range(2, 11))
 EXP3_TOTAL_INDEX_SIZE = 2_000  # held constant across the d sweep; see experiment_3()
 
