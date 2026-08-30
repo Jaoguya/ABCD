@@ -114,8 +114,40 @@ MARKERS = ("o", "s", "^", "D", "v", "P", "X")
 LINESTYLES = ("-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 2)), (0, (1, 1)))
 COLORS = ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#56B4E9", "#E69F00", "#000000")
 
+# Exp. 7-8 are an ablation of ONE scheme, so their four series are variants, not
+# schemes, and their labels are absent from STYLE_ORDER. style_for() fell through
+# to the same out-of-range index for all four, giving every curve the identical
+# colour, marker AND linestyle: #E69F00 / "P" / (0,(5,2)). a237107 fixed
+# COLLECTING four series and left them STYLED as one, so the four-way comparison
+# §V claims rendered as a single indistinguishable tangle.
+#
+# Palette chosen by running the dataviz validator, not by eye
+# (--mode light --pairs all, since all four curves are visible at once):
+#   blue/vermillion/green/dark-purple -> CVD worst pair dE 6.7 (deutan),
+#   normal-vision worst 18.7, and ALL FOUR clear 3:1 contrast on white.
+# The obvious alternative, swapping dark purple for #E69F00 orange, scores
+# better on CVD (dE 11.0) but leaves the orange at 2.19:1 against white. These
+# are 1.1pt lines in a PRINTED figure: sub-3:1 is a legibility failure for every
+# reader, while the 6-8 CVD band is explicitly legal where secondary encoding
+# exists -- and here marker and linestyle both vary by design (README §10's
+# grayscale requirement), so identity never rests on hue alone. Contrast wins.
+#
+# aass keeps #0072B2/"o"/"-", the same styling ma_lb_pq_vdse carries in the
+# cross-scheme figures, so the proposed thing looks the same in all eight.
+# no_lb takes the purple: it is the pair closest to blue under deuteranopia, and
+# no_lb is also the curve furthest from aass in value (1547 vs 3320 q/s, sigma
+# 0.39 vs 0.086), so proximity in hue costs nothing at the distance they sit.
+ABLATION_STYLES: Dict[str, Dict[str, object]] = {
+    "No load balancing": {"color": "#7B3294", "marker": "v", "linestyle": ":"},
+    "Round robin":       {"color": "#D55E00", "marker": "s", "linestyle": "--"},
+    "Least loaded":      {"color": "#009E73", "marker": "^", "linestyle": "-."},
+    "AASS (proposed)":   {"color": "#0072B2", "marker": "o", "linestyle": "-"},
+}
+
 
 def style_for(scheme: str) -> Dict[str, object]:
+    if scheme in ABLATION_STYLES:
+        return dict(ABLATION_STYLES[scheme])
     idx = STYLE_ORDER.index(scheme) if scheme in STYLE_ORDER else len(STYLE_ORDER)
     return {
         "marker": MARKERS[idx % len(MARKERS)],
@@ -344,9 +376,15 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
         return False, [f"exp{spec.number}: no results.csv found for any scheme"]
 
     fig, ax = plt.subplots()
-    for series in sorted(series_list,
-                         key=lambda s: STYLE_ORDER.index(s.scheme)
-                         if s.scheme in STYLE_ORDER else 99):
+    def _draw_order(s: "Series") -> int:
+        # Ablation labels are not schemes; without this they all tied at 99 and
+        # the legend order depended on collection order rather than intent.
+        labels = [lbl for _, lbl in ABLATION_VARIANTS]
+        if s.scheme in labels:
+            return labels.index(s.scheme)
+        return STYLE_ORDER.index(s.scheme) if s.scheme in STYLE_ORDER else 99
+
+    for series in sorted(series_list, key=_draw_order):
         label = SCHEME_LABELS.get(series.scheme, series.scheme)
         # A series that stops short of the sweep is a DISCLOSED CAP, not missing
         # data -- guo_vdsse's Exp. 2 ends at N=2e5 because its forward index is
