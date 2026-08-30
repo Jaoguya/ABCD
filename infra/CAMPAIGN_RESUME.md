@@ -4,24 +4,47 @@ Everything was stopped on the user's instruction. This file is what you need to
 resume; it records what was running, how far it got, and what is **not** yet
 banked. Written by the coder pane at shutdown.
 
-## What was actually banked
+## READ THIS FIRST — nothing from this campaign is in git
 
-**Nothing new landed from the interrupted runs.** Both nodes were still inside
-Exp. 2's index-build phase, which writes no output until the whole experiment
-completes. So ~1h of build work per node is lost on resume, but **no completed
-result was lost** — every `run_meta.json` already on disk predates the stop and
-survives on the EBS volumes (stopping an instance does not delete them).
+**All 85 committed `run_meta.json` files predate this campaign. Zero are at
+`6c97ee9`, the commit every node ran.** Everything the 2026-08-29/30 campaign
+produced exists ONLY on the stopped instances' EBS volumes:
 
-Banked this campaign, one per node, both verified `reportable: true`,
-`corpus_type: synthea`, clean 40-hex commit:
+- `ma_lb_pq_vdse` — 12 dirs, **12/12 clean 40-hex SHA**, verified on its node at
+  20:36 UTC before it was stopped. These are the first results this repo has ever
+  produced with a working provenance marker. **Not harvested.**
+- `perera_lv_pqabse` — 3/3 clean, complete. **Not harvested.**
+- `guo_vdsse`, `yue_ge`, `thingom_pq_abse` — exp1 each, clean. **Not harvested.**
 
-| scheme | banked |
-|---|---|
-| `guo_vdsse` | `exp1_trapdoor_generation` |
-| `yue_ge` | `exp1_trapdoor_generation` |
-| `thingom_pq_abse` | `exp1_trapdoor_generation` (stopped earlier, separately) |
-| `perera_lv_pqabse` | exp1, exp2, exp3 — **complete**, 3/3 clean |
-| `ma_lb_pq_vdse` | 12 dirs, **12/12 clean SHA** (exp1,2,3,5 + exp7/8 x 4 variants) |
+**So do not delete the ~270 GB of EBS to save the $21.60/month.** That is the only
+copy. Harvest first: start the instances, run `./infra/fleet.sh harvest <dir>`,
+unpack, commit. The harvest filter rejects `-dirty` by default and these runs are
+clean at `6c97ee9`, so they pass without an override.
+
+An earlier version of this file listed those same results under a heading that
+read as "banked", which invited exactly the wrong conclusion. What is in git is
+the PREVIOUS campaign: ma_lb at `55aa3c8`/`5cf65f9`/`d65df6b`, 20 of its 26 dirs
+carrying a `-dirty` suffix.
+
+## What the interrupted runs lost
+
+**No completed result.** guo and yue_ge were both inside Exp. 2's index-build
+phase, which writes nothing until the experiment finishes, so ~1h of build per
+node is gone and nothing else. Their exp1 dirs were already on disk and survive
+the stop.
+
+## On the `-dirty` stamps in git
+
+Do not read them as evidence that code was modified. `dfa7e69` diagnosed the
+marker: `git_commit()` ran `git status --porcelain` over the whole repo including
+tracked result directories, so a run's own output tripped it. Its own conclusion
+stands — the stamps "are not evidence that code was modified, and equally cannot
+rule it out."
+
+Corroborating: at the SAME commit `55aa3c8`, `exp7` base and its five
+`__points-N` shards are clean while `exp8` base, its five shards, and `exp6` are
+dirty. Same commit, same sweep, opposite verdicts — that is write-order
+contamination, not modified source.
 
 ## Exact state at stop
 
@@ -76,13 +99,24 @@ so runs proceed and record `pinned=false` rather than refusing.
 So **anything these two produce is non-conforming to §V's identical-hardware
 sentence.** Resuming without settling this spends money on inadmissible numbers.
 
-One nuance not yet run down: `verify_experiment_host()` returns
-`instance_type=None`, not `m6i.4xlarge` — that is **detection failing**, not a
-detected-wrong-type, and probably IMDSv2 requiring a token. Worth confirming
-before concluding anything, because it also bears on how the earlier
-`pinned=True` results were determined.
+Why it returned `instance_type=None` rather than `m6i.4xlarge`: **not** an
+IMDSv2 token problem — `_detect_aws_instance_type()` already does the correct v2
+dance (PUT for a token, then GET with the header), and both instances had
+`HttpEndpoint=enabled`, `HttpTokens=required`, hop limit 2. The leading
+explanation is its **0.3 s timeout** (`Common/crypto/config.py:95`, applied
+twice) expiring under index-build load — guo was at 14.1 GB RSS and 100% CPU when
+probed. Fix the probe before spending anything on re-runs: re-pinning could buy
+85 re-runs that still record `pinned=false`.
 
 Three decisions were with the user when work stopped: the host question above,
 whether ma_lb's 20 dirty-tree results get re-run, and the Exp. 2 estimand
 mismatch (the proposed scheme measures one fixed 1-keyword query; the baselines
 measure 30 drawn 5-keyword queries).
+
+## One trap for a resuming session
+
+Relaunching guo or yue_ge with `--experiment 2,3,4,5` writes into result
+directories that **already contain** run_meta.json files from an earlier campaign
+(`f745880` / `55aa3c8`, 2026-08-29). The directories will not be empty and the
+old files are overwritten in place. That is intended, but harvest anything you
+still want from them first.

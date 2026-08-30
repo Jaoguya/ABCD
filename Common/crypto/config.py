@@ -10,6 +10,7 @@ that record.
 from __future__ import annotations
 
 import hashlib
+import functools
 import platform
 import threading
 import urllib.error
@@ -92,31 +93,56 @@ def scheme_params(scheme: str) -> Dict[str, Any]:
     return get(scheme)
 
 
-def _detect_aws_instance_type(timeout: float = 0.3) -> Optional[str]:
+@functools.lru_cache(maxsize=1)
+def _detect_aws_instance_type(
+    timeout: float = 2.0, attempts: int = 3
+) -> Optional[str]:
     """Best-effort EC2 instance type of the host actually running this process.
 
     Reads the IMDSv2 metadata service (token-gated, so IMDSv1-disabled hosts
     still answer). Returns ``None`` off EC2 — a Mac, a personal PC, any
     non-AWS box — never raises: this sits behind ``environment_report()``,
-    which every run_meta.json gets, reportable or not, so a 0.3s stall or a
-    dev laptop with no route to 169.254.169.254 must not block a run.
+    which every run_meta.json gets, reportable or not, so a stall or a dev
+    laptop with no route to 169.254.169.254 must not block a run.
+
+    The timeout was 0.3s and applied twice, which is not enough on a box doing
+    what this repo does to boxes. Both fleet nodes returned ``None`` here while
+    at 100% CPU mid index-build (one at 14.1 GB RSS), with IMDS demonstrably
+    healthy: HttpEndpoint enabled, HttpTokens required, hop limit 2, and the v2
+    handshake below is correct. A probe that reports "not on the pinned host"
+    because the host was BUSY is measuring load, not identity.
+
+    None of this is on a timed path — every caller is a provenance or
+    reportability check (``provenance.py``, each scheme's ``harness.py``,
+    ``environment_report()``), never a measurement loop — so seconds spent here
+    change no reported number.
+
+    Cached: a process cannot migrate between instances, so the answer is fixed
+    for its lifetime. Without this the retries would be paid at every call site
+    -- and off EC2, where all three attempts always expire, that is the full
+    ``attempts * timeout`` each time.
     """
-    try:
-        token_request = urllib.request.Request(
-            "http://169.254.169.254/latest/api/token",
-            method="PUT",
-            headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
-        )
-        with urllib.request.urlopen(token_request, timeout=timeout) as resp:
-            token = resp.read().decode("utf-8")
-        type_request = urllib.request.Request(
-            "http://169.254.169.254/latest/meta-data/instance-type",
-            headers={"X-aws-ec2-metadata-token": token},
-        )
-        with urllib.request.urlopen(type_request, timeout=timeout) as resp:
-            return resp.read().decode("utf-8").strip()
-    except (urllib.error.URLError, OSError, TimeoutError):
-        return None
+    for attempt in range(attempts):
+        try:
+            token_request = urllib.request.Request(
+                "http://169.254.169.254/latest/api/token",
+                method="PUT",
+                headers={"X-aws-ec2-metadata-token-ttl-seconds": "60"},
+            )
+            with urllib.request.urlopen(token_request, timeout=timeout) as resp:
+                token = resp.read().decode("utf-8")
+            type_request = urllib.request.Request(
+                "http://169.254.169.254/latest/meta-data/instance-type",
+                headers={"X-aws-ec2-metadata-token": token},
+            )
+            with urllib.request.urlopen(type_request, timeout=timeout) as resp:
+                return resp.read().decode("utf-8").strip()
+        except (urllib.error.URLError, OSError, TimeoutError):
+            # Off EC2 this fails identically every time, so the retries cost a
+            # dev laptop `attempts * timeout` once per run and nothing else.
+            if attempt == attempts - 1:
+                return None
+    return None
 
 
 def verify_experiment_host(*, require: bool = False) -> Dict[str, Any]:
@@ -144,6 +170,11 @@ def verify_experiment_host(*, require: bool = False) -> Dict[str, Any]:
         "detected_instance_type": detected,
         "platform": platform.platform(),
         "is_pinned_experiment_host": is_pinned_host,
+        # "could not ask" and "asked, wrong answer" both produced
+        # is_pinned_experiment_host=False and were indistinguishable in the
+        # record. They mean opposite things: the first says nothing about the
+        # host, the second condemns it. Record which one happened.
+        "metadata_reachable": detected is not None,
     }
     if require and not is_pinned_host:
         raise ConfigError(
