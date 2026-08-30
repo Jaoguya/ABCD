@@ -228,6 +228,7 @@ def merge(base: Path, *, dry_run: bool = False) -> int:
     # other schemes write the metric's real name (`trapdoors_issued_mean`).
     # Take them from a shard's own results.csv and map positionally, so the
     # merged file is byte-compatible with what Plots/generate_plots.py reads.
+    _refuse_projected(shards)
     _reaggregate(rows, base / "results.csv",
                  template=_result_columns(shards[0]))
     (base / "run_meta.json").write_text(
@@ -245,6 +246,40 @@ def _result_columns(shard: Path) -> List[str]:
         return []
     with path.open(newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh).fieldnames or [])
+
+
+def _refuse_projected(shards: List[Path]) -> None:
+    """Refuse to merge shards containing PROJECTED points.
+
+    Merging projected rows is not a meaningful operation, and getting it wrong
+    fails silently in the flattering direction. _reaggregate() rebuilds
+    primary_ci95 from raw_runs.csv rather than carrying the aggregate forward
+    -- correct for measured points, and exactly wrong for a projected one,
+    whose results.csv says `nan` precisely because there is no sample to
+    interval over. Re-aggregation would manufacture a confidence interval for
+    a number that has none, with nobody doing anything wrong.
+
+    Inert on every path in the current campaign: nothing shards a projected
+    experiment. It exists so that the day someone does, they get a message
+    instead of an invented error bar.
+    """
+    for shard in shards:
+        path = shard / "results.csv"
+        if not path.exists():
+            continue
+        with path.open(newline="", encoding="utf-8") as fh:
+            for lineno, row in enumerate(csv.DictReader(fh), start=2):
+                if (row.get("measurement_type") or "").strip() == "projected":
+                    raise SystemExit(
+                        f"{path}:{lineno}: refusing to merge -- this point is "
+                        f"PROJECTED (variable_value="
+                        f"{row.get('variable_value','?')}), not measured. "
+                        f"Re-aggregation recomputes primary_ci95 from the raw "
+                        f"runs, which would invent a confidence interval for a "
+                        f"value derived from a unit cost. Merge the measured "
+                        f"shards and re-derive the projection from the merged "
+                        f"unit cost instead."
+                    )
 
 
 def _reaggregate(rows: List[Dict[str, str]], out: Path,

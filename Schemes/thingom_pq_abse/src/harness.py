@@ -79,6 +79,14 @@ class Run:
     secondary_1: Optional[float] = None
     secondary_2: Optional[float] = None
     status: str = "ok"
+    # "measured" = this run was executed. "projected" = this value was derived
+    # from a measured unit cost (Ref[41]'s search is q*N*(2u+1) pairings with no
+    # index and no early termination, so cost is linear in N and one measured
+    # record extrapolates). A projected row must never be readable as measured:
+    # it carries NO confidence interval, because there is no sample to interval
+    # over, and multiplying one run by 30 would state a replication that did
+    # not happen.
+    measurement_type: str = "measured"
 
 
 @dataclass
@@ -248,7 +256,7 @@ def write_results(path: Path, result: ExperimentResult) -> None:
     header = (
         "variable_value,primary_mean,primary_ci95,"
         "secondary_1_mean,secondary_1_ci95,"
-        "secondary_2_mean,secondary_2_ci95,n_runs"
+        "secondary_2_mean,secondary_2_ci95,n_runs,measurement_type"
     )
     lines = [header]
 
@@ -263,11 +271,25 @@ def write_results(path: Path, result: ExperimentResult) -> None:
     for variable_value in ordered:
         ok = [run for run in grouped[variable_value] if run.status == "ok"]
         if not ok:
-            lines.append(f"{variable_value},,,,,,,0")
+            lines.append(f"{variable_value},,,,,,,0,measured")
             continue
 
+        projected = any(run.measurement_type == "projected" for run in ok)
+        # A projected point gets its mean and the string "nan" for every CI.
+        #
+        # "nan" rather than an empty cell, deliberately. generate_plots.py:200
+        # reads `_to_float(cell) or 0.0`, so an EMPTY cell becomes 0.0 and
+        # matplotlib draws a zero-length error bar -- a 2pt cap that reads as a
+        # vanishingly TIGHT interval, the single most flattering misreading of
+        # a number that has no interval at all. nan is truthy so it survives
+        # the `or`, and matplotlib draws nothing for it. Verified by pixel
+        # count: the empty/0.0 path renders 13 extra pixels at the point, nan
+        # renders none, and the axis limits are identical either way. This is
+        # why the plotting code needs no change to represent it honestly.
+        ci_cell = (lambda _v: "nan") if projected else _format
+
         primary_mean, primary_ci = mean_ci95([run.primary for run in ok])
-        cells = [str(variable_value), _format(primary_mean), _format(primary_ci)]
+        cells = [str(variable_value), _format(primary_mean), ci_cell(primary_ci)]
 
         for attribute in ("secondary_1", "secondary_2"):
             values = [
@@ -277,11 +299,15 @@ def write_results(path: Path, result: ExperimentResult) -> None:
             ]
             if values:
                 mean, ci = mean_ci95(values)
-                cells.extend([_format(mean), _format(ci)])
+                cells.extend([_format(mean), ci_cell(ci)])
             else:
                 cells.extend(["", ""])
 
+        # len(ok) is what was EXECUTED. A projected point is derived from one
+        # measured unit cost, so this reads 1 -- never the count of points it
+        # was multiplied out to, and never a replication that did not happen.
         cells.append(str(len(ok)))
+        cells.append("projected" if projected else "measured")
         lines.append(",".join(cells))
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
