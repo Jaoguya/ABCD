@@ -160,7 +160,25 @@ sys.exit(3 if is_dirty and os.environ.get(\"ALLOW_DIRTY\")!=\"1\" else 0)" 2>/de
     echo "  $ip -> $(tar tzf "$out/$ip.tgz" 2>/dev/null | grep -c run_meta.json) result dir(s)$(
       [ "$nd" -gt 0 ] && echo " -- $nd SKIPPED as -dirty, see $out/$ip.skipped (OJCOMS_ALLOW_DIRTY=1 to override)")"
   done
-  echo "unpack with: for f in $out/*.tgz; do tar xzf \$f -C \$(git rev-parse --show-toplevel); done"
+  # This used to print a blanket `for f in */*.tgz; do tar xzf ...` loop. That
+  # recipe destroys data and did: every node's tarball also carries a stale,
+  # already-committed baseline copy of every OTHER scheme's directories (from
+  # deploy's full checkout), and tar order is not provenance-aware, so a later
+  # node's stale copy silently overwrites an earlier node's fresh result for the
+  # same path. No error, no warning -- git status then shows the fresh result as
+  # "clean", i.e. reverted. Caught 2026-08-30 before anything was committed.
+  cat <<UNPACK
+unpack PER SCHEME, from the ONE node that produced it, scoped to its path:
+  tar xzf $out/<ip>.tgz -C \$(git rev-parse --show-toplevel) Schemes/<scheme>
+
+Do NOT loop over every tarball -- see the comment above this message; it
+overwrites fresh results with stale ones silently.
+
+Find the right (ip, scheme) pairs first, and never from mtime (see this
+script's header): run \`tar tzf $out/<ip>.tgz\` per node to see what each
+holds, then check that scheme's run_meta.json git_commit and reportable
+fields on each candidate node before choosing.
+UNPACK
 }
 
 cmd_stop()   { echo "stopping..."; for i in $(ids); do
