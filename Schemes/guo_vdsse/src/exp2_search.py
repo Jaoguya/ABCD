@@ -49,20 +49,33 @@ SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio"]
 #     N = 10^5  ->  5.2 GB      N = 5*10^5  ->  25.9 GB
 #     N = 2*10^5 -> 10.3 GB     N = 10^6    ->  51.7 GB
 #
-# global.yaml pins a 16 GiB host and the materialised corpus takes ~2 GB, so
-# 2*10^5 is the largest point that fits. The 2026-08-28 campaign proved the
-# rest: at the previous 128-bit domain every guo experiment was OOM-killed
-# (rc=137, anon-rss 15.67 GB).
+# THE CAP IS LIFTED. This was [10_000, 20_000, 50_000, 100_000, 200_000],
+# stopping at 2*10^5 because global.yaml pins a 16 GiB host and 51.7 GB does not
+# fit in it. The answer is a bigger host, not a shorter sweep: guo now runs the
+# same five points as every other scheme so the Exp. 2 figure has one shared
+# x-axis instead of four schemes on four ranges.
 #
-# This is not peculiar to our implementation. Ref[35]'s own evaluation ran on
-# 112 GB of memory over a dataset averaging 3.85 keywords/document; corpus v4
-# averages 31.70, and this index is linear in that. At our density N = 10^6
-# needs 51.7 GB, which the paper's own machine could hold but the pinned
-# benchmark host cannot.
+# Note 20_000 and 200_000 are GONE. They were guo's alone -- in no other scheme
+# and in no config -- so they contributed points no one could compare against.
+# These five are exactly global.yaml's exp2_search_latency.values.
 #
-# §V MUST STATE the cap and its reason -- hardware and corpus density, not an
-# unfavourable result. Same treatment Ref[41]'s N = 10^4 cap already carries.
-VARIABLE_RANGE = [10_000, 20_000, 50_000, 100_000, 200_000]
+# MEMORY, measured byte-exact from the EDB dicts at real corpus density
+# (51,675 B/record for Tf plus 1,773 for Ti; see the corrected note below):
+#     N = 10^5 -> 5.0 GB    N = 5*10^5 -> 24.9 GB    N = 10^6 -> 49.8 GB
+# Plus ~2 GB for the materialised corpus. So 10^6 needs ~52 GB and REQUIRES a
+# host with real headroom above that -- it will OOM on the pinned m6i.xlarge
+# exactly as the 2026-08-28 campaign did at 128-bit domain (rc=137, anon-rss
+# 15.67 GB).
+#
+# Ref[35]'s own evaluation ran on 112 GB over a dataset averaging 3.85
+# keywords/document; corpus v4 averages 31.70 and this index is linear in that.
+# So the memory here is a property of OUR corpus density, not of the scheme
+# being unfairly run.
+#
+# §V MUST STATE that guo's Exp. 2 ran on a larger-memory host than the other
+# schemes, and why: 31.70 keywords/document against Ref[35]'s 3.85. It is a
+# hardware disclosure, not a caveat about the result.
+VARIABLE_RANGE = [10_000, 50_000, 100_000, 500_000, 1_000_000]
 
 # Default query size (README §6: "each query contains five keywords")
 DEFAULT_Q = 5
