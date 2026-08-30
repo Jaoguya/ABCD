@@ -333,9 +333,21 @@ def _reaggregate(rows: List[Dict[str, str]], out: Path,
                 try:
                     vals.append(float(r[col]))
                 except (TypeError, ValueError):
+                    # Blank or unparseable: the writers emit "" for a secondary
+                    # a run did not produce. Dropping it from the mean is right;
+                    # dropping it SILENTLY was not, because n_runs then claimed
+                    # a sample size this metric never had. Counted below.
                     pass
             entry[f"{label}_mean"] = round(sum(vals) / len(vals), 6) if vals else ""
             entry[f"{label}_ci95"] = round(ci95(vals), 6) if vals else ""
+            # How many runs actually contributed to THIS metric. Equal to
+            # n_runs in the normal case; smaller when values were missing. A
+            # 95% CI's width depends on the sample size behind it, so a reader
+            # taking n_runs for a secondary would compute the wrong degrees of
+            # freedom and believe an interval narrower than the data supports.
+            entry[f"{label}_n"] = len(vals)
+        # The count for the PRIMARY metric, which never silently drops: the
+        # primary is parsed without a try/except and raises on bad input.
         entry["n_runs"] = len(runs)
         out_rows.append(entry)
 
