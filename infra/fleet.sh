@@ -89,7 +89,13 @@ bk=Path(sys.argv[1])/'Schemes'; live=Path('Schemes'); n=0
 for meta in bk.glob('*/*/run_meta.json'):
     try: m=json.loads(meta.read_text())
     except Exception: continue
-    if m.get('corpus_type')!='synthea': continue
+    # Same nested/top-level split the harvest filter hit: thingom stores
+    # corpus_type under `dataset`, everyone else at top level. Reading only the
+    # top level here does not merely skip thingom -- this is the RESTORE step
+    # after a checkout, so a thingom result that is not restored is DESTROYED.
+    ds=m.get('dataset') or {}
+    ct=m.get('corpus_type') or (ds.get('corpus_type') if isinstance(ds,dict) else None)
+    if ct!='synthea': continue
     dst=live/meta.parent.relative_to(bk); dst.mkdir(parents=True,exist_ok=True)
     for f in meta.parent.iterdir():
         if f.is_file() and f.name in ARTIFACTS: shutil.copy2(f,dst/f.name)
