@@ -109,7 +109,47 @@ def _find_conjunctive_keywords(
     ]
     if len(eligible) < q:
         eligible = sorted(kw_counts.keys())
+    eligible_set = set(eligible)
 
+    # THE q KEYWORDS MUST CO-OCCUR IN A REAL DOCUMENT.
+    #
+    # This used to draw q keywords that were each INDIVIDUALLY frequent enough,
+    # and never checked they appear together anywhere. Over a corpus averaging
+    # 31.70 keywords/document, five independently-common keywords essentially
+    # never all land in one document -- so the conjunction matched NOTHING, in
+    # all 150 banked runs. Evidence: prune_ratio is
+    # `len(result_ids) / single_count` (exp2_search.py:277) and is the string
+    # "0.0" in 150/150 rows, one distinct value, while entries_traversed is
+    # nonzero -- so single_count > 0 and the zero is a real empty result set,
+    # not the divide-by-zero fallback.
+    #
+    # It corrupted the LATENCY, not just prune_ratio. scheme.py:513-518 breaks
+    # out of the keyword loop on the FIRST miss, so every candidate was
+    # rejected after ~1 punctured-PRF eval instead of the q-1 a real
+    # conjunctive match costs. guo's Exp. 2 measured a search that
+    # short-circuits immediately and returns nothing -- which UNDERSTATES guo.
+    # guo is a baseline, so it understated a baseline and made the proposed
+    # scheme's advantage look smaller. Conservative in our disfavour, which is
+    # probably why it survived, and still not a valid measurement.
+    #
+    # Now: pick a document that carries at least q eligible keywords, and draw
+    # the query from ITS keywords. The conjunction is then guaranteed to match
+    # at least that document. The frequency bound still applies as a filter on
+    # top, so the selectivity property the original was reaching for is kept.
+    carriers = [rec for rec in records
+                if len(eligible_set.intersection(rec.kw)) >= q]
+    if carriers:
+        for _ in range(attempts):
+            doc = rng.choice(carriers, size=1, replace=False)[0]
+            pool = sorted(eligible_set.intersection(doc.kw))
+            selected = rng.choice(pool, size=q, replace=False)
+            if len(selected) == q:
+                return selected
+
+    # No document carries q eligible keywords. Fall back to the old
+    # independent draw rather than failing the run, but the caller's
+    # prune_ratio will be 0 and the acceptance check will catch it -- which is
+    # the point: this path must be visible, not silently equivalent.
     for _ in range(attempts):
         selected = rng.choice(eligible, size=min(q, len(eligible)),
                               replace=False)
