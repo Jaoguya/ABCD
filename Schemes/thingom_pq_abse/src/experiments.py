@@ -43,13 +43,13 @@ import os
 import multiprocessing as mp
 import random
 from dataclasses import dataclass
-from typing import Any, Callable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from Common.crypto.pairing import PairingBackend
 
 from . import scheme
 from .harness import (
-    CpuTimer, ExperimentResult, Measurement, Run, Timer, measure_point,
+    CpuTimer, ExperimentResult, Measurement, Run, Timer, mean_ci95, measure_point,
 )
 from .lsss import and_gate_policy
 
@@ -406,6 +406,179 @@ def experiment_2(
         )
         _point_done(size)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Experiment 2 by PROJECTION from a measured unit cost
+# ---------------------------------------------------------------------------
+# Ref[41]'s published sweep to N = 10^6 is not runnable: no index, no early
+# termination, q*N*(2u+1) real pairings per query. So the curve is DERIVED from
+# a measured per-candidate cost rather than measured at each N. That is the
+# user's instruction and the paper's own assumption; what follows is what makes
+# it honest rather than merely cheap.
+#
+# WHY NOT SIMPLY MEASURE ONE RECORD AND MULTIPLY. A query at N=1 costs
+#     cost(1) = fixed + per_candidate
+# where `fixed` is q trapdoor generations plus one prepare_query per trapdoor --
+# work done ONCE per query whatever N is. Multiplying cost(1) by N charges that
+# setup N times: at 10^6, a million trapdoor generations for a scan that does q.
+# It does not merely add noise, it inflates thingom systematically. thingom is a
+# BASELINE, so inflating it inflates the proposed scheme's apparent advantage --
+# the same defect class as the Exp. 2 estimand asymmetry, and the reason this is
+# worth thirty extra seconds of measurement.
+#
+# THREE anchors, not two: two points FIT a line and cannot TEST one. Linearity
+# is the load-bearing assumption of the entire projection, so it is measured and
+# reported as a residual rather than asserted.
+#
+# P=1 AT THE ANCHORS, forced. At N=1..1000 there is nothing to parallelise, but
+# the pool still forks, and CpuTimer sums RUSAGE_CHILDREN -- so fork and
+# teardown land inside the measurement and are attributed to `fixed`, the exact
+# term being isolated. It inflates the small anchors more than a large N, which
+# tilts the slope too. The primary is aggregate CPU and P-invariant by design,
+# so forcing P=1 here costs nothing in comparability.
+_PROJECTION_ANCHORS = (1, 100, 1000)
+
+
+def experiment_2_projected(
+    workload: Workload,
+    *,
+    index_sizes: Sequence[int],
+    q: int,
+    repetitions: int,
+    warmups: int,
+    anchors: Sequence[int] = _PROJECTION_ANCHORS,
+) -> Tuple[ExperimentResult, Dict[str, Any]]:
+    """Measure a unit cost at small N, then project the published sweep.
+
+    Returns (result, provenance). Every projected point is reconstructible from
+    `provenance` without re-running anything: it carries the anchor means and
+    CIs, the fitted slope and intercept, the linearity residual, and the worker
+    count the anchors were measured at.
+    """
+    global _SEARCH_PROCESSES
+
+    result = ExperimentResult(
+        scheme=SCHEME_NAME,
+        experiment="exp2",
+        columns={
+            "variable": "N (index size)",
+            "primary": "search_cpu_time_ms",
+            "secondary_1": "wall_clock_ms",
+            "secondary_2": "pairings_computed",
+        },
+    )
+
+    keyword = workload.keywords[0]
+    # Drawn ONCE, before the anchor loop, and reused at every anchor -- the same
+    # discipline guo's exp2 requires. Inside the loop it would vary per anchor
+    # and contaminate the slope with query selectivity.
+    selected = [keyword] + [
+        workload.rng.choice(workload.keywords) for _ in range(q - 1)
+    ]
+
+    saved_procs = _SEARCH_PROCESSES
+    _SEARCH_PROCESSES = 1
+    anchor_stats: List[Dict[str, Any]] = []
+    try:
+        for n in anchors:
+            index = build_index(workload, keyword, n)
+
+            def operation(index: List[scheme.KeywordIndex] = index) -> Measurement:
+                tokens = [
+                    scheme.trapdoor(workload.params, workload.key, word)
+                    for word in selected
+                ]
+                pairings = 0
+                with CpuTimer() as timer:
+                    matches: Optional[set] = None
+                    for token in tokens:
+                        plan = scheme.prepare_query(
+                            workload.params, index[0].structure, token
+                        )
+                        hits, tp = _parallel_search(
+                            workload.params, index, token, plan
+                        )
+                        pairings += tp
+                        matches = hits if matches is None else (matches & hits)
+                return Measurement(
+                    primary=timer.elapsed_ms,
+                    secondary_1=timer.wall_ms,
+                    secondary_2=float(pairings),
+                )
+
+            runs = measure_point(
+                operation, variable_value=n,
+                repetitions=repetitions, warmups=warmups,
+            )
+            ok = [r for r in runs if r.status == "ok"]
+            if not ok:
+                raise RuntimeError(f"anchor N={n} produced no successful run")
+            mean, ci = mean_ci95([r.primary for r in ok])
+            pv = [r.secondary_2 for r in ok if r.secondary_2 is not None]
+            anchor_stats.append(
+                {"n": n, "mean_ms": mean, "ci95_ms": ci, "n_runs": len(ok),
+                 "pairings_mean": (sum(pv) / len(pv)) if pv else None}
+            )
+    finally:
+        _SEARCH_PROCESSES = saved_procs
+
+    # Pairings are q*N*(2u+1) by construction -- exactly linear, not a fit.
+    # Taken from the largest anchor, where relative rounding error is smallest.
+    biggest = max(anchor_stats, key=lambda a: a["n"])
+    pairings_per_record = (
+        biggest["pairings_mean"] / biggest["n"] if biggest.get("pairings_mean") else None
+    )
+
+    # Least squares on (n, mean). Three points, so the residual is meaningful.
+    xs = [a["n"] for a in anchor_stats]
+    ys = [a["mean_ms"] for a in anchor_stats]
+    k = len(xs)
+    mx = sum(xs) / k
+    my = sum(ys) / k
+    denom = sum((x - mx) ** 2 for x in xs)
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denom if denom else 0.0
+    intercept = my - slope * mx
+    resid = [y - (intercept + slope * x) for x, y in zip(xs, ys)]
+    rel_resid = [
+        (r / y if y else 0.0) for r, y in zip(resid, ys)
+    ]
+
+    for n in index_sizes:
+        result.runs.append(
+            Run(
+                variable_value=n,
+                run_id=1,
+                primary=intercept + slope * n,
+                secondary_1=None,   # wall-clock is not projectable: it depends on P
+                secondary_2=(pairings_per_record * n) if pairings_per_record else None,
+                status="ok",
+                measurement_type="projected",
+            )
+        )
+
+    provenance = {
+        "method": "projected from a measured unit cost",
+        "anchors": anchor_stats,
+        "anchor_search_processes": 1,
+        "anchor_repetitions": repetitions,
+        "anchor_warmups": warmups,
+        "fit": {
+            "slope_ms_per_record": slope,
+            "intercept_ms": intercept,
+            "model": "cost(N) = intercept + slope * N",
+        },
+        "linearity_residuals_ms": resid,
+        "linearity_residuals_relative": rel_resid,
+        "max_abs_relative_residual": max((abs(r) for r in rel_resid), default=0.0),
+        "note": (
+            "Points at the published sweep sizes are PROJECTED, not measured. "
+            "The intercept is the per-query fixed cost (trapdoor generation and "
+            "query planning); projecting from cost(1)*N would have charged it "
+            "once per record and inflated this baseline."
+        ),
+    }
+    return result, provenance
 
 
 # ---------------------------------------------------------------------------
