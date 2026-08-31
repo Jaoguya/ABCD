@@ -59,12 +59,5 @@
     }
   },
   "reportable": true,
-  "not_reportable_because": [],
-  "merged_from": [
-    "exp2_search_latency__points-10000",
-    "exp2_search_latency__points-100000",
-    "exp2_search_latency__points-1000000",
-    "exp2_search_latency__points-50000",
-    "exp2_search_latency__points-500000"
-  ]
+  "not_reportable_because": []
 }

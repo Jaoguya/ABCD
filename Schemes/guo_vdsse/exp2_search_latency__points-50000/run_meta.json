@@ -12,7 +12,7 @@
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
   },
-  "utc_start_time": "2026-08-30T12:37:14+00:00",
+  "utc_start_time": "2026-08-30T12:50:15+00:00",
   "environment": {
     "python_version": "3.11.15",
     "python_implementation": "CPython",
@@ -59,12 +59,5 @@
     }
   },
   "reportable": true,
-  "not_reportable_because": [],
-  "merged_from": [
-    "exp2_search_latency__points-10000",
-    "exp2_search_latency__points-100000",
-    "exp2_search_latency__points-1000000",
-    "exp2_search_latency__points-50000",
-    "exp2_search_latency__points-500000"
-  ]
+  "not_reportable_because": []
 }
