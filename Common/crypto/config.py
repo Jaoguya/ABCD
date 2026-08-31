@@ -228,7 +228,31 @@ def _all_config_files() -> List[Path]:
     everything, including ``planning/runtime_estimates.csv`` and the two
     ``workload/*.yaml`` files.
     """
-    return sorted(p for p in CONFIG_DIR.rglob("*") if p.is_file())
+    files = [p for p in CONFIG_DIR.rglob("*") if p.is_file()]
+    # The CORPUS MANIFEST belongs in the guard too, and it is not under
+    # CONFIG_DIR. The fix that pins query selection guarantees every shard
+    # draws from records[:reference_n] with the same rng -- it does NOT
+    # guarantee every shard has the same `records`. Five processes on one node
+    # read one file, so it holds by accident; it stops holding the moment
+    # shards run on separate instances, which is exactly what global.yaml's
+    # `granularity: sweep_point` is for.
+    #
+    # Not hypothetical: README's 2026-08-27 entry records the frozen corpus
+    # being "lost and regenerated non-identically". Two shards measuring
+    # different corpora and reporting one curve is the same silent
+    # disagreement the query-set bug produced, wearing different clothes.
+    manifest = REPO_ROOT / "Dataset" / "dataset_manifest.json"
+    if manifest.is_file():
+        files.append(manifest)
+    return sorted(files)
+
+
+def _guard_key(path: Path) -> str:
+    """Stable name for a guarded file, for files inside CONFIG_DIR or outside."""
+    try:
+        return path.relative_to(CONFIG_DIR).as_posix()
+    except ValueError:
+        return path.relative_to(REPO_ROOT).as_posix()
 
 
 _CONFIG_BASELINE: Optional[Dict[str, str]] = None
@@ -256,7 +280,7 @@ def snapshot_config_state() -> Dict[str, str]:
     baseline: Dict[str, str] = {}
     dest = Path(tempfile.gettempdir()) / f"ojcoms-config-snapshot-{os.getpid()}"
     for path in _all_config_files():
-        rel = path.relative_to(CONFIG_DIR).as_posix()
+        rel = _guard_key(path)
         baseline[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
         try:
             target = dest / rel
@@ -286,7 +310,7 @@ def assert_config_unchanged() -> None:
     if _CONFIG_BASELINE is None:
         return
     current = {
-        p.relative_to(CONFIG_DIR).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        _guard_key(p): hashlib.sha256(p.read_bytes()).hexdigest()
         for p in _all_config_files()
     }
     problems: List[str] = []

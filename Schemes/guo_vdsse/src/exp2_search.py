@@ -160,7 +160,34 @@ def run(
 
     # Pre-select keyword queries — SAME keywords across all N values
     # so the difference is attributable to index size alone.
+    #
+    # DRAWN EAGERLY, HERE, FROM A FIXED REFERENCE PREFIX -- not lazily from
+    # whichever point this process happens to build first.
+    #
+    # It used to be drawn inside _ensure_built() on first call, guarded by
+    # `if not query_sets`. In ONE process walking the whole sweep that gives
+    # the smallest N and the invariant holds. Under --points it does not: each
+    # shard builds exactly one point, so each drew its own queries from its own
+    # prefix, and _find_conjunctive_keywords' eligibility bound
+    # (`cnt <= len(records) * 0.5`) is computed over that prefix, so the
+    # candidate pool moved with N too. Five shards, five different query sets.
+    #
+    # Proven, not suspected: records[:N] are NESTED, so a fixed query's n_eff
+    # can only rise with N. Across the 2026-08-30 sharded run, 44 of 120
+    # adjacent pairs FELL -- 37%. One run matched 1056 records at N=5x10^5 and
+    # 216 at N=10^6, a corpus containing all of them. That is impossible for a
+    # single query and it is what made the curve non-monotonic (877 ms at 10^6
+    # against 1004 ms at 5x10^5).
+    #
+    # REFERENCE_N, not `actual_range[0]`: the reference must not depend on
+    # which points this shard was asked to run, or two shards disagree again.
+    # This is the pattern exp3_crossdomain.py:102-111 already uses correctly.
+    reference_n = min(min(VARIABLE_RANGE), max_available)
     query_sets: List[List[str]] = []
+    for _ in range(warmup + runs):
+        query_sets.append(
+            _find_conjunctive_keywords(records[:reference_n], rng, DEFAULT_Q)
+        )
 
     # Build the EDB ONCE and GROW it through the sweep — not timed.
     #
@@ -225,15 +252,6 @@ def run(
         for rec in records[built_to[0]:n]:
             scheme.update(state, edb, "add", rec.rid, rec.kw)
         built_to[0] = n
-
-        # Query keywords are drawn ONCE, from the smallest sweep point, and
-        # reused at every N: the same queries must be issued at every index size
-        # or the curve mixes two variables. `records[:n]` is a prefix, so a
-        # keyword present in the smallest subset is present in all of them.
-        if not query_sets:
-            for _ in range(warmup + runs):
-                kws = _find_conjunctive_keywords(records[:n], rng, DEFAULT_Q)
-                query_sets.append(kws)
 
     iteration_counter: Dict[int, int] = {n: 0 for n in actual_range}
 
