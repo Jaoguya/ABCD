@@ -307,10 +307,30 @@ def _reaggregate(rows: List[Dict[str, str]], out: Path,
     def ci95(vals: List[float]) -> float:
         n = len(vals)
         if n <= 1:
-            return 0.0
+            # NOT 0.0. A single sample has NO interval, and 0.0 is not "no
+            # interval" -- generate_plots.py:200 reads `_to_float(cell) or 0.0`,
+            # so a zero reaches matplotlib as a real zero-width error bar and
+            # draws a 2 pt cap. That cap reads as a vanishingly TIGHT interval:
+            # the most flattering possible misreading of a number that has none.
+            # Measured, not assumed: the 0.0 path renders 13 more non-white
+            # pixels than the nan path at identical axis limits.
+            #
+            # nan is truthy, so it survives the `or 0.0`, and matplotlib draws
+            # nothing for it. This must be the convention EVERYWHERE a CI is
+            # absent -- thingom's write_results already uses it, and two writers
+            # disagreeing about what "no interval" looks like is how one of them
+            # ends up lying.
+            #
+            # It matters now, not in theory: --runs 1 smoke output and
+            # dbbd6e3's n=1 thingom rows both land here.
+            return float("nan")
         mean = sum(vals) / n
         sd = math.sqrt(sum((v - mean) ** 2 for v in vals) / (n - 1))
         return stats.t.ppf(0.975, df=n - 1) * sd / math.sqrt(n)
+
+    def _fmt_ci(v: float) -> str:
+        """Format a CI, preserving nan as the literal token the plotter needs."""
+        return "nan" if math.isnan(v) else f"{round(v, 6)}"
 
     def sort_key(v: str):
         try:
@@ -325,7 +345,7 @@ def _reaggregate(rows: List[Dict[str, str]], out: Path,
         entry = {
             "variable_value": value,
             "primary_mean": round(sum(primary) / len(primary), 6),
-            "primary_ci95": round(ci95(primary), 6),
+            "primary_ci95": _fmt_ci(ci95(primary)),
         }
         for col, label in zip(sec_cols, labels):
             vals = []
@@ -338,8 +358,10 @@ def _reaggregate(rows: List[Dict[str, str]], out: Path,
                     # dropping it SILENTLY was not, because n_runs then claimed
                     # a sample size this metric never had. Counted below.
                     pass
-            entry[f"{label}_mean"] = round(sum(vals) / len(vals), 6) if vals else ""
-            entry[f"{label}_ci95"] = round(ci95(vals), 6) if vals else ""
+            # "" reaches the plot as 0.0 through that same `or 0.0`, so an
+            # absent secondary would draw a zero-width bar exactly as above.
+            entry[f"{label}_mean"] = round(sum(vals) / len(vals), 6) if vals else "nan"
+            entry[f"{label}_ci95"] = _fmt_ci(ci95(vals)) if vals else "nan"
             # How many runs actually contributed to THIS metric. Equal to
             # n_runs in the normal case; smaller when values were missing. A
             # 95% CI's width depends on the sample size behind it, so a reader

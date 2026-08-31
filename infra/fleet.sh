@@ -85,22 +85,38 @@ from pathlib import Path
 # not HEAD's 23edee5, silently dropping sweep.select/--points support. Every run
 # after such a deploy executed stale code for any scheme that had results here.
 ARTIFACTS={'results.csv','raw_runs.csv','run_meta.json','lambda_sweep.csv'}
-bk=Path(sys.argv[1])/'Schemes'; live=Path('Schemes'); n=0
+bk=Path(sys.argv[1])/'Schemes'; live=Path('Schemes'); n=0; kept=0
+# THIS PATH IS DESTRUCTIVE BY OMISSION. The checkout has already replaced the
+# tree, so a directory this loop does not restore is GONE. A filter is
+# therefore a deletion policy here, and the default for "I cannot tell" must
+# be RESTORE, not skip. Selecting corpus_type=synthea is a REPORTABILITY
+# judgement; applying a reportability filter as a deletion policy is the same
+# conflation that made config_hashes and the guard two different jobs.
 for meta in bk.glob('*/*/run_meta.json'):
+    ct=None; readable=True
     try: m=json.loads(meta.read_text())
-    except Exception: continue
-    # Same nested/top-level split the harvest filter hit: thingom stores
-    # corpus_type under `dataset`, everyone else at top level. Reading only the
-    # top level here does not merely skip thingom -- this is the RESTORE step
-    # after a checkout, so a thingom result that is not restored is DESTROYED.
-    ds=m.get('dataset') or {}
-    ct=m.get('corpus_type') or (ds.get('corpus_type') if isinstance(ds,dict) else None)
-    if ct!='synthea': continue
+    except Exception as exc:
+        # A truncated or mid-write run_meta.json is EXACTLY what a killed or
+        # OOMed run leaves behind -- the case this rescue path exists for.
+        # Restoring it and complaining beats deleting it silently.
+        readable=False
+        print(f'  WARNING unreadable run_meta, restoring anyway: '
+              f'{meta.parent} ({type(exc).__name__})')
+    if readable:
+        # thingom nests corpus_type under `dataset`; everyone else is top-level.
+        ds=m.get('dataset') or {}
+        ct=m.get('corpus_type') or (ds.get('corpus_type') if isinstance(ds,dict) else None)
+        if ct is not None and ct!='synthea':
+            # Positively identified as something else: skipping is correct.
+            continue
+        if ct is None:
+            print(f'  WARNING no corpus_type, restoring anyway: {meta.parent}')
     dst=live/meta.parent.relative_to(bk); dst.mkdir(parents=True,exist_ok=True)
     for f in meta.parent.iterdir():
         if f.is_file() and f.name in ARTIFACTS: shutil.copy2(f,dst/f.name)
     n+=1
-print(f'  restored {n} result dir(s)')
+    if ct!='synthea': kept+=1
+print(f'  restored {n} result dir(s)' + (f' ({kept} of them unidentified, kept deliberately)' if kept else ''))
 PY
       echo \"  \$(hostname) \$(git log --oneline -1 | cut -c1-8)\"" 2>&1 | tail -2
   done
