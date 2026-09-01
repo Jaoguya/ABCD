@@ -53,6 +53,18 @@ import matplotlib.pyplot as plt  # noqa: E402
 # Figure specifications — README §5 (metrics) and §10 (filenames, log axes)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
+class PanelSpec:
+    """One sub-plot of a multi-panel figure.
+
+    ``metric`` indexes the results.csv columns: 0 is ``primary_mean``, 1 is the
+    first secondary, 2 the second. ``tag`` is the (a)/(b)/(c) label.
+    """
+    metric: int
+    ylabel: str
+    tag: str
+
+
+@dataclass(frozen=True)
 class ExperimentSpec:
     number: int
     folder: str
@@ -61,11 +73,23 @@ class ExperimentSpec:
     ylabel: str
     log_x: bool = False
     log_y: bool = False
+    #: Empty for a normal one-metric figure. When set, the figure is drawn as
+    #: one stacked panel per entry, sharing the x-axis and one legend.
+    #:
+    #: Exp. 8 needs this: "load balance" is not one number. `least_loaded`
+    #: minimises queue length, so it wins on utilization spread by
+    #: construction, while AASS trades some spread for authorization locality
+    #: and wins on peak node load and on cross-node traffic. Plotting only the
+    #: spread shows the one metric the proposed scheduler loses; plotting only
+    #: a metric it wins would be choosing the metric after seeing the result.
+    #: All three are recorded on every run, so all three are shown.
+    panels: Tuple["PanelSpec", ...] = ()
 
 
 EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     ExperimentSpec(1, "exp1_trapdoor_generation", "fig_exp1_trapdoor.pdf",
-                   "Queried keywords $q$", "Trapdoor generation latency (ms)"),
+                   "Queried keywords $q$", "Trapdoor generation latency (ms)",
+                   log_y=True),   # 4.82 decades — see LOG_Y_DECADES
     ExperimentSpec(2, "exp2_search_latency", "fig_exp2_search.pdf",
                    "Index size $N$ (records)", "Search latency (ms)",
                    log_x=True, log_y=True),
@@ -73,7 +97,8 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                    "Domains $d$", "Cross-domain search latency (ms)",
                    log_y=True),
     ExperimentSpec(4, "exp4_verification_overhead", "fig_exp4_verify.pdf",
-                   "Returned results $r$", "Verification latency (ms)"),
+                   "Returned results $r$", "Verification latency (ms)",
+                   log_y=True),   # 2.66 decades — see LOG_Y_DECADES
     ExperimentSpec(5, "exp5_keyword_update", "fig_exp5_update.pdf",
                    "Updated (keyword, document) pairs $k$", "Update latency (ms)",
                    log_x=True, log_y=True),
@@ -83,14 +108,33 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     ExperimentSpec(7, "exp7_search_throughput", "fig_exp7_throughput.pdf",
                    "Concurrent queries", "Throughput (queries/s)"),
     ExperimentSpec(8, "exp8_load_balance", "fig_exp8_balance.pdf",
-                   "Concurrent queries", "FSN utilization std. dev."),
+                   "Concurrent queries", "FSN utilization std. dev.",
+                   panels=(
+                       PanelSpec(0, "Utilization std. dev.", "a"),
+                       PanelSpec(1, "Max node utilization", "b"),
+                       PanelSpec(2, "Cross-node forwards", "c"),
+                   )),
 )
 
-# Exp. 2's y-range spans ~6 orders of magnitude between the proposed scheme and
-# a pairing-based baseline, so a linear y-axis would collapse every curve but
-# the slowest into the x-axis. log_y is set above for the experiments where
-# that is true; it is NOT a presentational choice made per-figure to flatter a
-# result (AGENT_RULES "Bias Detection"), it is set once here for all runs.
+# LOG-Y CRITERION, applied uniformly: an experiment gets a log y-axis when its
+# measured values span >= LOG_Y_DECADES orders of magnitude. On a linear axis a
+# wider span collapses every curve but the slowest onto the x-axis, which hides
+# real differences rather than showing them.
+#
+# Stated as a threshold, not chosen per figure, so it cannot be an axis picked
+# after seeing which scheme it flatters (AGENT_RULES "Bias Detection"). Measured
+# spans at the time of writing:
+#
+#   exp1 4.82   exp2 8.10   exp3 6.29   exp4 2.66
+#   exp5 4.41   exp6 3.01   exp7 0.99   exp8 0.93 / 0.11 / inf(zeros)
+#
+# so 1-6 are log and 7-8 are linear. exp1 and exp4 were LINEAR until
+# 2026-09-01: exp1 put four of five schemes flat on the axis (the proposed
+# scheme's 0.01-0.10 ms was indistinguishable from Guo's and Perera's), and
+# exp4 hid the 0.06-28 ms spread the same way. `_check_log_y_criterion` warns
+# if new data ever pushes a linear figure past the threshold, so the rule stays
+# enforced rather than becoming a comment about what was once true.
+LOG_Y_DECADES = 2.0
 
 
 # Display names. Anything not listed falls back to the directory name, so a
@@ -115,8 +159,24 @@ LINESTYLES = ("-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 2)), (0, (1, 1)))
 COLORS = ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#56B4E9", "#E69F00", "#000000")
 
 
+#: Exp. 7-8 are an ABLATION of one scheme, so their four series are variant
+#: LABELS rather than scheme keys and would all miss STYLE_ORDER -- every curve
+#: drawn in the same colour and marker. Pin each to its own slot, and give
+#: `aass` slot 0, the one the proposed scheme holds on the other six figures, so
+#: the proposed line is the same blue circle everywhere.
+ABLATION_STYLE_SLOT: Dict[str, int] = {
+    "AASS (proposed)": 0,
+    "Round robin": 1,
+    "Least loaded": 2,
+    "No load balancing": 3,
+}
+
+
 def style_for(scheme: str) -> Dict[str, object]:
-    idx = STYLE_ORDER.index(scheme) if scheme in STYLE_ORDER else len(STYLE_ORDER)
+    if scheme in ABLATION_STYLE_SLOT:
+        idx = ABLATION_STYLE_SLOT[scheme]
+    else:
+        idx = STYLE_ORDER.index(scheme) if scheme in STYLE_ORDER else len(STYLE_ORDER)
     return {
         "marker": MARKERS[idx % len(MARKERS)],
         "linestyle": LINESTYLES[idx % len(LINESTYLES)],
@@ -133,6 +193,8 @@ class Series:
     x: List[float] = field(default_factory=list)
     y: List[float] = field(default_factory=list)
     yerr: List[float] = field(default_factory=list)
+    #: metric index (1-based) -> (values, ci95s), for multi-panel figures.
+    extra: Dict[int, Tuple[List[float], List[float]]] = field(default_factory=dict)
     n_runs: List[int] = field(default_factory=list)
     reportable: Optional[bool] = None
     problems: List[str] = field(default_factory=list)
@@ -146,6 +208,18 @@ def _to_float(value: str) -> Optional[float]:
         return float(value)
     except ValueError:
         return None
+
+
+def _secondary_columns(row: Dict[str, str]) -> List[Tuple[str, str]]:
+    """The (`*_mean`, `*_ci95`) column pairs after primary, in file order."""
+    pairs: List[Tuple[str, str]] = []
+    for name in row:
+        if not name.endswith("_mean") or name == "primary_mean":
+            continue
+        stem = name[: -len("_mean")]
+        ci = f"{stem}_ci95"
+        pairs.append((name, ci if ci in row else ""))
+    return pairs
 
 
 def read_results(path: Path, scheme: str) -> Optional[Series]:
@@ -165,12 +239,40 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
                         f"{path}:{lineno}: unusable variable_value/primary_mean, skipped"
                     )
                     continue
-                ci = _to_float(row.get("primary_ci95", "")) or 0.0
+                ci = _to_float(row.get("primary_ci95", ""))
                 n = _to_float(row.get("n_runs", "")) or 0
+                # A single-run point has NO confidence interval -- there is no
+                # variance to compute one from. Drawing ci=0 would put a
+                # zero-length bar with caps on the point, which reads as "we
+                # measured this very precisely": the exact opposite of the
+                # truth. NaN makes matplotlib omit the bar entirely, so an
+                # n=1 point is visibly bare next to the n=30 points beside it.
+                # Points measured once are legitimate for a baseline whose
+                # 30-run cost is prohibitive (thingom_pq_abse's Exp. 2 is
+                # ~10.9 h for ONE run at N=10^6); claiming a CI for them is
+                # not. See AGENT_RULES.md "Statistical Integrity".
+                if n < 2 or ci is None:
+                    ci = float("nan")
                 series.x.append(x)
                 series.y.append(y)
                 series.yerr.append(ci)
                 series.n_runs.append(int(n))
+                # Secondaries, positionally. The NAMES differ per scheme
+                # (ma_lb writes `secondary_1_mean`, the baselines write the
+                # metric's real name), so the i-th `*_mean` after primary is
+                # the i-th secondary. Only multi-panel figures read these, and
+                # those are single-scheme ablations, so the positional read
+                # cannot cross schemes that disagree on ordering.
+                for i, (mcol, ccol) in enumerate(_secondary_columns(row), start=1):
+                    sy = _to_float(row.get(mcol, ""))
+                    if sy is None:
+                        continue
+                    sci = _to_float(row.get(ccol, "")) if ccol else None
+                    if n < 2 or sci is None:
+                        sci = float("nan")
+                    vals, errs = series.extra.setdefault(i, ([], []))
+                    vals.append(sy)
+                    errs.append(sci)
     except FileNotFoundError:
         return None
     except OSError as exc:
@@ -200,6 +302,69 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
     return series
 
 
+#: Order is fixed so the legend reads weakest-to-proposed on every regeneration.
+ABLATION_VARIANTS: Tuple[Tuple[str, str], ...] = (
+    ("no_lb", "No load balancing"),
+    ("round_robin", "Round robin"),
+    ("least_loaded", "Least loaded"),
+    ("aass", "AASS (proposed)"),
+)
+
+
+def _variant_of(exp_dir: Path) -> Optional[str]:
+    """Which scheduler produced this directory.
+
+    ``run_meta.json``'s ``scheduler_variant`` note is authoritative; the
+    directory suffix is only the fallback. A result identified solely by its
+    folder name loses its identity the moment anything is renamed or merged,
+    which is why the note is written in the first place.
+    """
+    meta = exp_dir / "run_meta.json"
+    try:
+        notes = json.loads(meta.read_text(encoding="utf-8")).get("notes") or []
+        for note in notes:
+            if str(note).startswith("scheduler_variant="):
+                return str(note).split("=", 1)[1].strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        pass
+    return exp_dir.name.rsplit("__", 1)[-1] if "__" in exp_dir.name else None
+
+
+def collect_ablation(input_root: Path, spec: ExperimentSpec) -> List[Series]:
+    """One series per scheduler variant, for Exp. 7-8.
+
+    ``collect`` takes the FIRST matching ``exp<N>_*`` directory per scheme and
+    stops, which is right for a cross-scheme figure and wrong here: it would
+    draw a single curve labelled with the scheme name where section V claims a
+    four-way comparison, silently choosing whichever variant sorted first.
+    """
+    found: List[Series] = []
+    if not input_root.is_dir():
+        return found
+    by_variant: Dict[str, Path] = {}
+    for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
+        for exp_dir in sorted(scheme_dir.glob(f"exp{spec.number}_*__*")):
+            if not exp_dir.is_dir():
+                continue
+            variant = _variant_of(exp_dir)
+            # Skips the `__points-<N>` sweep shards, which are not variants.
+            if variant in dict(ABLATION_VARIANTS):
+                by_variant.setdefault(variant, exp_dir)
+    for variant, label in ABLATION_VARIANTS:
+        exp_dir = by_variant.get(variant)
+        if exp_dir is None:
+            print(f"  NOTE exp{spec.number}: no directory for variant "
+                  f"{variant!r}; the ablation figure will be incomplete")
+            continue
+        series = read_results(exp_dir / "results.csv", label)
+        if series is None:
+            print(f"  NOTE exp{spec.number}: {exp_dir.name} has no usable "
+                  f"results.csv; {variant!r} omitted")
+            continue
+        found.append(series)
+    return found
+
+
 def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     """Find every scheme's results for one experiment.
 
@@ -208,6 +373,8 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     silently contributing nothing.
     """
     found: List[Series] = []
+    if spec.number in (7, 8):
+        return collect_ablation(input_root, spec)
     if not input_root.is_dir():
         return found
     for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
@@ -265,17 +432,87 @@ def _axis_number(v: float) -> str:
             else rf"${mant:g}\times10^{{{exp}}}$")
 
 
+def _check_log_y_criterion(spec: ExperimentSpec, series_list: Sequence[Series],
+                           warnings: List[str]) -> None:
+    """Warn when a linear-y figure has grown past the log threshold.
+
+    Without this the criterion above decays into a comment: new data widens a
+    range, the axis stays linear, and curves quietly flatten onto the x-axis.
+    """
+    if spec.log_y or spec.panels:
+        return
+    vals = [v for s in series_list for v in s.y if v > 0]
+    if len(vals) < 2:
+        return
+    span = math.log10(max(vals) / min(vals))
+    if span >= LOG_Y_DECADES:
+        warnings.append(
+            f"exp{spec.number}: y-values now span {span:.2f} decades "
+            f"(>= {LOG_Y_DECADES}); LOG_Y_DECADES says this figure should set "
+            f"log_y=True or curves will flatten onto the axis"
+        )
+
+
+def _panel_values(series: Series, metric: int) -> Tuple[List[float], List[float]]:
+    """(values, ci95s) for one metric: 0 is primary, 1+ index the secondaries."""
+    if metric == 0:
+        return series.y, series.yerr
+    return series.extra.get(metric, ([], []))
+
+
 def render(spec: ExperimentSpec, series_list: Sequence[Series],
            out_path: Path, dpi: Optional[int] = None) -> Tuple[bool, List[str]]:
     """Draw one figure. Returns (written, warnings)."""
     warnings: List[str] = []
+    if not series_list:
+        return False, [f"exp{spec.number}: no results.csv found for any scheme"]
+    _check_log_y_criterion(spec, series_list, warnings)
+
+    if spec.panels:
+        # Stacked, not side by side: three panels across an IEEE single column
+        # would be 1.16in each, too narrow for an axis label. Height is per
+        # panel; width is whatever the column (and --scale) already set.
+        w, h = plt.rcParams["figure.figsize"]
+        fig, axes = plt.subplots(
+            len(spec.panels), 1, sharex=True,
+            figsize=(w, h * 0.78 * len(spec.panels)),
+        )
+        for i, (ax, panel) in enumerate(zip(axes, spec.panels)):
+            _draw_panel(
+                ax, spec, series_list, warnings,
+                metric=panel.metric, ylabel=panel.ylabel,
+                # Legend once, on the top panel; warnings once, or each series
+                # would report itself three times.
+                add_legend=(i == 0), collect_warnings=(i == 0),
+                # Only the bottom panel carries the shared x label.
+                add_xlabel=(i == len(spec.panels) - 1),
+                # log_y is declared for the PRIMARY metric; a secondary is a
+                # different quantity and may not be positive or wide-ranging.
+                allow_log_y=(panel.metric == 0),
+            )
+            ax.set_title(f"({panel.tag})", loc="left", fontsize=8, pad=2)
+        fig.align_ylabels(axes)
+        fig.tight_layout(pad=0.3, h_pad=0.6)
+    else:
+        fig, ax = plt.subplots()
+        _draw_panel(ax, spec, series_list, warnings,
+                    metric=0, ylabel=spec.ylabel, add_legend=True,
+                    collect_warnings=True, add_xlabel=True, allow_log_y=True)
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, **({'dpi': dpi} if dpi else {}))
+    plt.close(fig)
+    return True, warnings
+
+
+def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
+                warnings: List[str], *, metric: int, ylabel: str,
+                add_legend: bool, collect_warnings: bool,
+                add_xlabel: bool, allow_log_y: bool) -> None:
+    """Draw every series' `metric` onto one axes."""
     # The furthest point any scheme reached, so a shorter series can be marked.
     _all_x = [v for s in series_list for v in s.x]
     max_x = max(_all_x) if _all_x else None
-    if not series_list:
-        return False, [f"exp{spec.number}: no results.csv found for any scheme"]
-
-    fig, ax = plt.subplots()
     for series in sorted(series_list,
                          key=lambda s: STYLE_ORDER.index(s.scheme)
                          if s.scheme in STYLE_ORDER else 99):
@@ -288,11 +525,34 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
         # it vanishes. Say so on the curve itself.
         if series.x and max_x is not None and max(series.x) < max_x:
             label += f" (to {_axis_number(max(series.x))})"
+        # n_runs=0 marks a point COMPUTED from a measured anchor rather than
+        # run (infra/extrapolate_points.py). Those markers are drawn HOLLOW so
+        # the figure still separates measured from computed at a glance.
+        #
+        # A legend suffix saying so was removed on request 2026-08-31. The
+        # marker is now the ONLY in-figure signal, which means the FIGURE
+        # CAPTION in section V has to state which points are extrapolated --
+        # a hollow marker shows a reader that something differs, not what.
+        computed = [i for i, n in enumerate(series.n_runs) if n == 0]
+        yvals, yerrs = _panel_values(series, metric)
+        if not yvals:
+            # A scheme that records no such secondary simply has no curve on
+            # this panel; the others still draw.
+            continue
         ax.errorbar(
-            series.x, series.y, yerr=series.yerr,
+            series.x, yvals, yerr=yerrs,
             label=label, capsize=2, markersize=3.5, linewidth=1.1,
             elinewidth=0.8, **style_for(series.scheme),
         )
+        if computed:
+            st = style_for(series.scheme)
+            ax.plot([series.x[i] for i in computed],
+                    [yvals[i] for i in computed],
+                    linestyle="none", marker=st["marker"], markersize=3.5,
+                    markerfacecolor="white", markeredgecolor=st["color"],
+                    markeredgewidth=0.9, zorder=3)
+        if not collect_warnings:
+            continue
         if series.reportable is False:
             warnings.append(
                 f"exp{spec.number}: {series.scheme} is NOT reportable "
@@ -310,8 +570,9 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
             )
         warnings.extend(series.problems)
 
-    ax.set_xlabel(spec.xlabel)
-    ax.set_ylabel(spec.ylabel)
+    if add_xlabel:
+        ax.set_xlabel(spec.xlabel)
+    ax.set_ylabel(ylabel)
     if spec.log_x:
         # Same guard as log_y below, for the same reason: a log axis silently
         # drops non-positive values, so a variable_value of 0 would vanish from
@@ -324,10 +585,10 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
                 f"exp{spec.number}: log x-axis requested but data contains "
                 f"non-positive values; drew linear instead so nothing is hidden"
             )
-    if spec.log_y:
+    if spec.log_y and allow_log_y:
         # Only if every plotted value is strictly positive — a zero or negative
         # would be silently dropped by a log axis, which would hide data.
-        all_y = [v for s in series_list for v in s.y]
+        all_y = [v for s in series_list for v in _panel_values(s, metric)[0]]
         if all_y and min(all_y) > 0:
             ax.set_yscale("log")
         else:
@@ -346,32 +607,65 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
     # for the legend, and a little below so the lowest series is not on the
     # frame. Done by extending the LIMITS, never by clipping: no point moves and
     # nothing is hidden.
+    #
+    # The legend now sits INSIDE the axes (see below), so it needs more room
+    # than the 0.25-decade margin an outside legend wanted -- otherwise `best`
+    # is choosing between corners that are all occupied.
+    # The added band is a FRACTION of the data's own span, not a fixed number of
+    # decades: a five-row legend costs roughly a third of the axes height, and a
+    # fixed +0.75 decades that clears the curves in Exp. 5 (two decades) is
+    # invisible in Exp. 2 (seven). Capped so a very wide span does not push the
+    # data into a strip at the bottom.
     if ax.get_yscale() == "log":
         lo, hi = ax.get_ylim()
         if lo > 0 and hi > lo:
+            span = math.log10(hi) - math.log10(lo)
+            grow = min(0.72 * span, 4.6) if add_legend else 0.10 * span
             ax.set_ylim(10 ** (math.log10(lo) - 0.25),
-                        10 ** (math.log10(hi) + 0.25))
+                        10 ** (math.log10(hi) + grow))
     else:
-        ax.margins(y=0.12)
+        # One-sided, and never below zero. `ax.margins(y=...)` expands BOTH
+        # directions, which on Exp. 1 put the floor at -100 ms -- a negative
+        # latency, which is not a quantity. Every metric plotted here is a
+        # duration, a count or a ratio, so zero is a real floor: hold it when
+        # the data does, and spend the whole margin above, where the legend is.
+        #
+        # The 0.65 band exists to hold the LEGEND. A panel without one needs
+        # only breathing room, and on a stacked figure the difference is
+        # stark: Exp. 8's max-utilization panel spent two thirds of its height
+        # empty because it inherited a margin sized for a legend it does not
+        # carry.
+        lo, hi = ax.get_ylim()
+        if hi > lo:
+            grow = 0.65 if add_legend else 0.10
+            ax.set_ylim(0.0 if lo >= 0 else lo - 0.05 * (hi - lo),
+                        hi + grow * (hi - lo))
 
-    # Legend ABOVE the axes, not inside them. With five series spanning six
-    # decades there is no free corner: an in-axes legend lands on whichever
-    # series is topmost (Ref[41] at ~150,000 ms in Exp. 3) and hides the very
-    # curve it is labelling. Placing it outside costs a little height and keeps
-    # the whole plot area for data.
-    # Two columns, not three: the proposed scheme's label is the longest by far
-    # ("Proposed (MA-LB-PQ-VDSE)") and at three columns it runs into the next
-    # entry's marker. Two columns gives every entry room at any figure width.
-    ncol = 2 if len(series_list) >= 3 else 1
-    ax.legend(frameon=False, ncol=ncol,
-              loc="lower left", bbox_to_anchor=(0.0, 1.01, 1.0, 0.18),
-              mode="expand", borderaxespad=0.0,
-              columnspacing=1.0, handlelength=1.6)
-
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, **({'dpi': dpi} if dpi else {}))
-    plt.close(fig)
-    return True, warnings
+    # Legend INSIDE the axes, one entry per row.
+    #
+    # It used to sit above the axes in two expanded columns. That collided: with
+    # `mode="expand"` the two columns split the width evenly regardless of label
+    # length, and "Proposed (MA-LB-PQ-VDSE)" is far longer than half the figure,
+    # so it overprinted "Perera & Fugkeaw [54]" in the second column and both
+    # became unreadable. Widening the columns is not available -- the figure is
+    # fixed at IEEE single-column width.
+    #
+    # ncol=1 removes the collision by construction: no entry can ever run into
+    # another, at any figure width or label length. `loc="best"` then picks the
+    # emptiest corner per figure, which differs by experiment -- upper-left is
+    # free in Exp. 1 (one rising series), lower-right in Exp. 2 (all series
+    # rise). The extra headroom above keeps a corner genuinely free rather than
+    # letting `best` settle on top of a curve.
+    #
+    # A frame is required here, unlike outside the axes: the legend now overlays
+    # gridlines, and unframed text on a grid is what makes a figure look sloppy
+    # in print. Opaque white, thin grey edge -- and the headroom means it covers
+    # empty space, not data.
+    if add_legend:
+        ax.legend(frameon=True, ncol=1, loc="best",
+                  framealpha=1.0, facecolor="white", edgecolor="0.7",
+                  borderpad=0.3, labelspacing=0.22, handlelength=1.5)
+        ax.get_legend().get_frame().set_linewidth(0.4)
 
 
 # ---------------------------------------------------------------------------

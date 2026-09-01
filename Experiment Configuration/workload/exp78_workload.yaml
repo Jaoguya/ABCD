@@ -25,7 +25,12 @@ meta:
 # -----------------------------------------------------------------------------
 generator:
   model: closed_loop            # benchmark: README §5 Exp. 7-8 rule
-  concurrency: [100, 500, 1000, 2500, 5000]   # published: §V "100 to 5000"
+  # EXTENDED 2026-09-01 to 10000. Must stay identical to global.yaml's exp7
+  # sweep -- config.py::validate refuses to run if the two disagree, which is
+  # what caught this. Original points are all KEPT: AASS is WEAKEST at low
+  # concurrency (it loses cross-node forwards to least_loaded below ~500) and
+  # strongest above it, so reporting only the high end would be cherry-picking.
+  concurrency: [100, 500, 1000, 2500, 5000, 10000]
   think_time_ms: 0              # benchmark: zero think time, so concurrency is
                                 # the only load control variable
   ramp_seconds: 30              # benchmark: README §7 "warm after a 30 s ramp";
