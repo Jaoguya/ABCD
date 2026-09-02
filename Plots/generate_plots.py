@@ -139,12 +139,20 @@ LOG_Y_DECADES = 2.0
 
 # Display names. Anything not listed falls back to the directory name, so a
 # newly added scheme still plots (with an uglier label) rather than vanishing.
+# Baselines are labelled by REFERENCE NUMBER, not author name, so a figure and
+# section V's prose name the same thing without the reader translating between
+# them. Numbers are the bibitem keys in Overleaf/PQ-AVDSE-OJCOMS.
+#
+# yue_ge was labelled "Ge et al. [55]" and that was WRONG. ref55 is Cao et al.,
+# "Enabling Puncturable Encrypted Search Over Lattice" (IEEE TMC 2026) -- a
+# different paper. Ge et al. is ref30, cited 17 times in the manuscript against
+# ref55's 2. Every figure has been pointing readers at the wrong citation.
 SCHEME_LABELS: Dict[str, str] = {
-    "ma_lb_pq_vdse": "Proposed (MA-LB-PQ-VDSE)",
-    "guo_vdsse": "Guo et al. [35]",
-    "thingom_pq_abse": "Thingom et al. [41]",
-    "perera_lv_pqabse": "Perera & Fugkeaw [54]",
-    "yue_ge": "Ge et al. [55]",
+    "ma_lb_pq_vdse": "Proposed",
+    "yue_ge": "Scheme [30]",
+    "guo_vdsse": "Scheme [35]",
+    "thingom_pq_abse": "Scheme [41]",
+    "perera_lv_pqabse": "Scheme [54]",
 }
 
 # Marker AND linestyle both vary, so the figures survive grayscale (README §10).
