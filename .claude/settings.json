@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:blog.noonomyen.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(python3 -)"
+    ]
+  }
+}
