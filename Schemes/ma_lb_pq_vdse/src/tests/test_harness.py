@@ -511,7 +511,10 @@ def test_provenance_rejects_a_wrong_repetition_count():
 
     broken = dataclasses.replace(
         CONFIG,
-        measurement=dataclasses.replace(CONFIG.measurement, repetitions=10),
+        # 30 is now the WRONG count -- the campaign runs at 10 as of 2026-09-03.
+        # The test still pins the same property: a replication count that does
+        # not match the configured one must block reportability.
+        measurement=dataclasses.replace(CONFIG.measurement, repetitions=30),
     )
     _, reasons = provenance.reportability(
         broken, experiment="exp1_trapdoor_generation", corpus_type="synthea",

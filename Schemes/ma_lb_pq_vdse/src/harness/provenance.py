@@ -381,9 +381,26 @@ def reportability(
                 "would not measure the stated topology"
             )
 
-    if config.measurement.repetitions != 30:
+    # WAS `!= 30`. Retargeted to 10 on the user's instruction, 2026-09-03, the
+    # same day the campaign moved to 10 repetitions. Kept rather than removed:
+    # this is the gate that stamps run_meta.json `reportable`, so its job is to
+    # refuse any run whose replication count does not match what the manuscript
+    # claims. That makes it the LAST line of defence against publishing a figure
+    # whose n differs from section V's stated methodology.
+    #
+    # SECTION V MUST NOW SAY 10, NOT 30. If it still reads "the average of 30
+    # independent runs" when the paper is submitted, this check is passing runs
+    # that the text misdescribes -- which is the exact failure it exists to
+    # prevent, just pointed the other way.
+    #
+    # Note the statistical consequence, which is not cosmetic: the 95% t
+    # multiplier is 2.26 at n=10 against 2.05 at n=30, so every confidence
+    # interval widens by roughly 10% before any change in the underlying
+    # variance. Intervals in the new figures are not comparable to the banked
+    # ones on width alone.
+    if config.measurement.repetitions != 10:
         reasons.append(
-            f"measurement.repetitions is {config.measurement.repetitions}, not 30"
+            f"measurement.repetitions is {config.measurement.repetitions}, not 10"
         )
 
     return (not reasons), reasons
