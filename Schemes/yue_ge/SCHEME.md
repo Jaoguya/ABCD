@@ -73,7 +73,7 @@ Update line 5 masks each node with its *own* level key, while Search line 5 has 
 
 The paper never states the "every level populated per batch" assumption. At its own scale (2.2M files, 3 levels) it holds overwhelmingly and the case never arises.
 
-**Implemented as published, not repaired.** AGENT_RULES forbids strengthening a baseline past its published construction, and silently fixing this would credit Peony with recall it does not have. Instead:
+**Implemented as published, not repaired.** Strengthening a baseline past its published construction is forbidden, and silently fixing this would credit Peony with recall it does not have. Instead:
 
 - the condition is **counted** (`UpdateBatch.sparse_levels`) so a run that hits it reports the fact;
 - `test_sparse_level_batch_is_a_documented_limitation` pins the behaviour so it cannot drift;
@@ -185,6 +185,6 @@ See main [README.md](../../README.md) §9 for column format.
 
 ## Open items needing a team decision
 
-1. **README §3 and §5 do not list this scheme.** `README.md` is source-of-truth and is not edited by agents (AGENT_RULES). Adding Ref[55] to the baseline table (§3) and to the Schemes column of the experiment matrix (§5, Exps. 1–5, and notably Exp. 4's "Ours, Ref[35]") needs an author edit.
+1. **README §3 and §5 do not list this scheme.** `README.md` is source-of-truth and is not edited by agents. Adding Ref[55] to the baseline table (§3) and to the Schemes column of the experiment matrix (§5, Exps. 1–5, and notably Exp. 4's "Ours, Ref[35]") needs an author edit.
 2. **Exp. 3 domain ceiling.** The corpus carries 4 real domains against a `d = 2..10` sweep — the same open item README §14 already records for every scheme, not specific to this one.
 3. **`h = 5` vs `h = 13`.** Both are published. If the manuscript reports only one, the choice should be stated; `--bloom-hashes` makes running both cheap.

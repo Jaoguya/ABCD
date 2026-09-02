@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import os
+import queue as queue_mod
 import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -140,6 +141,27 @@ class FogSearchNodePool:
         if not self._started:
             raise RuntimeError("pool used outside its context manager")
         self._inboxes[node_id].put((request_id, list(tokens), list(authorized)))
+
+    def drain(self) -> List[NodeOutcome]:
+        """Take the completions available right now, without blocking.
+
+        The parent is the only producer into each worker's inbox and the only
+        consumer of the outbox, so dispatched-minus-drained IS that node's true
+        queue depth -- no load report has to cross back from the worker. But it
+        is only true if the parent drains WHILE it dispatches: draining only at
+        the end leaves every depth monotonically increasing, which is what left
+        ``queue_length`` useless to ``least_loaded`` and ``C_j^queue``.
+        """
+        results: List[NodeOutcome] = []
+        while True:
+            try:
+                _rid, node_id, ok, service_ns, error = self._outbox.get_nowait()
+            except queue_mod.Empty:
+                return results
+            results.append(
+                NodeOutcome(node_id=node_id, ok=ok,
+                            service_ns=service_ns, error=error)
+            )
 
     def collect(self, count: int, timeout: float = 60.0) -> List[NodeOutcome]:
         """Drain exactly ``count`` completions.

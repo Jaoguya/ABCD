@@ -94,6 +94,13 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
 def main(argv: List[str] | None = None) -> None:
     args = parse_args(argv)
 
+    # Freeze the configuration this run is measured under, before anything is
+    # measured. assert_config_unchanged() re-checks at every sweep-point
+    # boundary and aborts if it moved, so a multi-hour sweep cannot end up with
+    # its early and late points measured under different parameters.
+    from Common.crypto.config import snapshot_config_state
+    snapshot_config_state()
+
     # Parse experiment list
     exp_ids = [e.strip() for e in args.experiment.split(",")]
     for eid in exp_ids:

@@ -81,11 +81,21 @@ def run(
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp2_search")
 
+    # --points must FILTER the sweep, not merely name the output directory.
+    # It reached sweep.shard_dir() below and nothing else, so `--points 50000`
+    # ran all seven points and wrote them to a directory labelled 50000. Under
+    # global.yaml's `granularity: sweep_point` that gives every shard the whole
+    # sweep, and merge_points.py then concatenates those copies as if they were
+    # disjoint -- inflating n and computing a 95% CI over duplicated samples.
+    # Same defect as guo's exp2 (fixed 46e13d4); found by the same audit.
+    # Selected before the corpus cap so an unknown point raises against the
+    # real range rather than vanishing into the truncation notice below.
+    selected = sweep.select(VARIABLE_RANGE, points)
     available = len(records)
-    actual_range = [n for n in VARIABLE_RANGE if n <= available]
+    actual_range = [n for n in selected if n <= available]
     if not actual_range:
         actual_range = [available]
-    if actual_range != VARIABLE_RANGE:
+    if actual_range != selected:
         print(
             f"  NOTE: corpus holds {available} records; sweep truncated to "
             f"{actual_range}. Points above the corpus size are NOT reported "

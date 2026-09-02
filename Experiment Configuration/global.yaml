@@ -116,6 +116,17 @@ experiments:
     # README §5: Exp. 7 and Exp. 8 are DERIVED FROM THE SAME RUNS. Run the
     # trace once per variant and emit both metric sets.
     shares_runs_with: exp7_search_throughput
+    secondaries: [max_node_utilization, max_queue_depth]
+    # `cross_node_forwards` was the second secondary and was dropped 2026-08-30.
+    # At d = m = 4 each FSN holds one domain and the scheduler only considers
+    # nodes serving an authorized domain, so the chosen node serves exactly one
+    # of a request's k domains whichever node it is -- the count is k-1 under
+    # every variant (measured 600 for all four arms over 400 requests). Peak
+    # queue depth replaces it: it measures congestion, which is what the Exp. 8
+    # claim is about, and the FSN queue is now fed by the dispatch path.
+    # Exp. 7-8 ramp, README §7 "warm after a 30 s ramp" -- applied once per
+    # sweep point in setup, which run_point() excludes from every timing.
+    ramp_seconds: 30
 
 # -----------------------------------------------------------------------------
 # Topology — README §1. Four FSNs + one cloud server, one VPC/AZ.
@@ -154,9 +165,26 @@ authorities:
 # assertion is cheap, so a run on the wrong host is visible in provenance.
 # -----------------------------------------------------------------------------
 environment:
-  instance_type: m6i.xlarge     # benchmark: README §1 (paper §V now matches)
-  vcpus: 4
-  memory_gb: 16
+  # instance_type: DROPPED on the user's instruction, 2026-08-30. It pinned
+  # m6i.xlarge, which guo's Exp. 2 cannot satisfy -- its forward index needs
+  # ~52 GB at N=10^6 against a 16 GiB host -- and which caps thingom's Exp. 2
+  # at 4 vCPU. Both now run on hosts sized for the work, and §V discloses the
+  # host per scheme instead of claiming one type for all five.
+  #
+  # Absence is a supported STATE, not a missing key: verify_experiment_host()
+  # reports pin_configured=false and satisfies host_check_satisfied vacuously,
+  # so reportability no longer gates on a pin that does not exist. It still
+  # records detected_instance_type and metadata_reachable in every
+  # run_meta.json -- with nothing to compare against, recording what we
+  # actually ran on matters MORE, not less. Restore the pin by uncommenting.
+  #
+  # instance_type: m6i.xlarge
+  #
+  # vcpus/memory_gb described the pinned host and would now be false: the
+  # campaign rents r6i.8xlarge and r6i.32xlarge. Nothing reads them; they are
+  # kept as documentation of what the 85 banked run_metas were measured on.
+  vcpus_of_banked_corpus: 4       # historical: the m6i.xlarge all 85 banked runs used
+  memory_gb_of_banked_corpus: 16  # historical: as above
   os: ubuntu-22.04
   python: "3.11"
   # README §7: numpy claims all cores by default, which would make Ref[52]'s
@@ -188,7 +216,12 @@ environment:
 # -----------------------------------------------------------------------------
 fleet:
   nodes: 14
-  instance_type: m6i.xlarge     # every node identical -- README §1 parity
+  # instance_type: DROPPED with environment.instance_type above. Keeping it
+  # here would recreate the contradiction it was dropped to remove -- one line
+  # asserting every node is identical while the campaign deliberately rents
+  # two different sizes. Per-scheme hosts are recorded in each run_meta.json,
+  # which is now the only claim about hardware this repo makes.
+  # instance_type: m6i.xlarge
   placement: one cluster placement group, same AZ
   granularity: sweep_point      # see infra/sweep.py
   expected_wall_clock_h: 11.2

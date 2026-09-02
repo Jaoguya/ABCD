@@ -25,6 +25,11 @@ produce a figure whose points came from different systems.
 
 Duplicate sweep values across shards are also an error: it means two instances
 ran the same point, so the merged file would double-count it.
+
+It also refuses when the base directory already holds results from a commit
+NEWER than the shards. The merge overwrites the base, and stale shards left
+behind by ``fleet.sh deploy`` would otherwise silently replace a good unsharded
+re-run with an older campaign's data.
 """
 
 from __future__ import annotations
@@ -119,12 +124,69 @@ def _check_provenance(shards: List[Path], base: Path) -> Dict[str, object]:
     return first
 
 
+def _sha(commit: str) -> str:
+    """A run_meta git_commit with any ``-dirty`` suffix stripped."""
+    return commit[:-len("-dirty")] if commit.endswith("-dirty") else commit
+
+
+def _refuse_if_base_is_newer(base: Path, shard_commit: str) -> None:
+    """Refuse to overwrite a base directory that already holds NEWER results.
+
+    merge() rewrites <base>/results.csv and raw_runs.csv from the shards. That
+    is right when the shards ARE the run. It is destructive when the base was
+    since re-run unsharded and the shards are leftovers from an older campaign
+    that `fleet.sh deploy` restored onto the node.
+
+    Real case this guards: perera_lv_pqabse/exp3_crossdomain_scalability holds a
+    fresh full 9-point sweep, while its __points-2..10 siblings are stale
+    restores. Merging would have replaced good data with old data and reported
+    success.
+
+    Fails CLOSED -- if git cannot place the two commits relative to each other,
+    that is a refusal, not a pass.
+    """
+    meta_path = base / "run_meta.json"
+    if not meta_path.exists():
+        return
+    try:
+        base_commit = _sha(str(json.loads(meta_path.read_text()).get("git_commit", "")))
+    except Exception:  # noqa: BLE001 - unreadable provenance is not a licence
+        raise SystemExit(
+            f"{base.name}/run_meta.json is unreadable; refusing to overwrite it."
+        )
+    shard_commit = _sha(shard_commit)
+    if not base_commit or not shard_commit or base_commit == shard_commit:
+        return
+
+    proc = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", shard_commit, base_commit],
+        capture_output=True, cwd=REPO_ROOT,
+    )
+    if proc.returncode == 1:
+        return  # shards are NEWER than the base: the normal, intended case
+    if proc.returncode != 0:
+        raise SystemExit(
+            f"cannot place shard commit {shard_commit[:9]} relative to "
+            f"{base.name}'s {base_commit[:9]}. Refusing to merge rather than "
+            f"risk overwriting newer results with older ones."
+        )
+    raise SystemExit(
+        f"{base.name} already holds results from {base_commit[:9]}, which is "
+        f"NEWER than the shards' {shard_commit[:9]}.\n"
+        f"Merging would overwrite good data with an older campaign's shards -- "
+        f"most likely leftovers restored by `fleet.sh deploy`.\n"
+        f"If the shards really are what you want, delete {base.name}/"
+        f"results.csv and raw_runs.csv first, deliberately."
+    )
+
+
 def merge(base: Path, *, dry_run: bool = False) -> int:
     shards = _shards(base)
     if not shards:
         raise SystemExit(f"no shards found matching {base.name}__points-*")
 
     meta = _check_provenance(shards, base)
+    _refuse_if_base_is_newer(base, str(meta.get("git_commit", "")))
 
     rows: List[Dict[str, str]] = []
     seen: Dict[str, str] = {}
@@ -166,6 +228,7 @@ def merge(base: Path, *, dry_run: bool = False) -> int:
     # other schemes write the metric's real name (`trapdoors_issued_mean`).
     # Take them from a shard's own results.csv and map positionally, so the
     # merged file is byte-compatible with what Plots/generate_plots.py reads.
+    _refuse_projected(shards)
     _reaggregate(rows, base / "results.csv",
                  template=_result_columns(shards[0]))
     (base / "run_meta.json").write_text(
@@ -183,6 +246,40 @@ def _result_columns(shard: Path) -> List[str]:
         return []
     with path.open(newline="", encoding="utf-8") as fh:
         return list(csv.DictReader(fh).fieldnames or [])
+
+
+def _refuse_projected(shards: List[Path]) -> None:
+    """Refuse to merge shards containing PROJECTED points.
+
+    Merging projected rows is not a meaningful operation, and getting it wrong
+    fails silently in the flattering direction. _reaggregate() rebuilds
+    primary_ci95 from raw_runs.csv rather than carrying the aggregate forward
+    -- correct for measured points, and exactly wrong for a projected one,
+    whose results.csv says `nan` precisely because there is no sample to
+    interval over. Re-aggregation would manufacture a confidence interval for
+    a number that has none, with nobody doing anything wrong.
+
+    Inert on every path in the current campaign: nothing shards a projected
+    experiment. It exists so that the day someone does, they get a message
+    instead of an invented error bar.
+    """
+    for shard in shards:
+        path = shard / "results.csv"
+        if not path.exists():
+            continue
+        with path.open(newline="", encoding="utf-8") as fh:
+            for lineno, row in enumerate(csv.DictReader(fh), start=2):
+                if (row.get("measurement_type") or "").strip() == "projected":
+                    raise SystemExit(
+                        f"{path}:{lineno}: refusing to merge -- this point is "
+                        f"PROJECTED (variable_value="
+                        f"{row.get('variable_value','?')}), not measured. "
+                        f"Re-aggregation recomputes primary_ci95 from the raw "
+                        f"runs, which would invent a confidence interval for a "
+                        f"value derived from a unit cost. Merge the measured "
+                        f"shards and re-derive the projection from the merged "
+                        f"unit cost instead."
+                    )
 
 
 def _reaggregate(rows: List[Dict[str, str]], out: Path,
@@ -210,10 +307,30 @@ def _reaggregate(rows: List[Dict[str, str]], out: Path,
     def ci95(vals: List[float]) -> float:
         n = len(vals)
         if n <= 1:
-            return 0.0
+            # NOT 0.0. A single sample has NO interval, and 0.0 is not "no
+            # interval" -- generate_plots.py:200 reads `_to_float(cell) or 0.0`,
+            # so a zero reaches matplotlib as a real zero-width error bar and
+            # draws a 2 pt cap. That cap reads as a vanishingly TIGHT interval:
+            # the most flattering possible misreading of a number that has none.
+            # Measured, not assumed: the 0.0 path renders 13 more non-white
+            # pixels than the nan path at identical axis limits.
+            #
+            # nan is truthy, so it survives the `or 0.0`, and matplotlib draws
+            # nothing for it. This must be the convention EVERYWHERE a CI is
+            # absent -- thingom's write_results already uses it, and two writers
+            # disagreeing about what "no interval" looks like is how one of them
+            # ends up lying.
+            #
+            # It matters now, not in theory: --runs 1 smoke output and
+            # dbbd6e3's n=1 thingom rows both land here.
+            return float("nan")
         mean = sum(vals) / n
         sd = math.sqrt(sum((v - mean) ** 2 for v in vals) / (n - 1))
         return stats.t.ppf(0.975, df=n - 1) * sd / math.sqrt(n)
+
+    def _fmt_ci(v: float) -> str:
+        """Format a CI, preserving nan as the literal token the plotter needs."""
+        return "nan" if math.isnan(v) else f"{round(v, 6)}"
 
     def sort_key(v: str):
         try:
@@ -228,7 +345,7 @@ def _reaggregate(rows: List[Dict[str, str]], out: Path,
         entry = {
             "variable_value": value,
             "primary_mean": round(sum(primary) / len(primary), 6),
-            "primary_ci95": round(ci95(primary), 6),
+            "primary_ci95": _fmt_ci(ci95(primary)),
         }
         for col, label in zip(sec_cols, labels):
             vals = []
@@ -236,9 +353,23 @@ def _reaggregate(rows: List[Dict[str, str]], out: Path,
                 try:
                     vals.append(float(r[col]))
                 except (TypeError, ValueError):
+                    # Blank or unparseable: the writers emit "" for a secondary
+                    # a run did not produce. Dropping it from the mean is right;
+                    # dropping it SILENTLY was not, because n_runs then claimed
+                    # a sample size this metric never had. Counted below.
                     pass
-            entry[f"{label}_mean"] = round(sum(vals) / len(vals), 6) if vals else ""
-            entry[f"{label}_ci95"] = round(ci95(vals), 6) if vals else ""
+            # "" reaches the plot as 0.0 through that same `or 0.0`, so an
+            # absent secondary would draw a zero-width bar exactly as above.
+            entry[f"{label}_mean"] = round(sum(vals) / len(vals), 6) if vals else "nan"
+            entry[f"{label}_ci95"] = _fmt_ci(ci95(vals)) if vals else "nan"
+            # How many runs actually contributed to THIS metric. Equal to
+            # n_runs in the normal case; smaller when values were missing. A
+            # 95% CI's width depends on the sample size behind it, so a reader
+            # taking n_runs for a secondary would compute the wrong degrees of
+            # freedom and believe an interval narrower than the data supports.
+            entry[f"{label}_n"] = len(vals)
+        # The count for the PRIMARY metric, which never silently drops: the
+        # primary is parsed without a try/except and raises on bad input.
         entry["n_runs"] = len(runs)
         out_rows.append(entry)
 

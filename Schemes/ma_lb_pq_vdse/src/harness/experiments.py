@@ -1046,15 +1046,40 @@ class _WorkloadOutcome:
     utilization_stddev: float
     max_utilization: float
     cross_node_forwards: int
+    max_queue_depth: int
+
+
+def _default_ramp_seconds() -> float:
+    """README §7's ramp, from global.yaml with a hard fallback.
+
+    Resolved once at import rather than per call so there is a single name to
+    override -- the test suite zeroes RAMP_SECONDS in conftest, and reading the
+    config inside _ramp() would silently defeat that.
+    """
+    try:
+        configured = scheme_config.load().experiment("exp8").ramp_seconds
+    except Exception:  # noqa: BLE001 - a missing key must not break collection
+        configured = None
+    return 30.0 if configured is None else float(configured)
+
+
+#: README §7: "Cold vs warm. Defaults: Exp. 1-6 warm, Exp. 7-8 warm after a 30 s
+#: ramp." Applied once per sweep point, inside prepare(), which run_point()
+#: excludes from every timing.
+RAMP_SECONDS = _default_ramp_seconds()
 
 
 @dataclass
 class SchedulerAblation:
     """The shared engine for Exp. 7 and Exp. 8.
 
-    README §5: "Exp. 7 and Exp. 8 report different metrics from **the same runs**
-    — run the trace once per variant and emit both." So the workload is replayed
-    once here and both experiments read the same outcome.
+    README §5: "Exp. 7 and Exp. 8 report different metrics over **the same
+    recorded arrival trace**, replayed once per experiment per variant." The
+    trace is recorded once in prepare() and both experiments record the same
+    one; they do NOT share a replay. Each runs its own, so the two differ by
+    timing noise and Exp. 8's sigma cannot be paired run-for-run with a
+    specific Exp. 7 throughput. The per-point cross-variant comparison the
+    figures show is unaffected.
 
     **Not reportable, for two reasons beyond the λ sweep.** README §1 requires each
     FSN to be an independent process; this replays in one interpreter, so a
@@ -1097,10 +1122,13 @@ class SchedulerAblation:
             self.variant, config=self.config, reportable=False
         )
         node_ids = [node.node_id for node in deployment.nodes]
+        by_id = {node.node_id: node for node in deployment.nodes}
         rejected = 0
         forwards = 0
         dispatched = 0
         latency_starts: Dict[int, int] = {}
+        collected: List[fsn_pool.NodeOutcome] = []
+        peak_depth = 0
 
         with fsn_pool.FogSearchNodePool(deployment.nodes) as pool:
             self._worker_pids = pool.worker_pids
@@ -1117,14 +1145,41 @@ class SchedulerAblation:
                     rejected += 1
                     continue
                 latency_starts[dispatched] = time.perf_counter_ns()
+                # Enqueue BEFORE dispatch, so the depth the next select() reads
+                # already includes this request. The parent's node objects carry
+                # the queue the scheduler reasons about; the worker holds the
+                # index. Both are the same node, split across the fork.
+                depth = selection.node.enqueue(str(dispatched))
+                if depth > peak_depth:
+                    peak_depth = depth
                 pool.dispatch(
                     dispatched, selection.node.node_id,
                     token.tokens, decision.authorized_shards,
                 )
                 dispatched += 1
-                if not selection.node.serves_domain(request.domains[0]):
-                    forwards += 1
-            outcomes = pool.collect(dispatched)
+                # Retire what has finished, so depth falls as well as rises.
+                for outcome in pool.drain():
+                    by_id[outcome.node_id].dequeue()
+                    collected.append(outcome)
+                # A forward per authorized domain the chosen node does NOT hold:
+                # those shards are served from another node, which is the
+                # cross-node communication §V claims AASS minimizes. The former
+                # test -- serves_domain(request.domains[0]) -- compared against
+                # the alphabetically FIRST authorized domain, so with every
+                # request authorized for all four domains it only ever asked
+                # "did you pick the dom0 node?".
+                forwards += sum(
+                    1 for domain in request.domains
+                    if not selection.node.serves_domain(domain)
+                )
+            tail = pool.collect(dispatched - len(collected))
+            # Retire the tail too. Every enqueue must have its dequeue or the
+            # depth carries over into the next replay, and prepare()'s ramp plus
+            # 30 measured runs would leave `least_loaded` and `C_j^queue`
+            # reading a queue that only ever grew.
+            for outcome in tail:
+                by_id[outcome.node_id].dequeue()
+            outcomes = collected + tail
             wall = time.perf_counter() - started
 
         latencies = [o.service_ns / 1e6 for o in outcomes if o.ok]
@@ -1144,6 +1199,7 @@ class SchedulerAblation:
             ),
             max_utilization=max(utilizations) if utilizations else 0.0,
             cross_node_forwards=forwards,
+            max_queue_depth=peak_depth,
         )
 
     def _replay_single_interpreter(
@@ -1155,6 +1211,7 @@ class SchedulerAblation:
         latencies: List[float] = []
         rejected = 0
         forwards = 0
+        peak_depth = 0
         started = time.perf_counter()
         for token, decision in requests:
             request = aass_mod.SearchRequest(
@@ -1168,16 +1225,25 @@ class SchedulerAblation:
                 rejected += 1
                 continue
             began = time.perf_counter_ns()
+            depth = selection.node.enqueue(str(len(latencies)))
+            if depth > peak_depth:
+                peak_depth = depth
             try:
                 search_mod.execute_search(
                     selection.node, token.tokens, decision.authorized_shards
                 )
             except search_mod.SearchRejected:
+                selection.node.dequeue()
                 rejected += 1
                 continue
+            selection.node.dequeue()
             latencies.append((time.perf_counter_ns() - began) / 1e6)
-            if not selection.node.serves_domain(request.domains[0]):
-                forwards += 1
+            # Same forward count as the multiprocess path -- see there for why
+            # the previous single serves_domain(domains[0]) test was wrong.
+            forwards += sum(
+                1 for domain in request.domains
+                if not selection.node.serves_domain(domain)
+            )
         wall = time.perf_counter() - started
 
         window_ns = max(1, int(wall * 1e9))
@@ -1193,24 +1259,127 @@ class SchedulerAblation:
             ),
             max_utilization=max(utilizations) if utilizations else 0.0,
             cross_node_forwards=forwards,
+            max_queue_depth=peak_depth,
         )
+
+    def _population(self, deployment: Deployment) -> List[Any]:
+        """Data Users spanning 1..d authorized domains, no domain favoured.
+
+        A single user authorized across every domain — which is what this was —
+        makes two of AASS's five terms constant by construction: ``C_j^auth``
+        (``|P_Q|``) is the same for every request, and ``cross_node_forwards`` is
+        pinned at ``d-1`` per request for EVERY variant, because each FSN serves
+        one domain and a request needing all four must forward to three of them
+        whichever node is chosen. §V's claim that AASS "minimizes unnecessary
+        cross-node communication" is untestable on such a workload: there is no
+        unnecessary communication to remove.
+
+        **Benchmark choice, not published.** Neither §V nor README fixes how many
+        domains one query spans; §V fixes only d=4. Uniform over subset sizes
+        1..d with the starting domain rotated is the neutral choice — it spans
+        the range from single-domain queries (where authorization locality
+        decides everything) to all-domain queries (where it cannot matter), and
+        rotating the offset makes every domain appear equally often, so no FSN is
+        structurally favoured.
+        """
+        domains = tuple(deployment.domains)
+        # Computed ONCE. _enrol() rescans deployment.records per domain per user,
+        # which at N=10^5 over 16 users would be ~10^7 record comparisons.
+        policies_by_domain: Dict[str, Tuple[str, ...]] = {}
+        for domain in domains:
+            policies_by_domain[domain] = tuple(sorted({
+                r["record"].policy_id
+                for r in deployment.records
+                if r["record"].domain == domain
+            }))
+
+        population = []
+        for size in range(1, len(domains) + 1):
+            for offset in range(len(domains)):
+                subset = sorted(
+                    domains[(offset + i) % len(domains)] for i in range(size)
+                )
+                uid = f"DU-d{size}-o{offset}"
+                authority_ids = [
+                    deployment.authorities[d].authority_id for d in subset
+                ]
+                attributes = sorted(
+                    attr for d in subset
+                    for attr in deployment.authorities[d].attributes[:3]
+                )
+                profile = profile_mod.build_profile_from_aim(
+                    deployment.aim, uid=uid,
+                    authority_ids=authority_ids, attributes=attributes,
+                )
+                resolver = authz_mod.MappingPolicyResolver({
+                    (uid, d): policies_by_domain[d] for d in subset
+                })
+                population.append(
+                    (profile, authority_ids, attributes, resolver, tuple(subset))
+                )
+        return population
+
+    def _ramp(self, deployment: Deployment, requests, concurrency: int) -> None:
+        """README §7: "Exp. 7-8 warm after a 30 s ramp."
+
+        Here rather than in ``measure`` because ``run_point`` calls ``prepare``
+        once per point and excludes it from every timing — which is what "warm
+        AFTER a ramp" means: ramp once, then take the 30 runs on a warm system.
+        Putting it in ``measure`` would ramp 30 times per point and cost ~5 h
+        across the campaign to measure the same steady state.
+        """
+        if not requests:
+            return
+        if RAMP_SECONDS <= 0:
+            return
+        deadline = time.perf_counter() + RAMP_SECONDS
+        while time.perf_counter() < deadline:
+            self.replay(deployment, requests, concurrency)
 
     def prepare(self, value: Any) -> Any:
-        """Build the deployment and RECORD the arrival trace once.
+        """Build the deployment, RECORD the arrival trace, then ramp.
 
-        "All 4 variants see byte-identical workloads" — so the request list is
-        materialised here and replayed, not regenerated per variant.
+        All variants and both experiments see the same workload — so the
+        request list is materialised here and replayed, not regenerated per
+        variant. Identical in CONTENT, not in bytes: every SearchToken carries
+        a fresh random nonce, which must vary. Locked by
+        test_exp7_and_exp8_record_the_same_arrival_trace, which digests the
+        trace excluding the nonce, and by
+        test_search_token_nonce_is_fresh_per_token, which pins that the nonce
+        itself is never reproducible.
         """
         concurrency = int(value)
+        # README §6 fixes index_size at 10^5 for every experiment that does not
+        # sweep it, and Exp. 7-8 sweep concurrency. This built `records=32` —
+        # 8 entries per shard, 3,125x under the default. Measured consequence:
+        # execute_search is linear in shard size while select() is flat, so at
+        # 32 records the scheduler cost 23.8us against a 9.0us search and no
+        # variant could saturate a node, because the work unit was cheaper than
+        # the IPC round-trip delivering it. At 8,000 records the same search is
+        # 297us. Sized as Exp. 2 sizes it, so "N" means the same thing in both.
+        record_count = max(
+            1, int(self.config.defaults.index_size) // self.source.keywords_per_record
+        )
         deployment = build_deployment(
-            config=self.config, source=self.source, records=32
+            config=self.config, source=self.source, records=record_count
         )
-        profile, authority_ids, attributes, resolver = _enrol(
-            deployment, "DU-1", deployment.domains
-        )
+        population = self._population(deployment)
+        by_domain: Dict[str, List[Any]] = {d: [] for d in deployment.domains}
+        for entry in deployment.records:
+            by_domain[entry["record"].domain].append(entry)
+
         requests = []
         for index in range(concurrency):
-            record = deployment.records[index % len(deployment.records)]
+            profile, authority_ids, attributes, resolver, subset = (
+                population[index % len(population)]
+            )
+            # Draw from a domain this user actually holds, or the AIM rejects
+            # the request and the trace silently shrinks.
+            domain = subset[index % len(subset)]
+            pool_for_domain = by_domain[domain]
+            if not pool_for_domain:
+                continue
+            record = pool_for_domain[index % len(pool_for_domain)]
             token = token_mod.generate_search_token(
                 deployment.scheme, profile, [record["record"].keywords[0]]
             )
@@ -1221,8 +1390,10 @@ class SchedulerAblation:
             )
             if decision.accepted:
                 requests.append((token, decision))
+        requests = tuple(requests)
+        self._ramp(deployment, requests, concurrency)
         return dict(
-            deployment=deployment, requests=tuple(requests), concurrency=concurrency
+            deployment=deployment, requests=requests, concurrency=concurrency
         )
 
 
@@ -1268,7 +1439,21 @@ class Exp8LoadBalance(SchedulerAblation):
     primary: MetricSpec = MetricSpec("utilization_stddev", COUNT)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("max_node_utilization", COUNT),
-        MetricSpec("cross_node_forwards", COUNT),
+        # `cross_node_forwards` was here and is deliberately NOT reported.
+        # At the §V default d = m = 4, assign_domains_to_fsns gives each FSN one
+        # domain and _candidates() already restricts the choice to nodes serving
+        # an authorized domain, so the chosen node serves exactly one of the k
+        # authorized domains WHICHEVER node it is: the count is k-1 under every
+        # variant. Measured over 400 requests it was 600 for all four arms.
+        # A secondary that cannot vary is not evidence, and putting it in an
+        # ablation table invites the reviewer to check it and find it flat.
+        # `test_cross_node_forwards_is_scheduler_invariant_at_one_domain_per_node`
+        # fails if the topology ever makes it meaningful again.
+        #
+        # Peak queue depth replaces it because it measures the thing §V actually
+        # claims for Exp. 8 -- "prevents node congestion" -- and it is only
+        # measurable at all now that the enqueue/dequeue loop is wired.
+        MetricSpec("max_queue_depth", COUNT),
     )
 
     def __post_init__(self) -> None:
@@ -1283,7 +1468,7 @@ class Exp8LoadBalance(SchedulerAblation):
             primary=outcome.utilization_stddev,
             secondaries={
                 "max_node_utilization": outcome.max_utilization,
-                "cross_node_forwards": float(outcome.cross_node_forwards),
+                "max_queue_depth": float(outcome.max_queue_depth),
             },
         )
 

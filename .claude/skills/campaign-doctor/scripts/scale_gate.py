@@ -27,7 +27,7 @@ Fairness
 --------
 This measures; it does not tune. It may justify a cap or a larger host. It may
 NOT justify optimising one scheme and not the others -- that asymmetry is what
-AGENT_RULES "Bias Detection" forbids. And it gates on memory only: memory is a
+is a bias defect. And it gates on memory only: memory is a
 hardware limit, slowness is a finding, and refusing a scheme for being slow
 would shape which results exist.
 """

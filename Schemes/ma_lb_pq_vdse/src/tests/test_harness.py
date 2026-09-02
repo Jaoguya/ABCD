@@ -164,7 +164,7 @@ def test_ci_is_zero_for_a_constant_metric():
 
 
 def test_plausibility_flags_a_timing_with_zero_variance():
-    """AGENT_RULES: zero variance "indicates a bug or fabrication"."""
+    """Zero variance indicates a bug or fabrication."""
     summary = stats.summarise([2.5] * 30)
     warning = stats.check_plausibility(summary, metric="latency", is_timing=True)
     assert warning is not None and "zero variance" in warning
@@ -635,6 +635,225 @@ def test_exp7_and_exp8_share_one_workload_engine():
     assert exp_mod.Exp8LoadBalance.replay is exp_mod.SchedulerAblation.replay
 
 
+def test_merge_points_refuses_to_overwrite_newer_results():
+    """infra/merge_points.py must not replace fresh results with stale shards.
+
+    Covered here because that script has no suite of its own and the failure is
+    a harness-level one: merge() rewrites <base>/results.csv and raw_runs.csv
+    from the shards, which is correct when the shards ARE the run and
+    destructive when the base was since re-run unsharded and the shards are
+    leftovers `fleet.sh deploy` restored from an older campaign.
+
+    Live example: on the fleet, perera_lv_pqabse/exp3_crossdomain_scalability
+    was rewritten today at 6c97ee9 with the full 9-point sweep while its
+    __points-2..10 siblings still carry 55aa3c8. Merging would have reported
+    success while replacing good data with old data.
+    """
+    import importlib.util
+    import json as _json
+    import subprocess as _sp
+    import tempfile
+
+    spec = importlib.util.spec_from_file_location(
+        "merge_points", str(REPO_ROOT / "infra" / "merge_points.py"))
+    mp = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mp)
+
+    def sha(rev):
+        return _sp.run(["git", "rev-parse", rev], capture_output=True,
+                       text=True, cwd=REPO_ROOT).stdout.strip()
+
+    old, new_ = sha("55aa3c8"), sha("HEAD")
+    if not old or not new_:
+        return  # shallow clone: nothing to assert against
+
+    with tempfile.TemporaryDirectory() as tmp:
+        base = Path(tmp) / "exp3_crossdomain_scalability"
+        base.mkdir()
+        meta = base / "run_meta.json"
+
+        meta.write_text(_json.dumps({"git_commit": new_}))
+        try:
+            mp._refuse_if_base_is_newer(base, old)
+            raise AssertionError("merging older shards over a newer base must refuse")
+        except SystemExit as exc:
+            assert "NEWER" in str(exc)
+
+        # The normal case must still pass: shards newer than the base.
+        meta.write_text(_json.dumps({"git_commit": old}))
+        mp._refuse_if_base_is_newer(base, new_)
+
+        # Unresolvable provenance fails CLOSED, never silently open.
+        meta.write_text(_json.dumps({"git_commit": "0" * 40}))
+        try:
+            mp._refuse_if_base_is_newer(base, new_)
+            raise AssertionError("an unresolvable commit must refuse, not pass")
+        except SystemExit:
+            pass
+
+
+def test_superseded_results_are_caught_at_read_time():
+    """Stale Exp. 7-8 results must be refused without rewriting their record.
+
+    exp7_search_throughput/ and exp8_load_balance/ carry git_commit 55aa3c8 with
+    reportable:true -- written before 5cf65f9 fixed the shared costing overhead,
+    the dead queue loop and the 32-record index. They sit under the canonical
+    names main.py writes to, so a name-based reader would quote pre-fix numbers.
+
+    The judgement is DERIVED from the commit the record already carries.
+    Rewriting run_meta.json to say reportable:false would violate this module's
+    contract that provenance is measured and never supplied -- the record would
+    then state a belief rather than what ran.
+    """
+    boundary = provenance.SUPERSEDED_BEFORE[7]
+
+    stale = provenance.superseded_reason(7, "55aa3c828e0e0e6d18b30d1e35a3c6a4b0e8f7a1")
+    assert stale and "predates" in stale, (
+        "a pre-5cf65f9 Exp. 7 result must be refused"
+    )
+
+    # The boundary commit itself is the first GOOD one, not the last bad one.
+    assert provenance.superseded_reason(7, boundary) is None
+    assert provenance.superseded_reason(8, boundary) is None
+
+    # Dirtiness is a separate question; the suffix must not defeat the test.
+    assert provenance.superseded_reason(7, "55aa3c828e0e0e6d18b30d1e35a3c6a4b0e8f7a1-dirty")
+
+    # Exp. 1-6 have no boundary and must not be swept up.
+    for n in (1, 2, 3, 4, 5, 6):
+        assert provenance.superseded_reason(n, "55aa3c828e0e0e6d18b30d1e35a3c6a4b0e8f7a1") is None
+
+    # An unknown or unresolvable commit fails CLOSED, never silently open.
+    assert provenance.superseded_reason(7, "unknown")
+    assert provenance.superseded_reason(7, "0" * 40)
+
+
+def test_dirty_marker_ignores_a_runs_own_output():
+    """The ``-dirty`` marker must mean "the code changed", not "a run ran".
+
+    Result dirs are git-tracked and not ignored, and fleet.sh deploy restores
+    them onto every node before a run; the run overwrites results.csv and
+    raw_runs.csv and then stamps run_meta.json. So an unscoped
+    `git status --porcelain` was ALWAYS non-empty at stamp time and every fleet
+    run recorded `-dirty` regardless of whether any source changed -- all eight
+    Exp. 7-8 dirs at 0536312 carry it. A marker that is always on cannot do the
+    one job it has.
+    """
+    own_output = [
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/results.csv",
+        "Schemes/ma_lb_pq_vdse/exp8_load_balance__no_lb/raw_runs.csv",
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/run_meta.json",
+        "Plots/output/pdf/fig_exp7_throughput.pdf",
+        # lambda_sweep.py writes this into exp7_search_throughput/; it is run
+        # output, so regenerating it must not mark the tree dirty.
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput/lambda_sweep.csv",
+    ]
+    for path in own_output:
+        assert provenance._is_own_output(path), (
+            f"{path} is a run's own output; counting it makes -dirty fire on "
+            f"every run and stop meaning anything"
+        )
+
+    inputs = [
+        "Schemes/ma_lb_pq_vdse/src/scheduler/aass.py",
+        "Schemes/ma_lb_pq_vdse/src/harness/experiments.py",
+        "Experiment Configuration/global.yaml",
+        "Common/crypto/config.py",
+        "infra/fleet.sh",
+        "README.md",
+        # A result dir holding something OTHER than the three known artifacts
+        # is not recognised output and must still count.
+        "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/patch.py",
+    ]
+    for path in inputs:
+        assert not provenance._is_own_output(path), (
+            f"{path} can change what a run measures and must still mark -dirty"
+        )
+
+
+def test_dirty_paths_asks_git_for_untracked_files_not_directories():
+    """``-uall``, or an untracked result dir counts as dirty on its own.
+
+    Plain ``--porcelain`` collapses an untracked directory to one entry ending
+    in "/", with no filename for _is_own_output to classify -- so a fresh result
+    directory marked the tree dirty by itself. Measured on a fleet host: an
+    untracked exp6 result dir was the ONLY thing making that host dirty.
+    """
+    import inspect
+
+    src = inspect.getsource(provenance._dirty_paths)
+    assert '"-uall"' in src, (
+        "_dirty_paths must pass -uall so untracked results appear as files"
+    )
+    assert not provenance._is_own_output(
+        "Schemes/ma_lb_pq_vdse/exp6_authorization_sync__no_lb/"
+    ), "a bare directory has no filename and must not be classified as output"
+    assert provenance._is_own_output(
+        "Schemes/ma_lb_pq_vdse/exp6_authorization_sync__no_lb/results.csv"
+    ), "the files inside it are output and must not count"
+
+
+def test_exp7_and_exp8_record_the_same_arrival_trace():
+    """README §5: both experiments replay "the same recorded arrival trace".
+
+    They share the engine (above) but each calls prepare() separately, so
+    "the same workload" is a property of prepare() being deterministic, not a
+    consequence of the shared class. Nothing asserted it. Measured here by
+    digesting the trace: same digest for exp7 and exp8, and stable across
+    repeated calls, at two concurrencies.
+
+    The digest deliberately EXCLUDES SearchToken.nonce. Every other field --
+    the keyword tokens, auth_root, vid_u, and the authorization decision -- is
+    the workload; the nonce is fresh randomness per token and MUST vary, which
+    the companion test below pins. So the trace is identical in content and is
+    NOT byte-identical, and only the first of those is what the figures need.
+    """
+    import hashlib
+    import pickle
+
+    def trace_digest(number: int, concurrency: int) -> str:
+        experiment = exp_mod.build_experiment(number, CONFIG, SOURCE)
+        digest = hashlib.sha256()
+        for token, decision in experiment.prepare(concurrency)["requests"]:
+            digest.update(pickle.dumps(token.tokens, protocol=4))
+            digest.update(pickle.dumps(token.auth_root, protocol=4))
+            digest.update(pickle.dumps(token.vid_u, protocol=4))
+            digest.update(pickle.dumps(decision.accepted, protocol=4))
+        return digest.hexdigest()
+
+    for concurrency in (8, 32):
+        first7 = trace_digest(7, concurrency)
+        assert first7 == trace_digest(7, concurrency), (
+            f"exp7's trace is not stable across prepare() calls at "
+            f"concurrency={concurrency}; the ablation arms are then not "
+            f"comparable to each other"
+        )
+        assert first7 == trace_digest(8, concurrency), (
+            f"exp7 and exp8 recorded different traces at "
+            f"concurrency={concurrency}; §V pairs their metrics as one workload"
+        )
+
+
+def test_search_token_nonce_is_fresh_per_token():
+    """The counterpart to the digest above: the nonce must NOT be deterministic.
+
+    The trace test passes trivially if someone makes prepare() reproducible by
+    freezing the nonce, which would be a real cryptographic defect rather than
+    a fix. This fails first if that ever happens.
+    """
+    experiment = exp_mod.build_experiment(7, CONFIG, SOURCE)
+    requests = experiment.prepare(8)["requests"]
+    nonces = [token.nonce for token, _ in requests]
+    assert len(set(nonces)) == len(nonces), (
+        "SearchToken.nonce repeated within one trace"
+    )
+
+    again = experiment.prepare(8)["requests"]
+    assert [t.nonce for t, _ in again] != nonces, (
+        "SearchToken.nonce is reproducible across prepare() calls"
+    )
+
+
 def test_ablation_covers_the_four_variants():
     from Schemes.ma_lb_pq_vdse.src.scheduler import aass as aass_mod
 
@@ -645,6 +864,76 @@ def test_ablation_covers_the_four_variants():
         prepared = experiment.prepare(20)
         sample = experiment.measure(prepared)
         assert sample.primary >= 0.0
+
+
+def test_scheduler_ablation_ramps_before_measuring(monkeypatch):
+    """README §7: "Exp. 7-8 warm after a 30 s ramp."
+
+    The ramp belongs in prepare(), which run_point() calls once per point and
+    excludes from every timing. Putting it in measure() would ramp 30 times per
+    point and time a warm-up as if it were the measurement. This asserts the
+    ramp actually replays, and that it does so in prepare and not in measure --
+    conftest zeroes RAMP_SECONDS for every other test, so without this the
+    feature would be entirely uncovered.
+    """
+    monkeypatch.setattr(exp_mod, "RAMP_SECONDS", 0.05)
+    experiment = exp_mod.Exp7Throughput(config=CONFIG, source=SOURCE)
+
+    calls = []
+    original = type(experiment).replay
+    monkeypatch.setattr(
+        type(experiment), "replay",
+        lambda self, d, r, c, _o=original: (calls.append(1), _o(self, d, r, c))[1],
+    )
+
+    prepared = experiment.prepare(20)
+    ramped = len(calls)
+    assert ramped >= 1, "prepare() must ramp before the point is measured"
+
+    experiment.measure(prepared)
+    assert len(calls) == ramped + 1, "measure() must replay once, never ramp"
+
+
+def test_cross_node_forwards_is_scheduler_invariant_at_one_domain_per_node():
+    """A flat metric must be known to be flat before it is ever plotted.
+
+    README §1's default topology is d = m = 4, and assign_domains_to_fsns then
+    gives each FSN exactly one domain. _candidates() already restricts the
+    choice to nodes serving an authorized domain, so the chosen node serves
+    exactly ONE of the k domains a request is authorized for, whichever node
+    that is -- and the forward count is k-1 under every variant. No scheduler
+    can move it. §V's "minimizes unnecessary cross-node communication" is
+    therefore not testable on this topology, and this test exists so that fact
+    fails loudly if the topology or the candidate rule ever changes to make it
+    testable.
+    """
+    from Schemes.ma_lb_pq_vdse.src.scheduler import aass as aass_mod
+
+    experiment = exp_mod.Exp7Throughput(config=CONFIG, source=SOURCE)
+    prepared = experiment.prepare(40)
+    deployment, requests = prepared["deployment"], prepared["requests"]
+    assert all(len(node.domains) == 1 for node in deployment.nodes)
+
+    counts = set()
+    for variant in aass_mod.VARIANTS:
+        scheduler = aass_mod.Scheduler(variant, config=CONFIG, reportable=False)
+        forwards = 0
+        for token, decision in requests:
+            request = aass_mod.SearchRequest(
+                tokens=token.tokens,
+                authorized=decision.authorized_shards,
+                vid_u=token.vid_u,
+            )
+            node = scheduler.select(deployment.nodes, request).node
+            served = sum(1 for d in request.domains if node.serves_domain(d))
+            assert served == 1
+            forwards += len(request.domains) - served
+        counts.add(forwards)
+    assert len(counts) == 1, (
+        f"cross_node_forwards differed across variants ({counts}); the topology "
+        f"now permits a scheduling choice, so the metric has become meaningful "
+        f"and Exp. 8 should report it"
+    )
 
 
 def test_injected_stub_group_is_never_reportable():

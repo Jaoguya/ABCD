@@ -10,7 +10,7 @@ environment, never supplied by a caller** — a provenance record that could be
 passed the commit it claims would record what someone believed rather than what
 ran.
 
-:func:`reportability` collects the conditions AGENT_RULES requires for a result to
+:func:`reportability` collects the conditions required for a result to
 be quotable. It returns the failing reasons rather than a bool, because
 ``run_meta.json`` records *why* a run was not reportable, and "reportable: false"
 with no reason is not provenance.
@@ -37,13 +37,82 @@ from .. import config as scheme_config  # noqa: E402
 SCHEME_NAME = "ma_lb_pq_vdse"
 
 
+#: Paths a run necessarily rewrites as it produces output, so their being
+#: modified says nothing about whether the CODE was modified.
+#:
+#: This exclusion exists because the unscoped check could never fire usefully.
+#: Result directories are git-TRACKED and not ignored, and ``fleet.sh deploy``
+#: restores them onto every node before a run; the run then overwrites
+#: ``results.csv`` / ``raw_runs.csv`` and stamps ``run_meta.json`` afterwards.
+#: So ``git status --porcelain`` was already non-empty at stamp time and EVERY
+#: fleet run recorded ``-dirty`` by construction -- the eight Exp. 7-8 result
+#: dirs at 0536312 all carry it. A marker that is always on cannot distinguish
+#: a modified scheme from an experiment writing its own output, which is the
+#: one thing it exists to do.
+_OUTPUT_ARTIFACTS = (
+    "results.csv",
+    "raw_runs.csv",
+    "run_meta.json",
+    # Written by harness/lambda_sweep.py into exp7_search_throughput/. It is a
+    # run's output like any other, so regenerating it must not mark the tree
+    # dirty -- and infra/fleet.sh's deploy-restore must preserve it for the same
+    # reason. Keep the two lists in step.
+    "lambda_sweep.csv",
+)
+
+
+def _is_own_output(path: str) -> bool:
+    """True for a path that is a run's own output rather than its inputs."""
+    parts = path.split("/")
+    if parts[:1] == ["Plots"] and parts[1:2] == ["output"]:
+        return True
+    # Schemes/<scheme>/<exp-dir>/<artifact>
+    return (
+        len(parts) == 4
+        and parts[0] == "Schemes"
+        and parts[2].startswith("exp")
+        and parts[3] in _OUTPUT_ARTIFACTS
+    )
+
+
+def _dirty_paths() -> List[str]:
+    """Uncommitted paths that could actually change what a run measures.
+
+    ``git status --porcelain`` over the whole repo, minus the run's own output.
+    Anything else still counts -- source, config, dataset, infra -- so a genuinely
+    modified tree is still caught.
+    """
+    # -uall: without it git collapses an untracked directory to a single
+    # "Schemes/<scheme>/<exp-dir>/" entry, which _is_own_output cannot classify
+    # (it has no filename) and which therefore counted as dirty. Measured on the
+    # fleet: an untracked exp6 result dir marked a host dirty on its own.
+    status = subprocess.run(
+        ["git", "status", "--porcelain", "-uall"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    dirty = []
+    for line in status.stdout.splitlines():
+        if not line.strip():
+            continue
+        # "XY path" and "XY orig -> path" for renames; take the destination.
+        path = line[3:].strip().split(" -> ")[-1].strip('"')
+        if not _is_own_output(path):
+            dirty.append(path)
+    return dirty
+
+
 def git_commit() -> str:
     """The commit that produced this result, or an explicit marker.
 
     ``unknown`` rather than a guess when git cannot answer: an invented hash in a
     provenance record is worse than an admitted gap. ``-dirty`` is appended when
     the tree has uncommitted changes, because a result from a modified tree cannot
-    be reproduced from the commit alone.
+    be reproduced from the commit alone -- EXCLUDING the run's own output, which
+    every run rewrites and which therefore made the marker fire unconditionally.
+    See :data:`_OUTPUT_ARTIFACTS`.
     """
     try:
         commit = subprocess.run(
@@ -56,14 +125,7 @@ def git_commit() -> str:
         if commit.returncode != 0:
             return "unknown"
         sha = commit.stdout.strip()
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=REPO_ROOT,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        return f"{sha}-dirty" if status.stdout.strip() else sha
+        return f"{sha}-dirty" if _dirty_paths() else sha
     except Exception:
         return "unknown"
 
@@ -132,6 +194,77 @@ def _expected_corpus_sha256() -> Optional[str]:
         return None
 
 
+#: A result is superseded when the code that produced it is known to have had a
+#: defect that changes what the experiment measures. This is a fact about this
+#: repo's history, not a tunable, which is why it lives here rather than in
+#: config: 5cf65f9 fixed three such defects in Exp. 7-8 -- every arm paid AASS's
+#: cost vector, the queue feedback loop was dead so `least_loaded` collapsed onto
+#: `no_lb`, and prepare() built 32 records against README §6's 10^5. Numbers from
+#: before it are not comparable with numbers from after it.
+#:
+#: Judged at READ time from the commit the record already carries. A stamped
+#: run_meta.json is never rewritten -- this module's contract is that provenance
+#: is measured, never supplied, and editing a record to say what we now believe
+#: would make it a statement of belief. So the record keeps saying what it said,
+#: and the reader derives the consequence.
+SUPERSEDED_BEFORE: Dict[int, str] = {
+    7: "5cf65f9b8c0323252f604dd3ae2f8f0a599435b1",
+    8: "5cf65f9b8c0323252f604dd3ae2f8f0a599435b1",
+}
+
+
+def _is_ancestor(older: str, newer: str) -> Optional[bool]:
+    """True if ``older`` is an ancestor of ``newer``; None if git cannot say.
+
+    None rather than False when the answer is unknown -- a shallow clone or a
+    missing object must not silently downgrade to "not superseded".
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", older, newer],
+            cwd=REPO_ROOT, capture_output=True, timeout=10,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    if proc.returncode == 0:
+        return True
+    if proc.returncode == 1:
+        return False
+    return None  # 128: unknown revision, shallow clone, not a repo
+
+
+def superseded_reason(experiment_number: int, git_commit: str) -> Optional[str]:
+    """Why an already-written result should not be quoted, or None.
+
+    ``git_commit`` is taken verbatim from a run_meta.json, so it may carry the
+    ``-dirty`` suffix; the suffix is stripped before the ancestry test because
+    dirtiness is a separate question from staleness.
+    """
+    boundary = SUPERSEDED_BEFORE.get(experiment_number)
+    if not boundary or not git_commit:
+        return None
+    sha = git_commit[:-len("-dirty")] if git_commit.endswith("-dirty") else git_commit
+    if sha == "unknown":
+        return (
+            f"Exp. {experiment_number}: the producing commit is unknown, so it "
+            f"cannot be shown to postdate {boundary[:9]}"
+        )
+    older = _is_ancestor(sha, boundary)
+    if older is None:
+        return (
+            f"Exp. {experiment_number}: cannot determine whether {sha[:9]} "
+            f"predates {boundary[:9]} (commit not present in this clone)"
+        )
+    if older and sha != boundary:
+        return (
+            f"Exp. {experiment_number}: produced at {sha[:9]}, which predates "
+            f"{boundary[:9]} -- that commit fixed the shared costing overhead, "
+            f"the dead queue loop and the 32-record index, so this result does "
+            f"not measure what the experiment now measures"
+        )
+    return None
+
+
 def reportability(
     config: scheme_config.Configuration,
     *,
@@ -152,7 +285,7 @@ def reportability(
     reasons: List[str] = []
 
     host = verify_experiment_host()
-    if not host["is_pinned_experiment_host"]:
+    if not host["host_check_satisfied"]:
         reasons.append(
             f"not running on the pinned AWS experiment host: expected "
             f"{host['expected_instance_type']!r}, detected "

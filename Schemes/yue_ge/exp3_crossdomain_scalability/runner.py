@@ -101,7 +101,10 @@ def run(
             f"that rather than the §6 default {TOTAL_INDEX_SIZE:,}."
         )
 
-    actual_range = list(VARIABLE_RANGE)
+    # --points must FILTER the sweep, not merely name the output directory --
+    # see the note in this scheme's exp2 runner. This built every d from 2..10
+    # regardless of --points and wrote them all to a directory named for one.
+    actual_range = sweep.select(VARIABLE_RANGE, points)
     level = max(1, (params.access_levels + 1) // 2)
 
     # ---- d independent deployments over d shards of ONE fixed subset.

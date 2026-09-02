@@ -143,27 +143,28 @@ def report_running(show_storage: bool = True,
     if not running:
         print("  (nothing running — no compute charges accruing)")
     burn = 0.0
+    boot_cost = 0.0
     any_fallback = False
     now = dt.datetime.now(dt.timezone.utc)
     for inst in sorted(running, key=lambda r: r.get("Name") or ""):
         rate, fallback = hourly_rate(inst["Type"])
         any_fallback |= fallback
         burn += rate
-        uptime = ""
+        # Cost accrued, not a rate. A $/hr figure answers "how fast" when the
+        # question being asked is "how much" -- and it has to be multiplied by
+        # a duration nobody stated before it means anything.
+        detail = "uptime unknown"
         if inst.get("Launch"):
             try:
                 started = dt.datetime.fromisoformat(
                     inst["Launch"].replace("Z", "+00:00"))
                 hours = (now - started).total_seconds() / 3600
-                uptime = f"  up {hours:,.1f}h  (~{money(hours * rate)} this boot)"
+                boot_cost += hours * rate
+                detail = f"up {hours:>6,.1f}h   {money(hours * rate):>8} this boot"
             except ValueError:
                 pass
         mark = "*" if fallback else " "
-        print(f"  {(inst.get('Name') or '-'):<16} {inst['Type']:<12} "
-              f"{money(rate)}/hr{mark}{uptime}")
-
-    print(f"\n  BURN RATE  {money(burn)}/hr   {money(burn * 24)}/day   "
-          f"{money(burn * 24 * 7)}/week")
+        print(f"  {(inst.get('Name') or '-'):<16} {inst['Type']:<12} {detail}{mark}")
     if any_fallback:
         print("  * fallback price table, not the live Pricing API — estimate only")
 
@@ -175,13 +176,14 @@ def report_running(show_storage: bool = True,
             print(f"  {(inst.get('Name') or '-'):<16} {inst['Type']:<12} stopped")
         if gb and show_storage:
             print(f"  {gb:,.0f} GB attached  ~{money(gb * GP3_GB_MONTH)}/month storage")
-    return burn
+    return burn, boot_cost
 
 
 # ---------------------------------------------------------------------------
 # Cost Explorer — $0.01 per call
 # ---------------------------------------------------------------------------
-def cost_explorer(days: int, by_instance: bool, all_account: bool = False) -> None:
+def cost_explorer(days: int, by_instance: bool,
+                  all_account: bool = False) -> Optional[float]:
     """Billed cost. Scoped to this project unless --all-account is passed.
 
     THIS USED TO BE ACCOUNT-WIDE ALWAYS, under a header that said
@@ -226,12 +228,12 @@ def cost_explorer(days: int, by_instance: bool, all_account: bool = False) -> No
         else:
             print(f"  {err[:300]}")
         print("  (reporting $0 here would be wrong, so nothing is reported)")
-        return
+        return None
 
     results = (data or {}).get("ResultsByTime", [])
     if not results:
         print("\nCOST EXPLORER returned no data for the window.")
-        return
+        return None
 
     # With --group-by, per-day totals live under Groups[], and "Total" is an
     # empty dict. Reading only "Total" therefore sums to zero on a grouped
@@ -259,7 +261,7 @@ def cost_explorer(days: int, by_instance: bool, all_account: bool = False) -> No
         print("  Billing > Cost allocation tags (activation is NOT retroactive).")
         print("  Re-run with --all-account for the account total, but do not")
         print("  report that as this project's spend.")
-        return
+        return None
 
     total = 0.0
     per_service: Dict[str, float] = collections.defaultdict(float)
@@ -290,6 +292,58 @@ def cost_explorer(days: int, by_instance: bool, all_account: bool = False) -> No
                 print(f"    {name:<44} {money(amount)}")
     print("\n  Note: includes EBS, snapshots and transfer, not just instance-hours,")
     print("  so it will exceed (instances x hourly rate). Lags up to ~24h.")
+    return total
+
+
+def running_count() -> int:
+    """How many project instances are in the running state, for the outlook."""
+    code, out, _ = run([
+        "aws", "ec2", "describe-instances",
+        "--filters", "Name=tag:Project,Values=OJCOMS",
+        "Name=instance-state-name,Values=running",
+        "--query", "length(Reservations[].Instances[])", "--output", "text"])
+    try:
+        return int(out.strip()) if code == 0 else 0
+    except ValueError:
+        return 0
+
+
+def cost_outlook(spent: Optional[float], spent_label: str,
+                 burn: float, hours: float, n_running: int) -> None:
+    """What it has cost, and what it will cost if the fleet runs `hours` longer.
+
+    This replaces the old BURN RATE line. A $/hr figure answers "how fast am I
+    spending", but the decision in front of anyone reading this is "can I afford
+    to finish" -- and that needs a total, not a rate. The rate is still shown,
+    once, as the arithmetic basis: a projection nobody can check is worse than
+    no projection.
+
+    `spent` is month-to-date billed cost where Cost Explorer was queried, and
+    falls back to cost-accrued-this-boot under --running, which pays nothing.
+    The label says which, because they are not the same quantity -- MTD includes
+    storage and earlier boots, this-boot does not.
+    """
+    print()
+    print("COST")
+    print("-" * 72)
+    if spent is None:
+        print("  now         (unavailable — see the note above)")
+    else:
+        print(f"  now         {money(spent):>10}   {spent_label}")
+
+    if burn <= 0 or n_running == 0:
+        print("  projected   —          nothing is running, so this cannot grow")
+        return
+    added = burn * hours
+    print(f"  + {hours:,.1f}h      {money(added):>10}   "
+          f"{n_running} instance(s) at {money(burn)}/hr")
+    if spent is not None:
+        print(f"  {'=' * 10}")
+        print(f"  projected   {money(spent + added):>10}   if the fleet runs "
+              f"{hours:,.1f}h more")
+    print()
+    print(f"  Change --hours to project a different horizon. Stopping the fleet "
+          f"early saves\n  {money(burn)} for each hour not run.")
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -304,6 +358,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--running", action="store_true",
                         help="live state only; makes NO Cost Explorer call "
                              "(free)")
+    parser.add_argument("--hours", type=float, default=24.0,
+                        help="hours of further running to project (default 24). "
+                             "Use the experiment's REMAINING hours to get the "
+                             "cost-at-completion.")
     parser.add_argument("--all-account", action="store_true",
                         help="include instances outside Project=OJCOMS. "
                              "REPORTING ONLY -- they are never to be modified")
@@ -318,12 +376,18 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 1
     print(f"account {json.loads(out).get('Account', '?')}\n")
 
-    burn = report_running(all_account=args.all_account)
-    if not args.running:
-        cost_explorer(args.days, args.by_instance, args.all_account)
-        if burn > 0:
-            print(f"\n  At the current burn rate, another 24h adds "
-                  f"~{money(burn * 24)} of compute.")
+    burn, boot_cost = report_running(all_account=args.all_account)
+    n_running = running_count()
+    if args.running:
+        # --running pays nothing (no Cost Explorer call), so "spent" is what the
+        # current boots have accrued. Narrower than MTD and labelled as such.
+        cost_outlook(boot_cost, "accrued this boot (no billing query made)",
+                     burn, args.hours, n_running)
+    else:
+        spent = cost_explorer(args.days, args.by_instance, args.all_account)
+        scope = "account-wide" if args.all_account else "Project=OJCOMS"
+        cost_outlook(spent, f"billed, last {args.days}d, {scope}",
+                     burn, args.hours, n_running)
     return 0
 
 

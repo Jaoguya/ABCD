@@ -237,5 +237,5 @@ even now, with Phase II passing all of them.
    cannot match an index entry. This blocks Phase IV/VI, not Phase I/II, but it needs an
    author decision before Exp. 1–3 can be implemented.
 5. **`README.md` needs two Change Log lines** for the config additions (§16), and §14 issues
-   #5 and #7 need their status updated. Per AGENT_RULES constraint 1 the agent must not edit
+   #5 and #7 need their status updated. The agent must not edit
    `README.md` — these are for the user to apply.

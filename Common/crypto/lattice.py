@@ -28,7 +28,7 @@ cost (the R @ z product, ~47.7M multiply-adds), but it is a LOWER BOUND on
 the exact sampler's latency.
 
 Any Exp. 1/2/5/6 figure for Ref[52] must state which mode produced it. This
-is flagged in debug_history.md and needs sign-off before reportable runs.
+needs sign-off before reportable runs.
 """
 
 from __future__ import annotations
@@ -107,7 +107,7 @@ class LatticeParams:
 
         ``scheme`` has no default on purpose. It used to default to
         ``"zhuang_lattice_mabse"``, but that scheme was dropped 2026-08-27
-        (see debug_history.md) and its crypto.yaml block no longer has a
+        and its crypto.yaml block no longer has a
         ``lattice`` sub-block — a silent default here would have read from
         wherever the dropped scheme's config used to point, or raised a
         confusing error far from the actual cause. No caller currently

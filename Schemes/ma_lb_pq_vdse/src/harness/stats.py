@@ -1,6 +1,6 @@
 """Aggregation for the experiment harness — README §7.
 
-"Report mean ± 95% CI" over 30 runs. Two rules from AGENT_RULES' reviewer checks
+"Report mean ± 95% CI" over 30 runs. Two reviewer checks
 are enforced here rather than left to discipline:
 
 * **The CI is computed from the runs, never hardcoded.** :func:`confidence_interval`
@@ -111,7 +111,7 @@ def check_plausibility(
 ) -> Optional[str]:
     """Return a warning if a summary looks like a bug rather than a measurement.
 
-    AGENT_RULES' reviewer checks call out "zero variance or implausibly low
+    The reviewer checks call out "zero variance or implausibly low
     variance" as indicating "a bug or fabrication". Applied only to timings: a
     count that is the same every run (one trapdoor issued, one FSN touched) is
     correct, and warning about it would train the reader to ignore the warning.

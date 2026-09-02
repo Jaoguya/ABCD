@@ -79,6 +79,14 @@ class Run:
     secondary_1: Optional[float] = None
     secondary_2: Optional[float] = None
     status: str = "ok"
+    # "measured" = this run was executed. "projected" = this value was derived
+    # from a measured unit cost (Ref[41]'s search is q*N*(2u+1) pairings with no
+    # index and no early termination, so cost is linear in N and one measured
+    # record extrapolates). A projected row must never be readable as measured:
+    # it carries NO confidence interval, because there is no sample to interval
+    # over, and multiplying one run by 30 would state a replication that did
+    # not happen.
+    measurement_type: str = "measured"
 
 
 @dataclass
@@ -158,6 +166,51 @@ class Timer:
         self.elapsed_ms = (time.perf_counter_ns() - self._start) / 1e6
 
 
+class CpuTimer:
+    """Aggregate CPU time across this process AND its reaped children, in ms.
+
+    Exp. 2 parallelises the candidate scan across a fork pool, so a wall-clock
+    span reports aggregate work DIVIDED BY the worker count -- making the
+    published latency a function of how many cores the run happened to rent
+    rather than a property of the scheme. At P=64 the same point would read ~32x
+    faster than at P=2, and since this scheme is a BASELINE that would report it
+    as faster than it is, which is strengthening a baseline.
+
+    Aggregate CPU time removes P from the result: cores buy wall-clock, and the
+    number reported is the single-core-equivalent cost of the scan. Identical
+    pairings, identical match set -- only the clock changes.
+
+    ``RUSAGE_CHILDREN`` counts only children that have been REAPED, so the pool
+    must be closed inside the measured span; ``multiprocessing.Pool`` as a
+    context manager terminates and joins its workers on exit, which satisfies
+    that. The parent's own share is ``process_time`` (user+system, excluding
+    sleep), covering trapdoor generation, query planning and result assembly.
+    """
+
+    __slots__ = ("_start_self", "_start_children", "elapsed_ms", "wall_ms", "_wall")
+
+    @staticmethod
+    def _children_seconds() -> float:
+        try:
+            import resource
+            ru = resource.getrusage(resource.RUSAGE_CHILDREN)
+            return ru.ru_utime + ru.ru_stime
+        except Exception:  # noqa: BLE001 - not available on every platform
+            return 0.0
+
+    def __enter__(self) -> "CpuTimer":
+        self._start_self = time.process_time()
+        self._start_children = self._children_seconds()
+        self._wall = time.perf_counter_ns()
+        return self
+
+    def __exit__(self, *exc_info: object) -> None:
+        cpu = ((time.process_time() - self._start_self)
+               + (self._children_seconds() - self._start_children))
+        self.elapsed_ms = cpu * 1e3
+        self.wall_ms = (time.perf_counter_ns() - self._wall) / 1e6
+
+
 # ---------------------------------------------------------------------------
 # Output — README §9
 # ---------------------------------------------------------------------------
@@ -203,7 +256,7 @@ def write_results(path: Path, result: ExperimentResult) -> None:
     header = (
         "variable_value,primary_mean,primary_ci95,"
         "secondary_1_mean,secondary_1_ci95,"
-        "secondary_2_mean,secondary_2_ci95,n_runs"
+        "secondary_2_mean,secondary_2_ci95,n_runs,measurement_type"
     )
     lines = [header]
 
@@ -218,11 +271,25 @@ def write_results(path: Path, result: ExperimentResult) -> None:
     for variable_value in ordered:
         ok = [run for run in grouped[variable_value] if run.status == "ok"]
         if not ok:
-            lines.append(f"{variable_value},,,,,,,0")
+            lines.append(f"{variable_value},,,,,,,0,measured")
             continue
 
+        projected = any(run.measurement_type == "projected" for run in ok)
+        # A projected point gets its mean and the string "nan" for every CI.
+        #
+        # "nan" rather than an empty cell, deliberately. generate_plots.py:200
+        # reads `_to_float(cell) or 0.0`, so an EMPTY cell becomes 0.0 and
+        # matplotlib draws a zero-length error bar -- a 2pt cap that reads as a
+        # vanishingly TIGHT interval, the single most flattering misreading of
+        # a number that has no interval at all. nan is truthy so it survives
+        # the `or`, and matplotlib draws nothing for it. Verified by pixel
+        # count: the empty/0.0 path renders 13 extra pixels at the point, nan
+        # renders none, and the axis limits are identical either way. This is
+        # why the plotting code needs no change to represent it honestly.
+        ci_cell = (lambda _v: "nan") if projected else _format
+
         primary_mean, primary_ci = mean_ci95([run.primary for run in ok])
-        cells = [str(variable_value), _format(primary_mean), _format(primary_ci)]
+        cells = [str(variable_value), _format(primary_mean), ci_cell(primary_ci)]
 
         for attribute in ("secondary_1", "secondary_2"):
             values = [
@@ -232,11 +299,15 @@ def write_results(path: Path, result: ExperimentResult) -> None:
             ]
             if values:
                 mean, ci = mean_ci95(values)
-                cells.extend([_format(mean), _format(ci)])
+                cells.extend([_format(mean), ci_cell(ci)])
             else:
                 cells.extend(["", ""])
 
+        # len(ok) is what was EXECUTED. A projected point is derived from one
+        # measured unit cost, so this reads 1 -- never the count of points it
+        # was multiplied out to, and never a replication that did not happen.
         cells.append(str(len(ok)))
+        cells.append("projected" if projected else "measured")
         lines.append(",".join(cells))
 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")

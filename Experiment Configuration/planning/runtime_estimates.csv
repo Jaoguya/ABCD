@@ -20,11 +20,11 @@ guo_vdsse,exp5,100,0.089,30,5,35,3.1,0.0,MEASURED,high,macOS arm64 dev host; der
 guo_vdsse,exp5,1000,0.891,30,5,35,31.2,0.01,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
 guo_vdsse,exp5,10000,8.958,30,5,35,313.5,0.09,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
 guo_vdsse,exp5,100000,92.889,30,5,35,3251.1,0.9,MEASURED,high,macOS arm64 dev host; derate ~1.5x for m6i
-guo_vdsse,exp2,10000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
-guo_vdsse,exp2,50000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
-guo_vdsse,exp2,100000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
-guo_vdsse,exp2,500000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
-guo_vdsse,exp2,1000000,0.065,30,5,35,2.3,0.0,MEASURED,medium,search ~flat in N; build dominates
+guo_vdsse,exp2,10000,0.269,30,5,35,9.4,0.00,MEASURED,medium,measured: 269.2 ms at N=1e4; search scales ~LINEARLY in N -- the previous row said 0.065 s flat with note 'search ~flat in N', which guo's own data refutes (23x span over a 20x N range, 94x under at N=2e5)
+guo_vdsse,exp2,50000,1.229,30,5,35,43.0,0.01,MEASURED,medium,measured: 1229.1 ms at N=5e4; search scales ~LINEARLY in N -- the previous row said 0.065 s flat with note 'search ~flat in N', which guo's own data refutes (23x span over a 20x N range, 94x under at N=2e5)
+guo_vdsse,exp2,100000,2.924,30,5,35,102.3,0.03,MEASURED,medium,measured: 2923.6 ms at N=1e5; search scales ~LINEARLY in N -- the previous row said 0.065 s flat with note 'search ~flat in N', which guo's own data refutes (23x span over a 20x N range, 94x under at N=2e5)
+guo_vdsse,exp2,500000,15.400,30,5,35,539.0,0.15,EST,medium,extrapolated: 0.03089 ms/record linear fit; search scales ~LINEARLY in N -- the previous row said 0.065 s flat with note 'search ~flat in N', which guo's own data refutes (23x span over a 20x N range, 94x under at N=2e5)
+guo_vdsse,exp2,1000000,30.900,30,5,35,1081.5,0.30,EST,medium,extrapolated: 0.03089 ms/record linear fit; search scales ~LINEARLY in N -- the previous row said 0.065 s flat with note 'search ~flat in N', which guo's own data refutes (23x span over a 20x N range, 94x under at N=2e5)
 guo_vdsse,build_exp2,1000000,26992.117,1,0,1,26992.1,7.5,MEASURED,medium,nested build; 0.851ms/kw-doc pair
 guo_vdsse,exp4,10,0.001,30,5,35,0.1,0.0,MEASURED,high,
 guo_vdsse,exp4,50,0.001,30,5,35,0.1,0.0,MEASURED,high,

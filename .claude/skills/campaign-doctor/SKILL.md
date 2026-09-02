@@ -12,12 +12,12 @@ silently-wrong cost.
 ## Operating rule
 
 **Decide and act. Do not ask.** When there is a recommended option, take it.
-Record what was chosen and why in `debug_history.md`; that is the audit trail,
+Record what was chosen and why in the commit message; that is the audit trail,
 not a permission gate.
 
 The single exception is not a question, it is a **label**: a change that alters
 what a reported number means is `[results-affecting]` and must say so in
-`debug_history.md` and the commit message, and name what §V has to disclose.
+the commit message, and name what §V has to disclose.
 Make the change; make it loud. Never make one quietly.
 
 Three things are never traded away, whatever the schedule:
@@ -28,7 +28,7 @@ Three things are never traded away, whatever the schedule:
 2. **No baseline held to a weaker standard than the proposed scheme.** Same
    reportability gate, same corpus, same host, same methodology. An
    optimisation applied to one scheme must be considered for all of them.
-   (AGENT_RULES "Bias Detection".)
+   (That asymmetry is a bias defect.)
 3. **Never gate on speed.** Memory is a hardware limit; slowness is a finding.
    Refusing a scheme for being slow shapes which results exist.
 
@@ -142,7 +142,7 @@ Money is a constraint, and idle instances are the usual leak.
 - Every `results.csv` has `n_runs = 30` and a `run_meta.json` with
   `reportable: true`, or a recorded reason it is not
 - No `rc != 0` anywhere
-- Every cap and every results-affecting decision is in `debug_history.md` with
+- Every cap and every results-affecting decision is in the commit message with
   the measurement that forced it, and named for §V
 - `runtime-table` re-derived and blessed
 - Shards merged with `infra/merge_points.py`

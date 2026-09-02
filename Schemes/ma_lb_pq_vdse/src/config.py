@@ -242,6 +242,9 @@ class ExperimentSpec:
     values: Tuple[Any, ...]
     schemes: Tuple[str, ...]
     shares_runs_with: Optional[str] = None
+    #: README §7's warm-up ramp, seconds. Only Exp. 7-8 declare one; every other
+    #: experiment is plain warm and leaves this None.
+    ramp_seconds: Optional[float] = None
 
     @property
     def participates(self) -> bool:
@@ -636,7 +639,7 @@ class Configuration:
         if self.scheduler.allow_per_experiment_override:
             raise ConfigError(
                 "scheduler.yaml allows a per-experiment weight override; "
-                "AGENT_RULES fixes the weights across Exp. 7-8"
+                "the weights are fixed across Exp. 7-8"
             )
         raw_scheduler = load_raw(SCHEDULER_CONFIG_PATH)
         if (raw_scheduler.get("weights") or {}).get("sum_to_one"):
@@ -810,6 +813,10 @@ def load(*, reload: bool = False, validate: bool = True) -> Configuration:
                 values=tuple(_require(block, "values", source="global.yaml")),
                 schemes=tuple(_require(block, "schemes", source="global.yaml")),
                 shares_runs_with=block.get("shares_runs_with"),
+                ramp_seconds=(
+                    None if block.get("ramp_seconds") is None
+                    else float(block["ramp_seconds"])
+                ),
             )
         )
 

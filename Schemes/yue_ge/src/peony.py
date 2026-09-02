@@ -201,8 +201,8 @@ def list_gen(
     every level is populated per batch; at its own scale (2.2M files, 3 levels,
     batched updates) it holds overwhelmingly and the case never arises.
 
-    Implemented as published rather than repaired: AGENT_RULES forbids
-    strengthening a baseline beyond its published construction, and silently
+    Implemented as published rather than repaired: strengthening a baseline
+    beyond its published construction is forbidden, and silently
     fixing this would credit Peony with recall it does not have. Instead the
     condition is COUNTED (``UpdateBatch.sparse_levels``) so a run that hits it
     reports the fact rather than quietly losing results. ``workload.py`` also

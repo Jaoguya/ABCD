@@ -234,7 +234,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
     Deliberately mirrors ma_lb_pq_vdse's provenance.reportability() rather
     than inventing a looser rule -- a baseline held to a weaker standard than
     the proposed scheme would bias the comparison in the proposed scheme's
-    favour, which AGENT_RULES "Bias Detection" forbids.
+    favour, which is a bias defect.
 
     Ref[55] is symmetric-only (HMAC-SHA-256 / AES / keccak256 / GGM-PRF), so
     there is no pairing-backend condition to check -- the Ref[41] failure mode
@@ -275,7 +275,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
         from Common.crypto.config import verify_experiment_host
 
         host = verify_experiment_host()
-        if not host["is_pinned_experiment_host"]:
+        if not host["host_check_satisfied"]:
             reasons.append(
                 f"not running on the pinned AWS experiment host: expected "
                 f"{host['expected_instance_type']!r}, detected "

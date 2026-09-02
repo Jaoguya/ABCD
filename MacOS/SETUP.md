@@ -72,7 +72,7 @@ python -c "import oqs; print(oqs.oqs_version())"     # expect 0.16.0
 `liboqs-python` auto-builds its native library on first import and fails with
 `/bin/sh: cmake: command not found` unless cmake is present. Installing the **cmake
 PyPI wheel into the venv** keeps the toolchain self-contained and leaves the system
-untouched — this is what was done originally (`debug_history.md` 2026-08-06) and it
+untouched — this is what was done originally (2026-08-06) and it
 puts liboqs in `~/_oqs`.
 
 **Do not fall back to `kyber-py`.** It works, but `crypto.yaml` marks it

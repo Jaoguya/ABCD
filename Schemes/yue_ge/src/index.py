@@ -34,7 +34,7 @@ hold before they write anything — and the dict cost ~245 B of CPython object
 overhead per node (int key, tuple, two ``bytes`` headers, table slot) on top of
 the ~312 B of actual payload. At the published ``N = 10^6`` sweep point that is
 17.8 GB against ``global.yaml``'s 16 GiB host; the dense array is 9.9 GB and
-fits. Measured, not estimated: see ``debug_history.md``.
+fits. Measured, not estimated.
 
 Address ``0`` is reserved as the end-of-chain terminator (``next_addr = 0``),
 which is why addresses run ``1..|A_c|`` as the paper writes them rather than

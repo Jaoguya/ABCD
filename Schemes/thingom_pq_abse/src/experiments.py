@@ -43,12 +43,14 @@ import os
 import multiprocessing as mp
 import random
 from dataclasses import dataclass
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
 
 from Common.crypto.pairing import PairingBackend
 
 from . import scheme
-from .harness import ExperimentResult, Measurement, Run, Timer, measure_point
+from .harness import (
+    CpuTimer, ExperimentResult, Measurement, Run, Timer, mean_ci95, measure_point,
+)
 from .lsss import and_gate_policy
 
 SCHEME_NAME = "thingom_pq_abse"
@@ -89,7 +91,11 @@ _MP_PLAN: Any = None
 # 2 is right on the pinned m6i.xlarge: its "4 vCPU" is 2 physical cores plus
 # hyperthreading, and 4 processes measured SLOWER on this compute-bound work.
 # On a wider host, set THINGOM_SEARCH_PROCESSES to the physical core count.
-# Measured cost at N = 10^6, 35 runs: 380.8h at 2 procs, 23.8h at 32, 11.9h at 64.
+# Measured cost at N = 10^6, 35 runs: 380.8h at 2 procs. The 23.8h-at-32 and
+# 11.9h-at-64 figures once recorded here were NOT reachable: chunksize was a
+# constant 8 chunks, so those pools ran 8 workers and idled the rest. Fixed
+# below. Exp. 2 now runs at n=1 for this scheme, which is what makes the full
+# 10^4-10^6 sweep affordable at all (~4.7h on 8 workers vs ~165h at n=35).
 #
 # §V MUST STATE the process count: reported latency is aggregate work divided
 # across P workers, not a single-core figure.
@@ -135,9 +141,23 @@ def _parallel_search(
         )
     ctx = mp.get_context("fork")
     with ctx.Pool(processes=_SEARCH_PROCESSES) as pool:
+        # Chunk count must follow the POOL, not a constant. This was
+        # `len(index) // 8`, which yields exactly 8 chunks at any N >= 8
+        # regardless of _SEARCH_PROCESSES -- so a 32- or 64-process pool handed
+        # work to 8 workers and left the rest idle, capping speedup at 8x however
+        # wide the host. Measured by counting distinct worker PIDs: 32 procs ->
+        # 8 used, 24 idle; 64 procs -> 8 used, 56 idle. The 23.8h-at-32 and
+        # 11.9h-at-64 figures in the comment above are not reachable by that
+        # code, and the real floor was 380.8h/8 ~= 47.6h.
+        #
+        # Four chunks per worker rather than one: the scan is uniform, but an
+        # exact 1:1 split makes the whole map wait on whichever worker draws the
+        # slowest core, and finer chunks cost nothing here because the payload
+        # is one int.
+        chunks = max(1, _SEARCH_PROCESSES * 4)
         results = pool.map(
             _mp_search_worker, range(len(index)),
-            chunksize=max(1, len(index) // 8),
+            chunksize=max(1, len(index) // chunks),
         )
     hits: set = set()
     pairings = 0
@@ -273,6 +293,7 @@ def experiment_2(
     repetitions: int,
     warmups: int,
     max_seconds_per_run: float,
+    on_point_complete: Optional[Callable[[int, "ExperimentResult"], None]] = None,
 ) -> ExperimentResult:
     """Full online search path over an index of N entries.
 
@@ -283,6 +304,7 @@ def experiment_2(
 
     primary      search latency, ms
     secondary_1  entries traversed
+    secondary_1  wall-clock ms at P workers (primary is aggregate CPU ms)
     secondary_2  pairings computed
     """
     result = ExperimentResult(
@@ -290,11 +312,38 @@ def experiment_2(
         experiment="exp2",
         columns={
             "variable": "N (index size)",
-            "primary": "search_latency_ms",
-            "secondary_1": "entries_traversed",
+            # CPU time, not wall-clock: the scan is parallelised, so wall-clock
+            # would divide aggregate work by the worker count and make the
+            # published figure a function of the host's core count. The other
+            # four schemes run Exp. 2 single-process, where wall-clock and CPU
+            # time coincide, so this is what makes the column comparable across
+            # schemes rather than what makes it different.
+            "primary": "search_cpu_time_ms",
+            # Replaces `entries_traversed`, which restated the variable column
+            # (a full scan traverses exactly N). Wall-clock is the useful thing
+            # to carry here: it keeps the parallel speedup visible instead of
+            # hiding it inside the primary.
+            "secondary_1": "wall_clock_ms",
             "secondary_2": "pairings_computed",
         },
     )
+
+    # Fired after each sweep point so the caller can persist what is finished.
+    # The 10^6 point is most of this experiment's wall-clock, so without it a
+    # crash or a stop late in the sweep discards every completed point before
+    # it as well. Between points only -- never inside a CpuTimer span -- so the
+    # flush I/O cannot land in a measurement.
+    def _point_done(size: int) -> None:
+        if on_point_complete is None:
+            return
+        try:
+            on_point_complete(size, result)
+        except Exception as exc:  # noqa: BLE001 - a failed flush is never fatal
+            print(
+                f"  [warn] partial-result flush failed at N={size}: "
+                f"{type(exc).__name__}: {exc}",
+                flush=True,
+            )
 
     for size in index_sizes:
         keyword = workload.keywords[0]
@@ -303,6 +352,9 @@ def experiment_2(
             result.runs.extend(
                 _budget_exceeded_runs(size, repetitions, estimate, max_seconds_per_run)
             )
+            # Flushed like any other point: a budget-exceeded row is a recorded
+            # outcome, not an absence, and a reader needs to see it.
+            _point_done(size)
             continue
 
         index = build_index(workload, keyword, size)
@@ -316,7 +368,13 @@ def experiment_2(
                 for word in selected
             ]
             pairings = 0
-            with Timer() as timer:
+            # CPU time, not wall-clock. The scan is spread across a fork pool,
+            # so a wall-clock span would report aggregate work divided by the
+            # worker count -- i.e. a number that moves with the core count of
+            # whatever host was rented, for a BASELINE scheme. See
+            # harness.CpuTimer. Wall-clock is still captured and reported as a
+            # secondary so the parallel speedup stays visible rather than hidden.
+            with CpuTimer() as timer:
                 # Native mode: q independent scans, client-side intersection.
                 matches: Optional[set] = None
                 for token in tokens:
@@ -333,8 +391,8 @@ def experiment_2(
                     pairings += token_pairings
                     matches = hits if matches is None else (matches & hits)
             return Measurement(
-                primary=timer.elapsed_ms,
-                secondary_1=float(size),
+                primary=timer.elapsed_ms,          # aggregate CPU ms
+                secondary_1=timer.wall_ms,         # wall-clock at P workers
                 secondary_2=float(pairings),
             )
 
@@ -346,7 +404,181 @@ def experiment_2(
                 warmups=warmups,
             )
         )
+        _point_done(size)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Experiment 2 by PROJECTION from a measured unit cost
+# ---------------------------------------------------------------------------
+# Ref[41]'s published sweep to N = 10^6 is not runnable: no index, no early
+# termination, q*N*(2u+1) real pairings per query. So the curve is DERIVED from
+# a measured per-candidate cost rather than measured at each N. That is the
+# user's instruction and the paper's own assumption; what follows is what makes
+# it honest rather than merely cheap.
+#
+# WHY NOT SIMPLY MEASURE ONE RECORD AND MULTIPLY. A query at N=1 costs
+#     cost(1) = fixed + per_candidate
+# where `fixed` is q trapdoor generations plus one prepare_query per trapdoor --
+# work done ONCE per query whatever N is. Multiplying cost(1) by N charges that
+# setup N times: at 10^6, a million trapdoor generations for a scan that does q.
+# It does not merely add noise, it inflates thingom systematically. thingom is a
+# BASELINE, so inflating it inflates the proposed scheme's apparent advantage --
+# the same defect class as the Exp. 2 estimand asymmetry, and the reason this is
+# worth thirty extra seconds of measurement.
+#
+# THREE anchors, not two: two points FIT a line and cannot TEST one. Linearity
+# is the load-bearing assumption of the entire projection, so it is measured and
+# reported as a residual rather than asserted.
+#
+# P=1 AT THE ANCHORS, forced. At N=1..1000 there is nothing to parallelise, but
+# the pool still forks, and CpuTimer sums RUSAGE_CHILDREN -- so fork and
+# teardown land inside the measurement and are attributed to `fixed`, the exact
+# term being isolated. It inflates the small anchors more than a large N, which
+# tilts the slope too. The primary is aggregate CPU and P-invariant by design,
+# so forcing P=1 here costs nothing in comparability.
+_PROJECTION_ANCHORS = (1, 100, 1000)
+
+
+def experiment_2_projected(
+    workload: Workload,
+    *,
+    index_sizes: Sequence[int],
+    q: int,
+    repetitions: int,
+    warmups: int,
+    anchors: Sequence[int] = _PROJECTION_ANCHORS,
+) -> Tuple[ExperimentResult, Dict[str, Any]]:
+    """Measure a unit cost at small N, then project the published sweep.
+
+    Returns (result, provenance). Every projected point is reconstructible from
+    `provenance` without re-running anything: it carries the anchor means and
+    CIs, the fitted slope and intercept, the linearity residual, and the worker
+    count the anchors were measured at.
+    """
+    global _SEARCH_PROCESSES
+
+    result = ExperimentResult(
+        scheme=SCHEME_NAME,
+        experiment="exp2",
+        columns={
+            "variable": "N (index size)",
+            "primary": "search_cpu_time_ms",
+            "secondary_1": "wall_clock_ms",
+            "secondary_2": "pairings_computed",
+        },
+    )
+
+    keyword = workload.keywords[0]
+    # Drawn ONCE, before the anchor loop, and reused at every anchor -- the same
+    # discipline guo's exp2 requires. Inside the loop it would vary per anchor
+    # and contaminate the slope with query selectivity.
+    selected = [keyword] + [
+        workload.rng.choice(workload.keywords) for _ in range(q - 1)
+    ]
+
+    saved_procs = _SEARCH_PROCESSES
+    _SEARCH_PROCESSES = 1
+    anchor_stats: List[Dict[str, Any]] = []
+    try:
+        for n in anchors:
+            index = build_index(workload, keyword, n)
+
+            def operation(index: List[scheme.KeywordIndex] = index) -> Measurement:
+                tokens = [
+                    scheme.trapdoor(workload.params, workload.key, word)
+                    for word in selected
+                ]
+                pairings = 0
+                with CpuTimer() as timer:
+                    matches: Optional[set] = None
+                    for token in tokens:
+                        plan = scheme.prepare_query(
+                            workload.params, index[0].structure, token
+                        )
+                        hits, tp = _parallel_search(
+                            workload.params, index, token, plan
+                        )
+                        pairings += tp
+                        matches = hits if matches is None else (matches & hits)
+                return Measurement(
+                    primary=timer.elapsed_ms,
+                    secondary_1=timer.wall_ms,
+                    secondary_2=float(pairings),
+                )
+
+            runs = measure_point(
+                operation, variable_value=n,
+                repetitions=repetitions, warmups=warmups,
+            )
+            ok = [r for r in runs if r.status == "ok"]
+            if not ok:
+                raise RuntimeError(f"anchor N={n} produced no successful run")
+            mean, ci = mean_ci95([r.primary for r in ok])
+            pv = [r.secondary_2 for r in ok if r.secondary_2 is not None]
+            anchor_stats.append(
+                {"n": n, "mean_ms": mean, "ci95_ms": ci, "n_runs": len(ok),
+                 "pairings_mean": (sum(pv) / len(pv)) if pv else None}
+            )
+    finally:
+        _SEARCH_PROCESSES = saved_procs
+
+    # Pairings are q*N*(2u+1) by construction -- exactly linear, not a fit.
+    # Taken from the largest anchor, where relative rounding error is smallest.
+    biggest = max(anchor_stats, key=lambda a: a["n"])
+    pairings_per_record = (
+        biggest["pairings_mean"] / biggest["n"] if biggest.get("pairings_mean") else None
+    )
+
+    # Least squares on (n, mean). Three points, so the residual is meaningful.
+    xs = [a["n"] for a in anchor_stats]
+    ys = [a["mean_ms"] for a in anchor_stats]
+    k = len(xs)
+    mx = sum(xs) / k
+    my = sum(ys) / k
+    denom = sum((x - mx) ** 2 for x in xs)
+    slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / denom if denom else 0.0
+    intercept = my - slope * mx
+    resid = [y - (intercept + slope * x) for x, y in zip(xs, ys)]
+    rel_resid = [
+        (r / y if y else 0.0) for r, y in zip(resid, ys)
+    ]
+
+    for n in index_sizes:
+        result.runs.append(
+            Run(
+                variable_value=n,
+                run_id=1,
+                primary=intercept + slope * n,
+                secondary_1=None,   # wall-clock is not projectable: it depends on P
+                secondary_2=(pairings_per_record * n) if pairings_per_record else None,
+                status="ok",
+                measurement_type="projected",
+            )
+        )
+
+    provenance = {
+        "method": "projected from a measured unit cost",
+        "anchors": anchor_stats,
+        "anchor_search_processes": 1,
+        "anchor_repetitions": repetitions,
+        "anchor_warmups": warmups,
+        "fit": {
+            "slope_ms_per_record": slope,
+            "intercept_ms": intercept,
+            "model": "cost(N) = intercept + slope * N",
+        },
+        "linearity_residuals_ms": resid,
+        "linearity_residuals_relative": rel_resid,
+        "max_abs_relative_residual": max((abs(r) for r in rel_resid), default=0.0),
+        "note": (
+            "Points at the published sweep sizes are PROJECTED, not measured. "
+            "The intercept is the per-query fixed cost (trapdoor generation and "
+            "query planning); projecting from cost(1)*N would have charged it "
+            "once per record and inflated this baseline."
+        ),
+    }
+    return result, provenance
 
 
 # ---------------------------------------------------------------------------

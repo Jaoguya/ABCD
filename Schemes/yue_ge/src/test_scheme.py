@@ -222,8 +222,8 @@ def test_sparse_level_batch_is_a_documented_limitation():
     The paper never states the "every level populated per batch" assumption. At
     its own scale (2.2M files, 3 levels) it holds and the case never surfaces.
 
-    Asserted as-is rather than repaired: AGENT_RULES forbids strengthening a
-    baseline past its published construction. The condition is counted so runs
+    Asserted as-is rather than repaired: strengthening a baseline past its
+    published construction is forbidden. The condition is counted so runs
     surface it — see the ``sparse_levels`` assertion below.
     """
     p = _params()

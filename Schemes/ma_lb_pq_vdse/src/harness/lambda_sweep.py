@@ -29,7 +29,7 @@ vector cannot be chosen to flatter Exp. 7 at Exp. 8's expense.
 This writes ``lambda_sweep.csv`` (every vector, so the choice is auditable) and
 prints the winner. It does NOT edit ``scheduler.yaml`` — promoting a result to
 ``status: fixed`` is a deliberate, reviewable commit, not a side effect of
-running a script. AGENT_RULES forbids per-figure retuning: one sweep, one
+running a script. Per-figure retuning is forbidden: one sweep, one
 vector, identical across Exp. 7 and Exp. 8.
 """
 
