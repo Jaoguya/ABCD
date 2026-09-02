@@ -42,7 +42,7 @@ from infra import sweep
 # README §8 — does not exist in the repository yet. Every value that affects
 # a NUMBER (attribute count, pairing curve) is read from crypto.yaml instead,
 # so it is covered by the config hash in run_meta.json.
-DEFAULT_REPETITIONS = 30
+DEFAULT_REPETITIONS = 10
 DEFAULT_WARMUPS = 5
 DEFAULT_Q = 5
 DEFAULT_SEED = 20260804
@@ -363,6 +363,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         "exp2_search_processes": experiments._SEARCH_PROCESSES,
         "exp3_search_processes": 1,  # single-threaded on purpose; see experiment_3()
         "exp2_index_sizes": list(EXP2_INDEX_SIZES),
+        "exp2_projection": _PROJECTION_PROVENANCE,
         "exp3_total_index_size": EXP3_TOTAL_INDEX_SIZE,
         "exp3_domain_counts": list(EXP3_DOMAIN_COUNTS),
     }
@@ -414,6 +415,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     return 0
 
 
+#: Filled by Exp. 2's projection so run_meta can carry the anchors, the fitted
+#: slope and intercept, and the linearity residual -- every projected point
+#: must be reconstructible from the record without re-running anything.
+_PROJECTION_PROVENANCE: Dict[str, Any] = {}
+
+
 def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespace,
              *, on_point_complete=None):
     points = getattr(args, "points", None)
@@ -425,15 +432,28 @@ def _run_one(number: str, workload: experiments.Workload, args: argparse.Namespa
             warmups=args.warmups,
         )
     if number == "2":
-        return experiments.experiment_2(
+        # PROJECTED, not swept. Ref[41] has no index and no early termination, so
+        # a real N=10^6 search is ~q*10^6*(2u+1) pairings and days of compute --
+        # not runnable, which is why the published sweep was never reproduced.
+        # Real searches run to N=10,000; the four larger points are derived from
+        # the fitted per-record slope. Cost is linear in N by construction, so
+        # the curve is a straight line and that is a property of the scheme, not
+        # an artefact of the fit.
+        #
+        # The projection uses the SLOPE, never cost(1)*N: a single search costs
+        # `fixed + per_candidate`, where `fixed` is trapdoor generation and query
+        # planning done once per query. Multiplying that by N would charge the
+        # setup a million times over and inflate this baseline -- and inflating a
+        # baseline inflates our own advantage.
+        result, projection = experiments.experiment_2_projected(
             workload,
             index_sizes=sweep.select(EXP2_INDEX_SIZES, points),
             q=DEFAULT_Q,
             repetitions=args.runs,
             warmups=args.warmups,
-            max_seconds_per_run=args.max_seconds_per_run,
-            on_point_complete=on_point_complete,
         )
+        _PROJECTION_PROVENANCE.update(projection)
+        return result
     return experiments.experiment_3(
         workload,
         domain_counts=sweep.select(EXP3_DOMAIN_COUNTS, points),

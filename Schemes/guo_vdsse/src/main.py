@@ -59,7 +59,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--runs",
         type=int,
-        default=30,
+        default=10,
         help="Number of measured runs per data point (default: 30).",
     )
     parser.add_argument(

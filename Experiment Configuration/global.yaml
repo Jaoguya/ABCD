@@ -35,7 +35,10 @@ defaults:
 # Measurement methodology — README §7.
 # -----------------------------------------------------------------------------
 measurement:
-  repetitions: 30               # published: §V "the average of 30 independent runs"
+  # REDUCED 30 -> 10 on the user's instruction, 2026-09-03. Section V's
+  # "average of 30 independent runs" must be updated to 10 to match, or the
+  # manuscript states a replication count the data does not have.
+  repetitions: 10               # was 30; §V still says 30 -- see note above
   confidence_interval: 0.95     # published: §V "95% confidence intervals"
   warmup_runs: 5                # benchmark: discarded, not counted in the 30
   clock:

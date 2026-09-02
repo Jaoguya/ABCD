@@ -37,7 +37,7 @@ generator:
                                 # ramp samples are excluded from both metrics
   steady_state_seconds: 60      # benchmark: long enough that a 100 ms
                                 # utilization sample yields 600 points per run
-  repetitions: 30               # published: §V, 30 independent runs
+  repetitions: 10               # was 30; reduced 2026-09-03, §V must match
 
 # -----------------------------------------------------------------------------
 # Arrival trace — recorded ONCE and replayed byte-identically to all four

@@ -581,10 +581,18 @@ class Configuration:
             raise ConfigError("authorities.initial_vid must be >= 0")
 
         # Methodology (README §7).
-        if self.measurement.repetitions != 30:
+        #
+        # WAS `!= 30`. Reduced to 10 on the user's instruction, 2026-09-03. The
+        # check is kept rather than deleted because its job is to stop the config
+        # and the MANUSCRIPT drifting apart: §V currently says "the average of 30
+        # independent runs" and must be changed to 10, or the paper states a
+        # replication count the data does not have. Fewer runs also widen every
+        # confidence interval -- with n=10 the t-multiplier is 2.26 against 2.05
+        # at n=30, so intervals grow ~10% before any change in variance.
+        if self.measurement.repetitions != 10:
             raise ConfigError(
-                f"measurement.repetitions is {self.measurement.repetitions}; §V "
-                f"specifies 30 independent runs"
+                f"measurement.repetitions is {self.measurement.repetitions}; the "
+                f"campaign is configured for 10 independent runs (§V must match)"
             )
         if not 0.0 < self.measurement.confidence_interval < 1.0:
             raise ConfigError("measurement.confidence_interval must be in (0, 1)")

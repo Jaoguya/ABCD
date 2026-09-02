@@ -134,18 +134,31 @@ def run(
     def runner(q: int) -> RunResult:
         keywords = [pool[i % len(pool)] for i in range(q)]
 
-        if variant == "peony":
-            def gen() -> List[Any]:
-                return [
-                    peony.token_gen(state.key, kw, level, batch_count)
-                    for kw in keywords
-                ]
-        else:
-            def gen() -> List[Any]:
-                return [
-                    peony_plus.token_gen(state, kw, level, batch_count)
-                    for kw in keywords
-                ]
+        # ALWAYS the Data User's token, in BOTH variants.
+        #
+        # This used to call peony_plus.token_gen under the peony_plus variant,
+        # which is not what Exp. 1 measures. peony_plus.token_gen is the user's
+        # F.Cons call PLUS the DATA OWNER's assistance -- MSRE.KLRev over the
+        # revoked-user list, and the deletion filter. Its own docstring says so:
+        # "The data user's own cost is one F.Cons call; the owner adds sk_{R_l}
+        # and the deletion filter."
+        #
+        # The manuscript's Exp. 1 states "only online trapdoor generation is
+        # measured", and Ref[55] §V-A puts token generation with the DATA USER
+        # while the owner performs update and revocation. Charging the owner's
+        # revocation work to the user's trapdoor made this scheme look ~11x
+        # slower than it is at q=1 (1.494 ms against Scheme35's 0.007 ms) and
+        # measured a different quantity from every other scheme in the figure.
+        #
+        # The user's cost is identical under both variants, so this is not a
+        # variant switch -- Exp. 4 still needs peony_plus and still gets it.
+        # RESULTS-AFFECTING: Scheme30's Exp. 1 latency falls. Authorised by the
+        # user on 2026-09-03.
+        def gen() -> List[Any]:
+            return [
+                peony.token_gen(state.key, kw, level, batch_count)
+                for kw in keywords
+            ]
 
         elapsed_ms, tokens = measure_ns(gen)
         return RunResult(

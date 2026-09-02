@@ -599,7 +599,7 @@ def test_config_loads_and_validates():
     assert config.defaults.keywords_per_query == 5      # §V
     assert config.defaults.domains == 4                 # §V
     assert config.topology.fog_search_nodes == 4        # §V
-    assert config.measurement.repetitions == 30         # §V
+    assert config.measurement.repetitions == 10         # §V (was 30, 2026-09-03)
     assert config.measurement.confidence_interval == 0.95
 
 
@@ -750,13 +750,13 @@ def test_config_validation_catches_outlier_dropping():
 def test_config_validation_catches_wrong_repetition_count():
     config = config_mod.load()
     broken = dataclasses.replace(
-        config, measurement=dataclasses.replace(config.measurement, repetitions=10)
+        config, measurement=dataclasses.replace(config.measurement, repetitions=30)
     )
     try:
         broken.validate()
     except config_mod.ConfigError:
         return
-    raise AssertionError("repetitions != 30 must fail validation")
+    raise AssertionError("repetitions != 10 must fail validation")
 
 
 def test_config_missing_key_names_the_full_path():

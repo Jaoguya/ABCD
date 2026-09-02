@@ -437,7 +437,11 @@ def experiment_2(
 # term being isolated. It inflates the small anchors more than a large N, which
 # tilts the slope too. The primary is aggregate CPU and P-invariant by design,
 # so forcing P=1 here costs nothing in comparability.
-_PROJECTION_ANCHORS = (1, 100, 1000)
+# Anchors are REAL searches. The user's instruction (2026-09-03) is to search
+# for real up to 10,000 records and project the rest, so the top anchor is the
+# 10^4 sweep point itself: that point is MEASURED, not projected, and the four
+# larger points are derived from the fitted slope.
+_PROJECTION_ANCHORS = (1_000, 5_000, 10_000)
 
 
 def experiment_2_projected(
@@ -480,6 +484,7 @@ def experiment_2_projected(
     saved_procs = _SEARCH_PROCESSES
     _SEARCH_PROCESSES = 1
     anchor_stats: List[Dict[str, Any]] = []
+    anchor_runs: Dict[int, List[Run]] = {}
     try:
         for n in anchors:
             index = build_index(workload, keyword, n)
@@ -514,6 +519,7 @@ def experiment_2_projected(
             ok = [r for r in runs if r.status == "ok"]
             if not ok:
                 raise RuntimeError(f"anchor N={n} produced no successful run")
+            anchor_runs[n] = list(ok)
             mean, ci = mean_ci95([r.primary for r in ok])
             pv = [r.secondary_2 for r in ok if r.secondary_2 is not None]
             anchor_stats.append(
@@ -544,7 +550,25 @@ def experiment_2_projected(
         (r / y if y else 0.0) for r, y in zip(resid, ys)
     ]
 
+    # A sweep point that IS an anchor was really measured -- emit its actual runs
+    # rather than a value fitted through itself, so the figure carries a genuine
+    # measurement with a genuine CI at that N and the projection starts above it.
+    measured_at = {a["n"]: a for a in anchor_stats}
     for n in index_sizes:
+        if n in measured_at:
+            for r in anchor_runs.get(n, []):
+                result.runs.append(
+                    Run(
+                        variable_value=n,
+                        run_id=r.run_id,
+                        primary=r.primary,
+                        secondary_1=r.secondary_1,
+                        secondary_2=r.secondary_2,
+                        status=r.status,
+                        measurement_type="measured",
+                    )
+                )
+            continue
         result.runs.append(
             Run(
                 variable_value=n,

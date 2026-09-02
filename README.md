@@ -20,6 +20,28 @@ New to this project? Start with **[SystemConfiguration.md](SystemConfiguration.m
 
 ---
 
+## Branching: there is one branch, and it is `main`
+
+**Never create a branch. Never work on one. Commit straight to `main`.**
+
+Set by the user on 2026-09-03 after `exp78-diagnosis`, `final-debug`, `Zhuang`,
+`ma-lb-pq-vdse` and `ref-36-XB-Muse` had to be reconciled by hand. That merge hit
+59 add/add conflicts, every one of them on generated artefacts -- results.csv,
+raw_runs.csv, run_meta.json and figures -- because two branches had independently
+produced results for the same experiment. Resolving those by hand is exactly the
+operation that silently replaces a fresh measurement with a stale one, and it
+nearly did: one side held guo/Scheme35 Exp. 2 at the commit with both correctness
+fixes, the other held the superseded run, and only the `git_commit` field inside
+each `run_meta.json` distinguished them.
+
+Result files are tracked, so a branch is not a cheap experiment here the way it is
+in ordinary code. Two branches that both run a scheme produce two conflicting
+histories of the same number, and git cannot tell you which is real.
+
+If an experiment needs isolating, isolate it with `--points` and a separate output
+directory, not with a branch.
+
+
 ## 1. Environment
 
 | Component | Specification |
