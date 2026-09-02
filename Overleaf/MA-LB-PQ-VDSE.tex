@@ -1766,7 +1766,6 @@ Accordingly, its trapdoor-generation cost is normalized as
 $O(q)T_{\rm CPRF}$ for a query containing $q$ keywords.
 
 The notation used in the analysis is summarized in
-Table~\ref{tab:cost-notation}.
 \begin{table}[t]
 \centering
 \caption{Notation used in the computation-cost analysis.}
@@ -1782,7 +1781,7 @@ $d$ & Number of participating administrative domains \\
 $x$ & Number of candidate/returned documents \\
 $t$ & Number of keywords in an updated document \\
 $u$ & Number of user attributes \\
-$e$ & Number of rows in an LSSS access structure \\
+$e$ & Number of satisfying LSSS rows \\
 $|\mathcal{T}|$ & Number of generated query/search tokens \\
 $n_{\rm cand}$ & Number of candidate records after index filtering \\
 $N$ & Number of records in the authenticated searchable index \\
@@ -1795,10 +1794,11 @@ $\delta$ & Number of authorization/revocation updates \\
 \hline
 $T_H$ & One cryptographic hash computation \\
 $T_P$ & One bilinear pairing operation \\
-$T_E$ & One encryption/exponentiation operation \\
-$T_B$ & One lattice-basis-related operation \\
+$T_E$ & One exponentiation/encryption operation \\
+$T_{\rm Mul}$ & One group multiplication operation \\
 $T_{\rm PRF}$ & One pseudorandom-function evaluation \\
-$T_{\rm CPRF}$ & One constrained-PRF key generation operation \\
+$T_{\rm CPRF}$ & One constrained-PRF key-generation operation \\
+$T_{\rm Punc}$ & One puncturable-PRF puncturing operation \\
 $T_L$ & One encrypted-index lookup/set-processing operation \\
 $T_{\rm BF}$ & One bitmap/Bloom-filter lookup operation \\
 $T_F$ & One filter-based candidate lookup/test operation \\
@@ -1809,7 +1809,6 @@ $T_{\rm MAC}$ & One message-authentication-code verification operation \\
 \hline
 \end{tabular}
 \end{table}
-
 
 \begin{table*}[t]
 \centering
@@ -1848,33 +1847,29 @@ N/A
 \\
 Scheme~\cite{ref35}
 &
-$O(d)T_P$
+$O(1)T_{\rm PRF}$
+&
+$O(xq)$
 &
 \makecell{
-$O(dxq)$\\
-$(T_P+T_H)$
+$O(t)(T_H+T_{\rm PRF})$\\
+$+T_{\rm Punc}$
 }
 &
-\makecell{
-$O(t)$\\
-$(T_P+T_H)$
-}
-&
-$O(x)T_H$
+$O(x)T_{\rm MAC}$
 &
 N/A
 \\
-
 Scheme~\cite{ref41}
 &
 \makecell{
-$O(d(u+e))$\\
-$(T_H+T_E)+dT_B$
+$O(u+q)(T_H+T_{\rm Mul})$\\
+$+T_E$
 }
 &
 \makecell{
-$O(de)$\\
-$(T_E+T_B)$
+$(2e+1)T_P$\\
+$+O(e)(T_E+T_{\rm Mul})$
 }
 &
 N/A
@@ -1936,43 +1931,35 @@ $+O(\log d)T_{\rm MT}$
 \end{table*}
 
 Table~\ref{tab:cost} highlights the different computational trade-offs
-of the compared schemes. Scheme~\cite{ref35} incurs pairing-dependent
-costs for trapdoor generation, search, and keyword update, with search
-overhead increasing with the numbers of domains, candidates, and query
-keywords. Scheme~\cite{ref41} instead incurs attribute- and
-LSSS-dependent costs, causing trapdoor and search overhead to grow with
-the number of domains and access-structure complexity. Neither scheme
-explicitly supports cross-domain authorization synchronization.
-
-Scheme~\cite{ref54} avoids pairing-based search through PRF-derived
-tokens and hybrid encrypted indexing. Its trapdoor cost is linear in
-the number of query tokens, while search depends on index lookup and
-candidate filtering; result verification further requires signature,
-MAC, and logarithmic Merkle-proof processing. Scheme~\cite{ref30}
-adopts a symmetric multilevel dynamic searchable-encryption design.
-Its user-side trapdoor generation requires only a constrained-PRF
-operation, while both search and public verification scale as
-$O(n_w^l)$ with the number of matching files accessible at level $l$.
-Its dynamic update cost is $O(k)$, supporting efficient addition and
-deletion, although it does not provide cross-domain authorization
-synchronization. The paper explicitly reports Peony++ search,
-update, and verification complexities of $O(n_w^l)$, $O(k)$, and
-$O(n_w^l)$, respectively. :contentReference[oaicite:0]{index=0}
+of the compared schemes. Scheme~\cite{ref30} uses constrained-PRF-based
+trapdoor generation, with search and public verification scaling as
+$O(n_w^l)$ and dynamic updates as $O(k)$. Scheme~\cite{ref35} relies
+primarily on symmetric cryptography: trapdoor generation requires
+constant PRF work, conjunctive search scales as $O(xq)$, and verification
+grows linearly with the returned results. Its dynamic updates require
+per-keyword hash/PRF processing and puncturable-PRF operations.
+Scheme~\cite{ref41}, in contrast, incurs attribute- and
+access-structure-dependent costs, with trapdoor generation involving
+hash, multiplication, and exponentiation operations and search dominated
+by repeated bilinear pairings over satisfying LSSS rows.
+Scheme~\cite{ref54} uses PRF-derived tokens and hybrid encrypted-index
+filtering, while its verifiable retrieval additionally requires Merkle,
+signature, and MAC verification. None of these baselines explicitly
+supports cross-domain authorization synchronization.
 
 The proposed framework separates cross-domain authorization from
-candidate-level search. Trapdoor generation costs $O(q)T_P$,
-independent of the number of domains, while domain resolution requires
-only $O(dT_H)$ before restricting search to $n_{\mathrm{eff}}$
-authorized candidates. Keyword updates and result verification are
-mainly hash- and Merkle-based, with costs of
+candidate-level encrypted search. Trapdoor generation costs
+$O(q)T_P$, while authorization resolution requires only $O(dT_H)$
+before search is restricted to $n_{\mathrm{eff}}$ authorized
+candidates. Keyword updates and verification cost
 $O(k)T_H+O(\log n)T_{\mathrm{MT}}$ and
 $O(r)T_{\mathrm{MT}}+O(d)T_{\mathrm{Ver}}$, respectively.
-Moreover, unlike the baselines, the proposed framework explicitly
-supports authorization synchronization at
-$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Hence, although pairing is
-retained for trapdoor generation, the dominant online operations rely
-primarily on hashing, filtering, and logarithmic Merkle-tree processing,
-providing an efficient trade-off for dynamic cross-domain retrieval.
+Furthermore, authorization synchronization requires only
+$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Thus, despite retaining
+pairing cost for trapdoor generation, the proposed framework shifts
+the dominant online workload toward authorization pruning, hashing,
+filtering, and logarithmic Merkle-tree operations, providing an
+efficient trade-off for dynamic cross-domain retrieval.
 \subsection{Performance Evaluation}
 
 \subsubsection{Experimental Setup}
