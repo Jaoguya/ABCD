@@ -247,7 +247,7 @@ These decide what the numbers mean.
 - **Exp. 4** — client-side verification only: Merkle proof, `Commit_i*` recomputation, chain consistency. IPFS fetch and decryption excluded.
 - **Exp. 5** — incremental update only. A global rebuild means Phase VII is implemented wrong. `k` counts (keyword, document) pairs — the corpus has 18.8M of them, so 10⁵ is available; read as distinct keywords it would be impossible against a 2,102 vocabulary.
 - **Exp. 6** — IAS end-to-end: commitment recomputation → Merkle path update → IAS message → selective FSN propagation until all affected FSNs report the new `VID`. Report FSNs touched; selective propagation is the claim.
-- **Exp. 7–8** — closed-loop generator, fixed concurrency per point, recorded arrival trace so all variants see identical workloads. Utilization sampled every 100 ms. Index size is the §6 default 10⁵, sized as Exp. 2 sizes it (`index_size // keywords_per_record`) so `N` means the same thing in both. The 30 s ramp runs once per sweep point inside setup, not once per run — "warm after a ramp" means the 30 retained runs all see a warm system, and ramping per run would time a warm-up 30 times over.
+- **Exp. 7–8** — closed-loop generator, fixed concurrency per point, recorded arrival trace so all variants see identical workloads. Utilization sampled every 100 ms. Index size is the §6 default 10⁵, sized as Exp. 2 sizes it (`index_size // keywords_per_record`) so `N` means the same thing in both. The 30 s ramp runs once per sweep point inside setup, not once per run — "warm after a ramp" means the 10 retained runs all see a warm system, and ramping per run would time a warm-up 10 times over.
   - **Query domain span is a benchmark choice, not published.** §V fixes `d = 4` but never says how many domains one query touches. The Data User population is uniform over spans 1…`d` with the starting domain rotated, so every domain appears equally often and no FSN is structurally favoured. A single user authorized across all domains — which is what this was — makes `C^auth` constant on every node and leaves the scheduler nothing to discriminate on.
   - **Cross-node forwards is not reported, and cannot be.** At `d = m = 4` each FSN holds exactly one domain, and the scheduler only ever considers nodes serving an authorized domain, so the chosen node serves exactly one of a request's `k` domains *whichever node it is* — the forward count is `k−1` under all four variants, measured identically at 600 over 400 requests. Peak queue depth replaces it: it measures node congestion, which is what the claim is actually about, and it is only measurable now that the FSN queue is fed by the dispatch path.
 
@@ -276,11 +276,14 @@ The λ weights are load-bearing — they define the AASS selection rule and a re
 
 ## 7. Measurement Methodology
 
-- **Repetitions.** 30 runs per point after 5 discarded warm-ups. Report mean ± 95% CI.
+- **Repetitions.** 10 runs per point after 5 discarded warm-ups. Report mean ± 95% CI.
+  Reduced from 30 on 2026-09-03. Note the 95% t multiplier is 2.26 at n=10 against
+  2.05 at n=30, so every interval is ~10% wider than a banked one before any change
+  in variance — widths are not comparable across the two campaigns.
 - **Clock.** `time.perf_counter_ns()` for latency; wall-clock for throughput.
 - **Isolation.** One experiment at a time per instance, no concurrent plotting or preprocessing.
 - **Cold vs warm.** State which. Defaults: Exp. 1–6 warm, Exp. 7–8 warm after a 30 s ramp.
-- **Outliers.** Keep them. If a run fails, record `status=failed` in `raw_runs.csv` and re-run to restore n=30 rather than dropping it.
+- **Outliers.** Keep them. If a run fails, record `status=failed` in `raw_runs.csv` and re-run to restore n=10 rather than dropping it.
 - **Provenance.** Each `results.csv` gets a `run_meta.json`: git commit, instance type, Python and library versions, dataset SHA-256, corpus type, config hashes, UTC start time.
 
 BLAS threads must be pinned (`OMP_NUM_THREADS` etc.) — numpy claims all cores by default, which would make a lattice-heavy scheme's latency depend on core count (was Ref[52]'s concern; applies equally to Ref[54]'s lattice CP-ABE once implemented). `provision.sh` sets this; `environment_report()` records what was in force.
@@ -408,7 +411,7 @@ Each collaborator owns one or more scheme folders. `git pull` before starting. W
 Commit format: `<type>(<scope>): <summary>` with types `feat` `fix` `data` `exp` `config` `docs` `refactor` `plot` `chore` and scope naming the scheme or area. Keep the first line under 72 chars, one logical change per commit, and separate results commits from code commits so provenance stays clear. Add `Results-Affecting: yes` in the footer when a change means earlier results are no longer comparable, and `Experiment: exp2` when committing results.
 
 ```
-exp(guo_vdsse): run exp1 trapdoor generation (n=30, Synthea)
+exp(guo_vdsse): run exp1 trapdoor generation (n=10, Synthea)
 
 Experiment: exp1
 Dataset: synthea (SHA-256: d991c695...)
