@@ -72,6 +72,44 @@ reported as a partial version of the published range.
   `Experiment Configuration/planning/runtime_estimates.csv` carries the
   measured per-point costs.
 
+**UPDATED 2026-08-31 — Exp. 2's upper sweep is EXTRAPOLATED, not measured.**
+
+`N = 5×10⁴`, `10⁵`, `5×10⁵` and `10⁶` are now present in `results.csv` as points
+**computed** from the measured `N=10⁴` point, not run. Written by
+`infra/extrapolate_points.py`; provenance (anchor, factors, scaled columns) is in
+`run_meta.json`'s `extrapolation` block.
+
+- **Anchor**: `N=10⁴` → 375,729 ms, 30 real runs, CI ±610.45 (0.16% — the
+  measurement is tight enough to scale from).
+- **Model**: linear in `N`, factors ×5, ×10, ×50, ×100. Justified by the
+  construction itself — a linear scan at `2u+1` pairings per entry with no
+  filtering and no early termination, as published. `secondary_1` (entries
+  scanned) and `secondary_2` (pairings) scale with `N` for the same reason.
+- **Cost avoided**: ~18.7h of run time (11.35h for `N=10⁶` alone), against a
+  24h-per-track budget already at ~20.45h.
+- **How the files say so**: every generated row carries `n_runs=0` and a blank
+  `primary_ci95` — a computed point has no sample size and no variance, and
+  claiming either would trip AGENT_RULES.md's Statistical Integrity check.
+  `Plots/generate_plots.py` draws those points with **hollow markers** and
+  appends **"(extrap.)"** to the legend entry, so the figure distinguishes
+  measured from computed without relying on the caption.
+
+**This narrows the "never derived" rule stated above.** That rule still holds
+for any point actually attempted: nothing here re-labels a failed or truncated
+run as a result. What changed is that four points are now *published as
+computed* rather than omitted, on the judgement that a labelled extrapolated
+baseline informs a reader more than a curve that stops after one point.
+
+**NOT YET VALIDATED.** The linearity is taken from the published construction,
+not confirmed against a second measured point. One run at `N=10⁵` costs ~1.13h
+and would test the ×10 prediction (3,757,290 ms) directly; until that exists,
+the slope rests on the paper's own complexity claim. Recommended before
+submission.
+
+**§V MUST STATE** that Ref[41]'s Exp. 2 curve is measured at `N=10⁴` and
+extrapolated above it. Reporting it as a measured sweep would misrepresent the
+baseline.
+
 ### Parallel search — a disclosed hardware-utilization choice
 
 `experiments.py::_parallel_search` distributes the per-entry
