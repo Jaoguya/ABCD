@@ -119,7 +119,8 @@ def run(
     # ---- base index: built ONCE, over the README §6 default N. Untimed. ----
     #
     # This used to be rebuilt INSIDE runner(), over the ENTIRE corpus, on every
-    # run: 35 runs x 4 k-values = 140 rebuilds of 1,143,792 records. Two
+    # run: 15 runs x 4 k-values = 60 rebuilds of 1,143,792 records (it was
+    # 35 x 4 = 140 when this was found, at the then-current 30 repetitions). Two
     # separate deviations, neither of them deliberate:
     #
     #   1. Rebuilding per run contradicts this repo's own reference standard --

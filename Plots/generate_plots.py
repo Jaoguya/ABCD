@@ -254,9 +254,9 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
                 # zero-length bar with caps on the point, which reads as "we
                 # measured this very precisely": the exact opposite of the
                 # truth. NaN makes matplotlib omit the bar entirely, so an
-                # n=1 point is visibly bare next to the n=30 points beside it.
+                # n=1 point is visibly bare next to the n=10 points beside it.
                 # Points measured once are legitimate for a baseline whose
-                # 30-run cost is prohibitive (thingom_pq_abse's Exp. 2 is
+                # 10-run cost is prohibitive (thingom_pq_abse's Exp. 2 is
                 # ~10.9 h for ONE run at N=10^6); claiming a CI for them is
                 # not. See AGENT_RULES.md "Statistical Integrity".
                 if n < 2 or ci is None:

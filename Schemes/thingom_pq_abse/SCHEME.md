@@ -49,7 +49,7 @@ The multi-keyword reading diverges from the paper's **own** Table III (`:485`), 
 
 ## Feasibility
 
-Search is a linear scan at `2u+1` pairings per entry with no filtering. At the Exp. 2 sweep top (`N=10⁶`, `u=10`, `q=5`) that is ~1.05×10⁸ pairings for **one** run, before 30 repetitions.
+Search is a linear scan at `2u+1` pairings per entry with no filtering. At the Exp. 2 sweep top (`N=10⁶`, `u=10`, `q=5`) that is ~1.05×10⁸ pairings for **one** run, before 10 repetitions.
 
 `--max-seconds-per-run` (default 1800 s) bounds each point. Over-budget points are written as `status=failed` with the estimate and budget in the status string, so the gap is visible in `raw_runs.csv`. The estimate decides only whether to *attempt* a point — any point attempted is measured end to end, never derived (README §13).
 

@@ -29,7 +29,7 @@ FEASIBILITY
 Ref[41] has no index structure. Search is a linear scan in which every
 candidate costs ``2u+1`` pairings, and there is no filtering step of any
 kind. At the Exp. 2 sweep top of N=10^6 with u=10 that is ~2.1x10^7 pairings
-per single run, before the 30 repetitions. This is not a bug and not a slow
+per single run, before the 10 repetitions. This is not a bug and not a slow
 implementation — it is what the construction says. ``max_seconds_per_run``
 bounds each point and records over-budget points as ``status=failed`` with
 the reason, rather than letting a sweep run for days or, worse, tempting an

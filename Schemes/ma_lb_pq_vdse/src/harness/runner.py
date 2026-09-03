@@ -5,7 +5,7 @@ a different repetition count, discard a run, or invent an interval.
 
 What README §7 requires, and where it is enforced:
 
-* **30 runs after 5 discarded warm-ups.** :func:`run_point`. Warm-ups are executed
+* **10 runs after 5 discarded warm-ups.** :func:`run_point`. Warm-ups are executed
   and thrown away, never recorded — a warm-up in ``raw_runs.csv`` would be a run
   that never happened at the stated cache state.
 * **Keep outliers.** Nothing here trims. A run that raises is recorded with
@@ -52,7 +52,7 @@ STATUS_OK = "ok"
 STATUS_FAILED = "failed"
 
 #: A run is retried this many times before the point is abandoned. README §7 says
-#: to re-run a failure "to restore n=30"; a bound stops a deterministic failure
+#: to re-run a failure "to restore n=10"; a bound stops a deterministic failure
 #: from looping forever, and the abandoned point keeps its failed rows so the
 #: gap is visible rather than silent.
 MAX_RETRIES_PER_RUN = 3

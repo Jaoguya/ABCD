@@ -1324,8 +1324,8 @@ class SchedulerAblation:
 
         Here rather than in ``measure`` because ``run_point`` calls ``prepare``
         once per point and excludes it from every timing — which is what "warm
-        AFTER a ramp" means: ramp once, then take the 30 runs on a warm system.
-        Putting it in ``measure`` would ramp 30 times per point and cost ~5 h
+        AFTER a ramp" means: ramp once, then take the 10 runs on a warm system.
+        Putting it in ``measure`` would ramp 10 times per point and cost ~1.7 h
         across the campaign to measure the same steady state.
         """
         if not requests:

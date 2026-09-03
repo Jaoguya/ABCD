@@ -3,7 +3,7 @@
 Timing uses ``time.perf_counter_ns()`` (README §7). Warm-ups are discarded
 before the retained runs begin. Failed runs are recorded with
 ``status=failed`` and are NOT dropped — README §7 is explicit that a failure
-is re-run to restore n=30 rather than deleted, so the row has to survive to
+is re-run to restore n=10 rather than deleted, so the row has to survive to
 be visible.
 """
 

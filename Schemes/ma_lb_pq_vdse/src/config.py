@@ -599,7 +599,7 @@ class Configuration:
         if self.measurement.drop_outliers:
             raise ConfigError(
                 "measurement.drop_outliers is true; README §7 requires outliers "
-                "to be kept and failed runs re-run to restore n=30"
+                "to be kept and failed runs re-run to restore n=10"
             )
 
         # Each experiment's sweep must contain the default operating point, so

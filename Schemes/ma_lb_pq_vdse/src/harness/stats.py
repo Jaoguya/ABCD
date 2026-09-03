@@ -1,6 +1,6 @@
 """Aggregation for the experiment harness — README §7.
 
-"Report mean ± 95% CI" over 30 runs. Two reviewer checks
+"Report mean ± 95% CI" over 10 runs. Two reviewer checks
 are enforced here rather than left to discipline:
 
 * **The CI is computed from the runs, never hardcoded.** :func:`confidence_interval`
@@ -8,7 +8,7 @@ are enforced here rather than left to discipline:
   narrower interval could be supplied.
 * **Outliers are kept.** There is deliberately no trimming, winsorising or
   filtering function in this module. README §7: "Keep them. If a run fails, record
-  ``status=failed`` in ``raw_runs.csv`` and re-run to restore n=30 rather than
+  ``status=failed`` in ``raw_runs.csv`` and re-run to restore n=10 rather than
   dropping it."
 
 Uses Student's *t*, not the normal approximation: at n = 30 the difference is

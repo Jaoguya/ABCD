@@ -82,8 +82,11 @@ EXP1_Q_VALUES = list(range(1, 21))
 #   1. experiments.py's chunksize was `len(index) // 8`, a constant 8 chunks at
 #      any process count, so speedup capped at 8x however wide the host. It now
 #      follows _SEARCH_PROCESSES.
-#   2. Exp. 2 runs at n=1 for this scheme, not the usual 30 + 5 warm-ups. At
-#      n=35 the sweep is ~165h; at n=1 it is ~4.7h on 8 workers.
+#   2. Exp. 2 runs at n=1 for this scheme, not the usual 10 + 5 warm-ups. At
+#      n=15 the sweep is ~71h; at n=1 it is ~4.7h on 8 workers. (The ~165h
+#      figure this was sized against was n=35, before the 30 -> 10 change;
+#      rescaling on the same per-run basis gives ~71h, still far past budget,
+#      so the n=1 decision below is unchanged.)
 #
 # n=1 is a REAL cost and must be disclosed, not hidden: this scheme's Exp. 2
 # points carry no confidence interval and no error bar, while every other

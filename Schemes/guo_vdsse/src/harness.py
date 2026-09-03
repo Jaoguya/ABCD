@@ -3,7 +3,7 @@
 Handles the mechanical parts of running benchmark experiments per README §7:
   - Warm-up discarding (5 runs)
   - Per-run recording to raw_runs.csv
-  - Aggregation to results.csv (mean ± 95% CI from 30 retained runs)
+  - Aggregation to results.csv (mean ± 95% CI from 10 retained runs)
   - run_meta.json provenance
 
 NO scheme logic lives here — the harness is agnostic to what is being
@@ -85,7 +85,7 @@ def run_experiment(
     with ``primary_metric`` and ``secondary_metrics`` populated.
 
     The warm-up / retained split follows README §7:
-      "30 runs per point after 5 discarded warm-ups."
+      "10 runs per point after 5 discarded warm-ups."
 
     ``on_point_complete(value, results_so_far)`` fires after each sweep point
     finishes, so a caller can persist partial results instead of holding the
