@@ -40,6 +40,7 @@ from Schemes.yue_ge.exp2_search_latency import runner as exp2
 from Schemes.yue_ge.exp3_crossdomain_scalability import runner as exp3
 from Schemes.yue_ge.exp4_verification_overhead import runner as exp4
 from Schemes.yue_ge.exp5_keyword_update import runner as exp5
+from Schemes.yue_ge.exp9_verification_granularity import runner as exp9
 from Schemes.yue_ge.src.params import SchemeParams
 
 EXPERIMENT_MAP = {
@@ -47,6 +48,7 @@ EXPERIMENT_MAP = {
     "2": ("exp2_search_latency", exp2),
     "3": ("exp3_crossdomain_scalability", exp3),
     "4": ("exp4_verification_overhead", exp4),
+    "9": ("exp9_verification_granularity", exp9),
     "5": ("exp5_keyword_update", exp5),
 }
 

@@ -242,6 +242,11 @@ class ExperimentSpec:
     values: Tuple[Any, ...]
     schemes: Tuple[str, ...]
     shares_runs_with: Optional[str] = None
+    #: Parameters this experiment PINS while it sweeps ``variable`` -- e.g. Exp. 9
+    #: fixes ``returned_results`` at 20,000 and sweeps the tamper count. Kept in
+    #: global.yaml rather than in each scheme's runner so all three schemes read
+    #: one number; a per-runner constant is how the three drift apart.
+    held_constant: Optional[Any] = None
     #: README §7's warm-up ramp, seconds. Only Exp. 7-8 declare one; every other
     #: experiment is plain warm and leaves this None.
     ramp_seconds: Optional[float] = None
@@ -821,6 +826,7 @@ def load(*, reload: bool = False, validate: bool = True) -> Configuration:
                 values=tuple(_require(block, "values", source="global.yaml")),
                 schemes=tuple(_require(block, "schemes", source="global.yaml")),
                 shares_runs_with=block.get("shares_runs_with"),
+                held_constant=block.get("held_constant"),
                 ramp_seconds=(
                     None if block.get("ramp_seconds") is None
                     else float(block["ramp_seconds"])

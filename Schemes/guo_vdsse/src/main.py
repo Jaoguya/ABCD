@@ -32,7 +32,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from Dataset.corpus import load_verified_corpus
 
-from . import exp1_trapdoor, exp2_search, exp3_crossdomain, exp4_verify, exp5_update
+from . import (exp1_trapdoor, exp2_search, exp3_crossdomain, exp4_verify,
+               exp5_update, exp9_granularity)
 from .scheme import GuoVDSSE
 
 
@@ -41,6 +42,7 @@ EXPERIMENT_MAP = {
     "2": ("exp2_search_latency", exp2_search),
     "3": ("exp3_crossdomain_scalability", exp3_crossdomain),
     "4": ("exp4_verification_overhead", exp4_verify),
+    "9": ("exp9_verification_granularity", exp9_granularity),
     "5": ("exp5_keyword_update", exp5_update),
 }
 

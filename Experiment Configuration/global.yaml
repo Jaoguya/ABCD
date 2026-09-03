@@ -77,6 +77,20 @@ experiments:
     # (SS VI-A), so Exp. 4 finally has a third participant. Ref[41] and Ref[54]
     # have no result-verification primitive at all.
     schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
+  exp9_verification_granularity:
+    variable: tampered_records
+    # Fixed result-set size, swept tamper count. Exp. 4 asks what verification
+    # COSTS; this asks what it BUYS. Guo and Ge verify with a single accumulator
+    # over the complete result set, so a failure is all-or-nothing -- the batch
+    # is discarded and no record can be named. Ours verifies a Merkle path per
+    # record, so the failed records are identified and excised.
+    #
+    # t = 0 is deliberately NOT swept: the figure is log-log, and the no-tamper
+    # case is already Exp. 4. src/tests pin the t=0 behaviour instead.
+    values: [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
+    held_constant:
+      returned_results: 20000
+    schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
   exp5_keyword_update:
     variable: keyword_document_pairs
     values: [100, 1000, 10000, 100000]            # published: §V "10^2-10^5"

@@ -603,10 +603,11 @@ def test_config_loads_and_validates():
     assert config.measurement.confidence_interval == 0.95
 
 
-def test_config_all_eight_experiments_include_us():
-    """SCHEME.md: the proposed scheme participates in all 8 experiments."""
+def test_config_every_experiment_includes_us():
+    """SCHEME.md: the proposed scheme participates in all 8 README §5
+    experiments, plus Exp. 9 (tamper granularity, added 2026-09-03)."""
     config = config_mod.load()
-    assert len(config.our_experiments()) == 8
+    assert len(config.our_experiments()) == 9
 
 
 def test_config_authority_topology_matches_the_decision():

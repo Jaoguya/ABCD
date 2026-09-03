@@ -1615,6 +1615,156 @@ class Exp8LoadBalance(SchedulerAblation):
         )
 
 
+# ===========================================================================
+# Exp. 9 — Verification Granularity under Tampering
+# ===========================================================================
+@dataclass
+class Exp9VerificationGranularity:
+    """What verification BUYS, where Exp. 4 measures what it COSTS.
+
+    The result-set size is PINNED (``global.yaml``: ``returned_results: 20000``)
+    and the number of tampered records is swept. The question is not how fast a
+    scheme verifies but what it can do once verification fails.
+
+    **Why this is a fair comparison and not a strawman.** Guo's Alg. 4 checks a
+    single XOR-accumulated tag computed over the COMPLETE result set
+    (``guo_vdsse/src/scheme.py:566-590``), and Peony++'s prooflist entry commits
+    to every file added at that level in that batch (``yue_ge`` §VI-A). In both,
+    a subset does not balance -- ``yue_ge``'s own runner docstring says
+    "verifying a truncated subset is *supposed* to fail -- the XOR would not
+    cancel". So neither construction can bisect its way to the bad record
+    without the server issuing fresh proofs per sub-batch, which neither paper
+    defines. The all-or-nothing outcome is a property of the published designs,
+    not of this implementation, and §V must say so in those terms.
+
+    **The tamper.** One byte of an index entry's ``T_j``, leaving ``CID_i``
+    intact so the bundle stays well-formed. ``entry_leaf`` covers every field, so
+    Phase VIII Step 1 rejects it as "the proof's leaf is not the entry this
+    bundle names" -- a detected tamper, not a malformed bundle. Those are
+    different code paths (``VerificationError`` vs ``accepted = False``) and
+    timing the wrong one would measure parse failure.
+
+    **Not swept at t = 0.** The figure is log-log and the untampered case is
+    Exp. 4. ``test_exp9_granularity.py`` pins the t=0 behaviour instead, which is
+    where a false-positive rejection would show up.
+    """
+
+    config: scheme_config.Configuration
+    source: SyntheticRecordSource
+    name: str = "exp9_verification_granularity"
+    number: int = 9
+    variable: str = "tampered_records"
+    values: Tuple[Any, ...] = ()
+    #: Not a timing. The primary is how many records the client must throw away,
+    #: which is the whole point of the comparison; latency rides along as a
+    #: secondary so the price of the granularity stays visible in the same table.
+    primary: MetricSpec = MetricSpec("records_discarded", COUNT)
+    secondaries: Tuple[MetricSpec, ...] = (
+        MetricSpec("usable_recovered", COUNT),
+        MetricSpec("tampered_localised", COUNT),
+        MetricSpec("latency", MS, is_timing=True),
+    )
+    returned_results: int = 0
+
+    def __post_init__(self) -> None:
+        spec = self.config.experiment("exp9")
+        if not self.values:
+            self.values = tuple(spec.values)
+        if not self.returned_results:
+            held = spec.held_constant or {}
+            if "returned_results" not in held:
+                raise scheme_config.ConfigError(
+                    "exp9 must pin returned_results in global.yaml's "
+                    "held_constant block; sweeping both would make the figure "
+                    "unreadable"
+                )
+            self.returned_results = int(held["returned_results"])
+
+    def _tampered(
+        self, bundle: proof_mod.VerificationBundle
+    ) -> proof_mod.VerificationBundle:
+        """One flipped bit in ``T_j``. ``CID_i`` is untouched on purpose."""
+        token = bytearray(bundle.entry.token)
+        token[0] ^= 0x01
+        entry = dataclasses.replace(bundle.entry, token=bytes(token))
+        return dataclasses.replace(bundle, entry=entry)
+
+    def prepare(self, value: Any) -> Any:
+        tampered = int(value)
+        wanted = self.returned_results
+        if tampered > wanted:
+            raise ValueError(
+                f"cannot tamper {tampered} of {wanted} returned records"
+            )
+        per_record = self.source.keywords_per_record
+        record_count = max(1, -(-wanted // per_record))
+        deployment = build_deployment(
+            config=self.config, source=self.source, records=record_count
+        )
+        bundles: List[proof_mod.VerificationBundle] = []
+        for record in deployment.records:
+            bundles.extend(
+                proof_mod.build_response(record["commitment"], record["entries"])
+            )
+            if len(bundles) >= wanted:
+                break
+        if len(bundles) < wanted:
+            raise RuntimeError(
+                f"built {len(bundles)} bundles but exp9 pins {wanted}; the "
+                f"deployment is too small"
+            )
+        bundles = bundles[:wanted]
+
+        # Evenly spaced rather than clustered or random: a run whose tampered
+        # records all land in one region would measure locality, not
+        # granularity, and a seeded shuffle would put a different set under each
+        # sweep point.
+        marked = sorted(
+            {(i * wanted) // tampered for i in range(tampered)}
+        ) if tampered else []
+        for index in marked:
+            bundles[index] = self._tampered(bundles[index])
+
+        return dict(
+            deployment=deployment,
+            bundles=tuple(bundles),
+            auth_root=deployment.owner_profile.auth_root,
+            tampered=len(marked),
+        )
+
+    def measure(self, prepared: Any) -> Sample:
+        d = prepared["deployment"]
+        checker = vledger_mod.chain_checker(d.ledger, check_chain_integrity=False)
+        started = time.perf_counter_ns()
+        batch = proof_mod.verify_response(
+            prepared["bundles"],
+            auth_root=prepared["auth_root"],
+            require_version_match=False,
+            chain_check=checker,
+        )
+        elapsed = time.perf_counter_ns() - started
+
+        discarded = len(batch.rejected)
+        expected = prepared["tampered"]
+        # A mismatch either way is a real failure, not a metric: fewer means a
+        # tamper went undetected (soundness), more means an intact record was
+        # thrown away (completeness). Both invalidate the figure, so neither is
+        # allowed to be silently averaged into it.
+        if discarded != expected:
+            raise RuntimeError(
+                f"{discarded} records rejected but {expected} were tampered; "
+                f"verification is neither sound nor complete under this build"
+            )
+        return Sample(
+            primary=float(discarded),
+            secondaries={
+                "usable_recovered": float(batch.accepted_count),
+                "tampered_localised": float(len(batch.rejected)),
+                "latency": elapsed / 1e6,
+            },
+        )
+
+
 EXPERIMENTS = {
     1: Exp1TrapdoorGeneration,
     2: Exp2SearchLatency,
@@ -1624,6 +1774,7 @@ EXPERIMENTS = {
     6: Exp6AuthorizationSync,
     7: Exp7Throughput,
     8: Exp8LoadBalance,
+    9: Exp9VerificationGranularity,
 }
 
 
@@ -1648,7 +1799,8 @@ def build_experiment(
     """
     if number not in EXPERIMENTS:
         raise KeyError(
-            f"no experiment {number}; README §5 defines 1-8"
+            f"no experiment {number}; README §5 defines 1-8, and Exp. 9 is "
+            f"the tamper-granularity companion to Exp. 4"
         )
     kwargs = dict(config=config, source=source or SyntheticRecordSource())
     if variant and "variant" in {f.name for f in dataclasses.fields(EXPERIMENTS[number])}:
@@ -1671,4 +1823,5 @@ __all__ = [
     "Exp6AuthorizationSync",
     "Exp7Throughput",
     "Exp8LoadBalance",
+    "Exp9VerificationGranularity",
 ]

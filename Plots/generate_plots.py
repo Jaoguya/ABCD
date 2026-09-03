@@ -107,6 +107,14 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                    log_x=True, log_y=True),
     ExperimentSpec(7, "exp7_search_throughput", "fig_exp7_throughput.pdf",
                    "Concurrent queries", "Throughput (queries/s)"),
+    # Exp. 9 is the Exp. 4 companion: Exp. 4 asks what verification COSTS,
+    # Exp. 9 what it BUYS. Log-log because the gap is the story -- ours tracks
+    # t exactly while the accumulator schemes sit flat at the full result-set
+    # size, so at t=1 the two are ~4 orders apart and at t=1000 ~1.
+    ExperimentSpec(9, "exp9_verification_granularity",
+                   "fig_exp9_granularity.pdf",
+                   "Tampered records $t$", "Records discarded",
+                   log_x=True, log_y=True),
     ExperimentSpec(8, "exp8_load_balance", "fig_exp8_balance.pdf",
                    "Concurrent queries", "FSN utilization std. dev.",
                    panels=(

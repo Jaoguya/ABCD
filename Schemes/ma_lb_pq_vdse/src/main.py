@@ -44,6 +44,7 @@ FOLDERS = {
     6: "exp6_authorization_sync",
     7: "exp7_search_throughput",
     8: "exp8_load_balance",
+    9: "exp9_verification_granularity",
 }
 
 
@@ -58,7 +59,8 @@ def parse_experiments(value: str) -> List[int]:
             continue
         if not part.isdigit() or int(part) not in FOLDERS:
             raise argparse.ArgumentTypeError(
-                f"unknown experiment {part!r}; README §5 defines 1-8"
+                f"unknown experiment {part!r}; README §5 defines 1-8, plus 9 "
+                f"(tamper granularity, the Exp. 4 companion)"
             )
         numbers.append(int(part))
     if not numbers:
