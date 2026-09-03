@@ -1697,21 +1697,43 @@ class Exp9VerificationGranularity:
                 f"cannot tamper {tampered} of {wanted} returned records"
             )
         per_record = self.source.keywords_per_record
+        # `per_record` is the CORPUS-WIDE mean |W_i|; a `record_count`-sized
+        # prefix draw is not guaranteed to match it -- CorpusRecordSource.records
+        # streams from the start of the corpus, and measured on the pinned host
+        # this arm's first 625-record draw yielded 17,435 bundles (27.9 kw/record
+        # actual) against the 31.7 mean, failing every sweep point identically
+        # ("built 17435 bundles but exp9 pins 20000"). Grow the draw against the
+        # ACTUAL yield instead of trusting the corpus-wide estimate with no
+        # margin.
         record_count = max(1, -(-wanted // per_record))
-        deployment = build_deployment(
-            config=self.config, source=self.source, records=record_count
-        )
+        deployment = None
         bundles: List[proof_mod.VerificationBundle] = []
-        for record in deployment.records:
-            bundles.extend(
-                proof_mod.build_response(record["commitment"], record["entries"])
+        for _ in range(6):
+            deployment = build_deployment(
+                config=self.config, source=self.source, records=record_count
             )
+            bundles = []
+            for record in deployment.records:
+                bundles.extend(
+                    proof_mod.build_response(record["commitment"], record["entries"])
+                )
+                if len(bundles) >= wanted:
+                    break
             if len(bundles) >= wanted:
                 break
+            # Short by this much: rescale the draw against what was ACTUALLY
+            # achieved (+20% margin) and re-stream from the start rather than
+            # incrementing blindly -- `source.records()` is deterministic, so a
+            # bigger count is a strict superset of the previous draw.
+            achieved_ratio = len(bundles) / record_count
+            record_count = max(
+                record_count + 1, int((wanted / max(achieved_ratio, 1e-9)) * 1.2)
+            )
         if len(bundles) < wanted:
             raise RuntimeError(
-                f"built {len(bundles)} bundles but exp9 pins {wanted}; the "
-                f"deployment is too small"
+                f"built {len(bundles)} bundles from {record_count} records but "
+                f"exp9 pins {wanted}; the deployment is too small even after "
+                f"growing the draw to {record_count} records"
             )
         bundles = bundles[:wanted]
 
