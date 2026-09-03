@@ -58,8 +58,8 @@
   },
   "dataset_records": null,
   "experiment": "exp9_verification_granularity",
-  "finished_utc": "2026-09-03T13:34:03.006275+00:00",
-  "git_commit": "8fad8e496c1f17607712de53a1dcdfaa47e8a79a",
+  "finished_utc": "2026-09-03T15:27:45.238077+00:00",
+  "git_commit": "30e55b29565ae10e45985cdb6b952a9779075e0f",
   "instance_type": "unknown",
   "libraries": {
     "bitarray": "3.10.1",
@@ -70,25 +70,13 @@
     "scipy": "1.17.1"
   },
   "not_reportable_because": [],
-  "notes": [
-    "exp9_verification_granularity tampered_records=1: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=2: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=5: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=10: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=20: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=50: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=100: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=200: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=500: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "exp9_verification_granularity tampered_records=1000: setup failed, point skipped \u2014 RuntimeError: built 17435 bundles but exp9 pins 20000; the deployment is too small",
-    "at least one sweep point did not retain the required run count; n_runs in results.csv is authoritative"
-  ],
+  "notes": [],
   "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
   "python_version": "3.11.15",
   "reportable": true,
   "runs": 10,
   "scheme": "ma_lb_pq_vdse",
-  "started_utc": "2026-09-03T13:33:56.646410+00:00",
+  "started_utc": "2026-09-03T15:26:20.766304+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": null,
     "NUMEXPR_NUM_THREADS": null,
