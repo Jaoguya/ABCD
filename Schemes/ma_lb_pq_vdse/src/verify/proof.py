@@ -175,6 +175,11 @@ class StepResult:
     passed: bool
     elapsed_ns: int
     detail: str = ""
+    #: True when this outcome was computed for an earlier bundle of the SAME
+    #: record and reused here. Such a step carries ``elapsed_ns=0`` so that
+    #: summing a batch gives the work actually performed rather than counting
+    #: one computation once per bundle that consumed it.
+    amortised: bool = False
 
     @property
     def elapsed_ms(self) -> float:
@@ -414,6 +419,36 @@ class BatchVerification:
         return sum(r.proof_path_length for r in self.results) / len(self.results)
 
 
+def _record_identity(bundle: VerificationBundle):
+    """The inputs Steps 2 and 3 actually read, and nothing else.
+
+    Step 2 (:func:`verify_authorization_state`) reads ``root``, ``policy_id``,
+    ``vid`` and compares against ``commit``. Step 3
+    (``ledger.verify_blockchain_consistency``) reads ``cid`` — it looks the anchor
+    up by CID and then compares ``anchor.cid``, ``root`` and ``commit``. ``cid`` is
+    therefore part of the key even though Step 2 does not read it: keying on less
+    than a step reads is how a cache starts answering a question it was never
+    asked.
+
+    Constant within a record by construction — :func:`build_response` builds every
+    bundle of a record from one ``RecordCommitment``, and
+    ``VerificationBundle.__post_init__`` rejects a bundle whose entry names a
+    different CID — so this groups exactly the bundles that share an answer.
+    """
+    return (bundle.cid, bundle.root, bundle.policy_id, bundle.vid, bundle.commit)
+
+
+def _reuse(step: StepResult) -> StepResult:
+    """The same verdict, with its cost attributed to the bundle that paid it."""
+    return StepResult(
+        name=step.name,
+        passed=step.passed,
+        elapsed_ns=0,
+        detail=step.detail,
+        amortised=True,
+    )
+
+
 def verify_response(
     bundles: Sequence[VerificationBundle],
     *,
@@ -427,21 +462,55 @@ def verify_response(
     Every bundle is verified even after one fails: a client checking ``r`` results
     must know which are usable, and stopping at the first rejection would make the
     measured cost depend on where the failure happened to be.
+
+    **Steps 2 and 3 are amortised over the record, Step 1 is not.** A response of
+    ``r`` entries carries far fewer distinct records — ``build_response`` emits one
+    bundle per index ENTRY, so at the published ``keywords_per_record`` a
+    thousand-entry response covers ~167 records. Steps 2 and 3 depend only on
+    :func:`_record_identity`, so running them per entry recomputed byte-identical
+    results five times over. Step 1 stays per bundle: every entry has its own leaf
+    and its own authentication path, and sharing there would be the classic
+    membership-proof error of checking one leaf and accepting another.
+
+    Nothing is skipped. Every bundle still gets its own Merkle check and its own
+    accept/reject verdict; only the recomputation of an identical answer is
+    dropped.
     """
     if not bundles:
         raise VerificationError("a response with no bundles has nothing to verify")
-    return BatchVerification(
-        results=tuple(
-            verify_bundle(
-                bundle,
-                auth_root=auth_root,
-                vid_u=vid_u,
-                require_version_match=require_version_match,
-                chain_check=chain_check,
+
+    authorization: dict = {}
+    chain: dict = {}
+    results = []
+    for bundle in bundles:
+        steps = [verify_merkle_membership(bundle)]
+        if steps[-1].passed:
+            key = _record_identity(bundle)
+            if key in authorization:
+                steps.append(_reuse(authorization[key]))
+            else:
+                authorization[key] = verify_authorization_state(
+                    bundle,
+                    auth_root=auth_root,
+                    vid_u=vid_u,
+                    require_version_match=require_version_match,
+                )
+                steps.append(authorization[key])
+            if steps[-1].passed and chain_check is not None:
+                if key in chain:
+                    steps.append(_reuse(chain[key]))
+                else:
+                    chain[key] = chain_check(bundle)
+                    steps.append(chain[key])
+        results.append(
+            VerificationResult(
+                cid=bundle.cid,
+                steps=tuple(steps),
+                proof_size_bytes=bundle.proof_size_bytes,
+                proof_path_length=bundle.proof_path_length,
             )
-            for bundle in bundles
         )
-    )
+    return BatchVerification(results=tuple(results))
 
 
 def build_response(
@@ -472,4 +541,5 @@ __all__ = [
     "verify_bundle",
     "verify_response",
     "build_response",
+    "_record_identity",
 ]
