@@ -257,7 +257,8 @@ ignores it: generate_plots.py now reads Exp. 6's own variant vocabulary.
 ================================================================================
 BUILD-2 — Exp. 4 aggregate proof ("Tier 2")                             [BUILD]
 ================================================================================
-This is the ONLY change that moves us from 3rd to 2nd.
+Necessary for 2nd place but NOT SUFFICIENT alone — see the corrected TARGET
+below. It must ship together with BUILD-2b, the batched ledger query.
 
 Where we are, fresh 10-repetition data, all three schemes:
 
@@ -282,9 +283,42 @@ All three schemes are the same complexity class (linear in r, R^2 >= 0.9998).
 The ordering is set entirely by the constant that O-notation discards, which is
 exactly why the cost table cannot predict it.
 
-TARGET (measured on a prototype, not projected):
-    3.43x -> ~8.2 ms at r=1000, which is under [30]'s 9.14 -> 2nd place
-    proof size 86 KB -> 0.34 KB
+TARGET — CORRECTED 2026-09-03. The "3.43x -> ~8.2 ms -> 2nd place" that stood
+here was WRONG and must not be planned around. It divided a HOST baseline
+(28.027 ms) by a speedup measured on a DEV machine (3.43x). Those do not
+compose: the host gains LESS from these optimisations. Tier 1 is the proof of
+that — 2.08x on dev, only 1.82x on the host.
+
+    Re-measured against the Tier-1 code that actually shipped:
+        Tier 1, current code (dev)      9.836 ms
+        Tier 2 aggregate prototype      5.797 ms   -> 1.70x over Tier 1
+        host/dev scaling, from Tier 1   15.411 / 9.836 = 1.567
+        projected host Tier 2           9.082 ms
+        Scheme [30] on host             9.139 ms
+        margin                          0.057 ms = 0.6%
+
+    0.6% IS NOT A SECOND PLACE. [30]'s own interval is ±0.047 ms and the 1.567
+    scaling factor rests on a single data point; ±10% on it spans 8.2–10.0 ms,
+    straddling the line. The aggregate proof ALONE brings us LEVEL with [30],
+    outcome uncertain. It is necessary but not sufficient — it needs BUILD-2b.
+
+    Proof size 86 KB -> 0.34 KB still holds; that was measured directly.
+
+    WHERE THE REMAINING TIME GOES (aggregate design, r=1000, dev):
+        leaf hashing, 1000 entries      2.764 ms   <- irreducible
+        build tree over them            0.715 ms
+        commit recompute, 167 records   0.445 ms
+        CHAIN CHECK, 167 records        1.725 ms   <- 30%, and it is the STUB
+
+    That chain check is the in-process hash chain, NOT Fabric. When BUILD-1
+    lands, 167 real RPCs dominate everything and this margin vanishes.
+
+BUILD-2b — BATCH THE LEDGER QUERY. This is what actually reaches 2nd, and it
+must ship WITH BUILD-2. One lookup covering all 167 records instead of one per
+record. Floor becomes 3.924 ms dev -> ~6.15 ms host: a comfortable 2nd, well
+clear of [30]'s 9.139, and the only version that survives real Fabric. Leaf
+hashing is then the floor at 2.764 ms and is irreducible — the client must hash
+every returned entry, which is the security property, not overhead.
 
 DESIGN: one response-level tree over the r leaves, one root check, plus the
 per-record anchor checks. The client still hashes EVERY returned entry —
