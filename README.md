@@ -520,143 +520,161 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 
 ## 17. Session Handoff — 2026-09-03
 
-**Read this first.** Nothing here is blocked on a decision except the two items
-marked **DECISION**. Everything else is queued work with a known recipe.
+**Read this before touching the fleet or quoting any number.** Written for
+someone picking this up cold.
 
-### Fleet state at hand-off (04:5x UTC)
+### 17.1 What was wrong, in one paragraph
 
-| Node | Type | State | Doing |
-|------|------|-------|-------|
-| `54.144.93.141` | `r6i.4xlarge` | **running**, $1.008/hr | guo Exp. 3, started 02:22, no log write since |
-| `98.89.22.58` | `m6i.xlarge` | **running**, $0.192/hr | thingom Exp. 3, started 22:56 (2026-09-02) |
-| `i-025c809974bbf7511` | `m6i.xlarge` | **stopped** | yue_ge finished all 5 experiments 03:01:15 |
+Two measurement defects were found in the proposed scheme, both of which had
+been silently shaping published numbers. Exp. 2 queried ONE arbitrary keyword
+(`keywords[0]` of the first record) for every run of every point, while every
+baseline draws a new keyword per run — so our flat ±2% curve measured the
+repeatability of one query rather than search latency, and whichever keyword
+that happened to be set the whole figure. Exp. 4 recomputed Phase VIII Steps 2–3
+once per index ENTRY when both depend only on the RECORD; at
+`keywords_per_record = 6` that made 67% of its runtime redundant. Both are fixed
+and both reruns are in flight. Separately, the 30 → 10 repetition change had been
+applied to values but not to prose — 18 stale claims across 13 files, including
+`global.yaml`'s own comment on the `repetitions: 10` line.
 
-- Both running nodes are at 99.9% / 48% CPU — working, not wedged. Exp. 3 writes
-  only on completion, so a silent log is expected.
-- **yue_ge stopped itself.** Its `~/watchdog.sh` runs `shutdown -h +2` when the
-  scheme's processes exit. `guo` and `thingom` carry the same script but it is
-  NOT running on either, so neither will self-stop.
-- **yue_ge results are harvested** — all 63 CSV/JSON files pulled before the node
-  was stopped again. They were previously single-copy on an EBS volume with
-  `DeleteOnTermination: true`; a *stop* preserves them, a *terminate* destroys
-  them. Do not terminate that instance.
-- Campaign cost so far: **~$13** for this run; **$65.57** billed to
-  `Project=OJCOMS` since the cost-allocation tag was activated 2026-08-28.
+### 17.2 DATA LOSS — disclose, do not quietly re-run
 
-### Reruns owed
+**perera's finished 10-repetition run was destroyed on 2026-09-03 by the
+assistant.** It had completed Exp. 1–3 at 18:42:40 on 2026-09-02 on node
+`i-0d9b2c6e1776c6f84`. While preparing that node for another job, `git checkout
+-- .` was run to clear the working tree; the perera result files were tracked and
+modified, so they reverted to the committed 2026-08-29 30-repetition versions.
+No untracked survivors; every `results-safe-*` backup on that box is from
+2026-08-29. **The data is unrecoverable and was re-run instead.**
 
-| # | What | Why | Cost |
-|---|------|-----|------|
-| R1 | **`ma_lb_pq_vdse --experiment 2`** | The query-draw fix (`bce2e46`) changes what Exp. 2 measures; the banked numbers describe one fixed keyword. Also clears R2. | small |
-| R2 | *(covered by R1)* | The banked `N=10^6` point has one 582.81 ms run against a 5.698 ms median — 29 of 30 runs were 5.63–7.31 ms. Mean 24.995 ms, **95% CI ±39.34 ms, wider than the mean**. | — |
-| R3 | **`ma_lb_pq_vdse --experiment 4`** | The Step 2–3 amortisation (`f413e62`) is a 2.08x speedup at r=1000; banked 28.03 ms is pre-fix. | ~12 min |
-| R4 | **`perera_lv_pqabse --experiment 1,2,3`** | Not in the current campaign at all. Its banked Exp. 1 has 12 of 20 points outlier-distorted (max/median up to 7.0x) and has never been re-measured at 10 repetitions. | medium |
+Two consequences worth carrying forward:
 
-**All reruns must go on the pinned `m6i.xlarge`** — latency depends on the CPU,
-so a number from an `r6i.4xlarge` or a laptop is not comparable to the banked
-baselines. **Wait for guo and thingom to finish Exp. 3 first**; running
-concurrently contends and corrupts both.
+* **Never `git checkout -- .` on a fleet node.** Results are tracked files. Look
+  at `git status` output and understand each modified path first.
+* **The watchdogs now commit results locally** before stopping, precisely so a
+  finished run cannot be destroyed this way again.
 
-### Still to fix — code
+### 17.3 Fleet state at hand-off (06:17 UTC)
 
-- **Exp. 4 Tier 2, the aggregate proof.** Tier 1 shipped (`f413e62`, 2.08x) but
-  does **not** reach 2nd place: 28.03 / 2.08 = ~13.5 ms against Scheme [30]'s
-  9.06. Measured prototype of the aggregate design gives **3.43x → ~8.2 ms
-  (2nd), and proof size 86 KB → 0.34 KB**. It changes Phase VIII, so the
-  security argument and the construction section need revisiting with it. Keep
-  per-result granularity by falling back to per-bundle verification only when
-  the aggregate check fails.
-- **`O(d)T_Ver` in the cost table has no counterpart in the code.** There is no
-  signature verification anywhere in `verify/`. Either the implementation is
-  missing a domain-signature check — in which case our Exp. 4 number is
-  *understated*, on top of the ledger caveat — or the table term is wrong.
-- **Fabric ledger adapter** (already §14/§15). Until it exists, **Exp. 4 and
-  Exp. 6 stay `reportable: false`** however fast they get.
+| Node | IP | Running | Watchdog |
+|------|----|---------|----------|
+| `i-0d9b2c6e1776c6f84` | 34.228.75.48 | **proposed scheme**, Exp. 8 (Exp. 1–7 done) | ARMED |
+| `i-0c376b61dae6fed24` | 54.87.2.31 | **perera restore**, Exp. 3 | ARMED |
+| `i-0e5ae20e113bae9f7` | 54.144.93.141 | **guo**, Exp. 3 (then 4, 5) | ARMED |
+| `i-025c809974bbf7511` | — | stopped — yue_ge complete, harvested | — |
+| `i-0b3030b5bd768536e` | — | stopped — thingom complete, harvested | — |
 
-### Still to fix — manuscript
+**Every watchdog waits for the DRIVER to exit, not a single python process.**
+The proposed scheme's run is two invocations (Exp. 1–6, then 7–8); a watchdog
+watching "is the python alive" would fire in the gap between them and stop the
+box with the ablation unrun. On stop, each watchdog commits results locally,
+writes `~/results-<scheme>-<ts>.bundle`, and attempts a push.
 
-Reported as file + line; not edited here.
+**The nodes cannot push.** The remote is `git@github.com:Jaoguya/ABCD` over SSH
+and no node holds a private key. Copying a personal key onto a cloud instance was
+deliberately not done. **To enable real auto-push, add a GitHub deploy key with
+write access to each node** — until then, fetch the bundle and push from a
+machine that holds a credential:
+
+```bash
+scp -i ~/.ssh/ojcoms.pem ubuntu@<ip>:~/results-<scheme>-*.bundle /tmp/
+git fetch /tmp/results-<scheme>-*.bundle HEAD:refs/remotes/node/main
+```
+
+A stop preserves EBS and every result. **A terminate destroys them** —
+`DeleteOnTermination: true` on these volumes. Do not terminate.
+
+### 17.4 New numbers from the fixed code (proposed scheme, 10 reps, m6i.xlarge)
+
+| Exp | Before (30 rep, pre-fix) | After | Note |
+|-----|--------------------------|-------|------|
+| 2 @ N=10⁶ | 24.995 **± 39.34** | **6.040 ± 0.386** | CI was 157% of the mean; the "8.8× blow-up" was one 582 ms run |
+| 4 @ r=1000 | 28.027 | **15.411 ± 0.072** | **1.82×** faster |
+
+**Exp. 4 is still 3rd of 3** — 15.411 against Scheme [30]'s 9.058 and Scheme
+[35]'s 5.171. The amortisation narrowed the gap from 3.09× to 1.70× and was
+never expected to close it.
+
+### 17.5 What remains — code
+
+1. **Exp. 4 Tier 2, the aggregate proof.** The only change that reaches 2nd:
+   measured prototype **3.43× → ~8.2 ms**, proof size **86 KB → 0.34 KB**. Both
+   baselines already verify this way (constant 32 B / 64 B proofs at every `r`);
+   our per-bundle design is the outlier. It changes Phase VIII, so the security
+   argument moves with it. Keep per-result granularity by falling back to
+   per-bundle verification only when the aggregate check fails.
+2. **`O(d)T_Ver` in `tab:cost` has no counterpart in the code.** There is no
+   signature verification anywhere in `verify/`. Either the implementation is
+   missing a domain-signature check — making our Exp. 4 number *understated* on
+   top of the ledger caveat — or the table term is wrong.
+3. **Fabric ledger adapter.** Until it exists, **Exp. 4 and Exp. 6 stay
+   `reportable: false`** however fast they get. This is not fixable by rerunning.
+
+### 17.6 What remains — DECISION, not work
+
+**Scheme [54] in Exp. 4.** Exp. 4 has **3 of 5 schemes**. `global.yaml:79` pins
+the roster to `[ma_lb_pq_vdse, guo_vdsse, yue_ge]`, and **zero source files** in
+thingom or perera mention `exp4`.
+
+* **[41] is correctly excluded** — Ref[41] has no verification algorithm.
+* **[54] was never decided.** `perera_lv_pqabse/SCHEME.md:24` calls its
+  verification "comparable in spirit — partitioned Merkle proofs" and says
+  inclusion "needs a decision before inclusion, not defaulted to yes". Its paper
+  is *LV-PQ-ABSE: A Lightweight **Verifiable** PQ-ABSE*, with Merkle inclusion
+  proofs, a threshold-Dilithium-signed root, and a freshness check.
+* **The manuscript already assumes it belongs**: `tab:cost` gives [54] a full
+  verification row, `O(x log N)T_H + O(x)(T_Ver+T_MAC)`, while `global.yaml:78`
+  claims [41] and [54] "have no result-verification primitive at all". **These
+  contradict each other and the table is what a reviewer reads.**
+* **This is the likeliest source of the "we rank 2nd in Exp. 4" estimate.** If
+  [54] were implemented and lands slower than 15.4 ms, the proposed scheme is
+  2nd of 4. Either implement `perera_lv_pqabse/exp4`, or drop [54] from the
+  verification column so the paper stops claiming a measurement that does not
+  exist.
+
+**How the baselines' spread should be reported.** `guo` caches by version key
+(its own Alg. 3 lines 25/28): identical secondary counters, latency 0.015 ms to
+195 ms. `yue_ge` is output-sensitive — `O(n_w^l)` is literally the matching-file
+count — so at N=10⁶ its ten runs spanned **0.33 → 1408.65 ms** and its mean is
+**16.9× its median**. Neither is a bug; rerunning reproduces both exactly. But §7
+mandates "mean ± 95% CI" with outliers kept, and a mean 17× its median is hard to
+defend in a figure. Note this interacts badly with 30 → 10: fewer samples from a
+heavy-tailed distribution make the *mean* less stable, not more.
+
+### 17.7 What remains — manuscript
+
+Reported as file + line; not edited by the assistant.
 
 | Where | Says | Measurement |
 |-------|------|-------------|
-| `tab:cost`, Scheme [35] trapdoor | `O(1)T_PRF` | rises 61% across q=1..20 (R² 0.879) |
-| `tab:cost`, Scheme [30] trapdoor | `O(q)T_CPRF` | step function; jumps at q=5→6 and 13→14 tracking token-size jumps. Linear fit needs an impossible −3.99 ms intercept |
-| `tab:cost`, Search row (our Exp. 3) | implies linear in `d` | sublinear: 0.076 → 0.154 ms across d=2→10, R² 0.983 |
-| `tab:cost`, Scheme [54] verification | `O(x log N)T_H+O(x)(T_Ver+T_MAC)` | **never measured** — [54] is excluded from Exp. 4 while `global.yaml:78` claims it has "no result-verification primitive at all". The paper and the config contradict each other |
+| `tab:cost`, [35] trapdoor | `O(1)T_PRF` | rises 61% across q=1..20 (R² 0.879) |
+| `tab:cost`, [30] trapdoor | `O(q)T_CPRF` | step function, jumps at q=5→6 and 13→14; linear fit needs an impossible −3.99 ms intercept |
+| `tab:cost`, Search row (our Exp. 3) | implies linear in `d` | sublinear, 0.076 → 0.154 ms across d=2→10 (R² 0.983) |
+| `tab:cost`, [54] verification | full formula | never measured — see 17.6 |
 
-### DECISION 1 — Scheme [54] in Exp. 4
+### 17.8 Audit result, Exp. 1 → 8
 
-`thingom_pq_abse/SCHEME.md:21` excludes [41] outright and correctly: Ref[41] has
-no verification algorithm. **[54] is different and was never decided.**
-`perera_lv_pqabse/SCHEME.md:24` says its verification is "comparable in spirit —
-partitioned Merkle proofs" and that inclusion "needs a decision before
-inclusion, not defaulted to yes". Its own paper is *LV-PQ-ABSE: A Lightweight
-**Verifiable** PQ-ABSE* with Merkle inclusion proofs, a threshold-Dilithium
-signed root, and a freshness check.
-
-This is very likely where the hand-computed "we rank 2nd in Exp. 4" came from.
-Against the roster that actually exists — Ours, [30], [35] — **we are 3rd of 3
-at every r**, and not marginally:
-
-| r | Proposed | Scheme [30] | Scheme [35] |
-|---:|---:|---:|---:|
-| 100 | 2.646 | 0.946 | **0.521** |
-| 1000 | 28.027 | 9.058 | **5.171** |
-
-All three are the same complexity class (linear, R² ≥ 0.9998). The ordering is
-set entirely by the constant O-notation discards: **28.03 vs 9.01 vs 5.16 µs per
-result.** A cost table cannot show that, which is why the prediction failed.
-
-### DECISION 2 — how to report the baselines' spread
-
-`guo`'s search cost varies with the query and it caches by version key
-(`index.py`, its own Alg. 3 lines 25/28): identical secondary counters, latency
-from 0.015 ms to 195 ms. `yue_ge` is output-sensitive by construction —
-`O(n_w^l)` is literally the number of matching files — so at N=10^6 its ten runs
-spanned **0.33 → 1408.65 ms** and its mean is **16.9x its median**.
-
-None of that is a bug and rerunning reproduces it exactly. But §7 mandates
-"mean ± 95% CI" and "keep outliers", and a mean 17x its median is hard to defend
-in a figure. Reporting medians, or reporting cold and warm separately, is a
-methodology change with paper consequences — **not made unilaterally.**
-
-Note this interacts badly with 30 → 10 repetitions: fewer samples from a
-heavy-tailed distribution makes the *mean* less stable, not more.
-
-### What was fixed this session
-
-- `9c6615f` — 18 stale "30 repetitions" claims across 13 files, including
-  `global.yaml`'s own comment on the `repetitions: 10` line. Plus
-  `test_repetition_count_agreement.py`, which pins `global.yaml` against §7 and
-  Section V and is mutation-verified both ways.
-- `a1c3a83` — Section V committed at "repeated 10 times".
-- `f413e62` — Exp. 4 amortises Phase VIII Steps 2–3 over the record. 1000
-  bundles cover only 167 distinct records at `keywords_per_record = 6`, so those
-  two steps (67% of runtime) were recomputing identical results six times.
-  **2.08x at r=1000**, Step 1 stays per bundle, 10 tests.
-- `bce2e46` — Exp. 2 draws a query per run at the baselines' selectivity. It had
-  been querying `keywords[0]` of the first record, unchanged across every run of
-  every point, while guo and yue_ge each draw a new keyword per run. Our flat
-  ±2% curve was an artefact of never varying the query. 11 tests.
-
-**Suite: 567 passed, 1 skipped.** Working tree clean, `main` pushed.
-
-### Audit result, first experiment to last
-
-| Exp | Cost table holds? | Data clean? |
-|-----|-------------------|-------------|
-| 1 Trapdoor | ours ✅ · [35] ❌ · [30] ❌ | **clean** — guo 1/20 minor, yue_ge 0/20 |
-| 2 Search | ❌ | **was a workload asymmetry, now fixed; needs rerun** |
-| 3 Cross-domain | ❌ (sublinear) | guo still running — cannot judge |
-| 4 Verify | ⚠️ phantom `T_Ver` | clean 0/7; `reportable: false` |
-| 5 Update | ✅ all three | **clean — our best result** |
+| Exp | Cost table holds? | Data quality |
+|-----|-------------------|--------------|
+| 1 Trapdoor | ours ✅ · [35] ❌ · [30] ❌ | clean (guo 1/20 minor, yue_ge 0/20, thingom 0/20) |
+| 2 Search | ❌ | **defect fixed; rerun in flight** |
+| 3 Cross-domain | ❌ sublinear | thingom 0/9 clean; guo still running |
+| 4 Verify | ⚠️ phantom `T_Ver` | clean; `reportable: false` |
+| 5 Update | ✅ all three | clean |
 | 6 Sync | ✅ | clean; `reportable: false` |
-| 7/8 | **no table row exists** | clean 0/44 |
+| 7 / 8 | **no table row exists** | clean |
 
-**Exp. 5 deserves more attention than it is getting.** Same complexity class as
-both baselines, and our constant is **15x better than [35] and 32x better than
-[30]** per updated pair — 18.9 µs against 607 and 289 µs — with clean data and
-no caveats. It is the strongest unqualified result in the campaign.
+**Exp. 5 is the strongest unqualified result in the campaign and nothing in the
+paper leans on it.** Same complexity class as both baselines, our constant
+**15× better than [35] and 32× better than [30]** per updated pair (18.9 µs vs
+607 and 289 µs), clean data, no caveats.
+
+### 17.9 Commits from this session
+
+`9c6615f` repetition prose + drift guard · `f413e62` Exp. 4 amortisation (2.08×
+on dev, 1.82× on host) · `a1c3a83` Section V at 10 · `bce2e46` Exp. 2 per-run
+query draw · `79a5739` earlier version of this handoff. Suite **567 passed,
+1 skipped**.
 
 ---
 
