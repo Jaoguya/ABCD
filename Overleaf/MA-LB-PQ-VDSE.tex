@@ -1915,10 +1915,7 @@ $O(k)T_H$\\
 $+O(\log n)T_{\rm MT}$
 }
 &
-\makecell{
-$O(r)T_{\rm MT}$\\
-$+O(d)T_{\rm Ver}$
-}
+$O(r)T_{\rm MT}$
 &
 \makecell{
 $O(\delta)T_H$\\
@@ -1953,7 +1950,7 @@ $O(q)T_P$, while authorization resolution requires only $O(dT_H)$
 before search is restricted to $n_{\mathrm{eff}}$ authorized
 candidates. Keyword updates and verification cost
 $O(k)T_H+O(\log n)T_{\mathrm{MT}}$ and
-$O(r)T_{\mathrm{MT}}+O(d)T_{\mathrm{Ver}}$, respectively.
+$O(r)T_{\mathrm{MT}}$, respectively.
 Furthermore, authorization synchronization requires only
 $O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Thus, despite retaining
 pairing cost for trapdoor generation, the proposed framework shifts
@@ -1986,7 +1983,7 @@ dataset~\cite{refSynthea}. Encrypted searchable indexes containing
 $10^4$--$10^6$ EHRs were generated from the dataset and uniformly
 distributed across four administrative healthcare domains. Unless
 otherwise specified, each query contains five keywords. Each
-experiment was repeated 30 times, and the reported results represent
+experiment was repeated 10 times, and the reported results represent
 the mean with 95\% confidence intervals.
 
 The proposed framework was compared with four representative
@@ -2125,12 +2122,14 @@ the number of returned results for all evaluated schemes.
 Scheme~\cite{ref35} performs hash-based verification with cost
 $O(x)T_H$, while Scheme~\cite{ref30} performs public verification
 through multilevel digests and a smart contract, with complexity
-$O(n_w^l)$. Scheme~\cite{ref54} additionally performs signature and
-MAC verification together with Merkle authentication, yielding
-$O(x\log N)T_H+O(x)(T_{\rm Ver}+T_{\rm MAC})$ verification cost.
+$O(n_w^l)$. Scheme~\cite{ref54} is not plotted: its
+$O(x\log N)T_H+O(x)(T_{\rm Ver}+T_{\rm MAC})$ verification cost, which
+combines signature and MAC verification with Merkle authentication, is
+stated analytically for completeness and was not measured.
 The proposed framework verifies returned records using authenticated
-Merkle evidence and domain-level authorization signatures, with cost
-$O(r)T_{\rm MT}+O(d)T_{\rm Ver}$. Consequently, its verification
+Merkle evidence, recomputing one authentication path and one policy
+commitment per returned record, with cost $O(r)T_{\rm MT}$. Consequently,
+its verification
 overhead grows primarily with the number of returned records while
 retaining efficient authenticated verification under a fixed
 searchable-index size.

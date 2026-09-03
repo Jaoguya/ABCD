@@ -20,6 +20,12 @@ Deliberately NOT asserted:
 from __future__ import annotations
 
 import re
+
+# Every read below is explicitly utf-8. Without it Python picks the platform
+# default -- cp1252 on Windows -- and these tests die on the first non-ASCII
+# byte in README.md or the manuscript before they can assert anything. They
+# were failing that way silently, which is how the Section V repetition
+# count drifted from the config without anyone noticing.
 from pathlib import Path
 
 import pytest
@@ -32,7 +38,7 @@ MANUSCRIPT = REPO / "Overleaf" / "MA-LB-PQ-VDSE.tex"
 
 
 def _configured_repetitions() -> int:
-    data = yaml.safe_load(GLOBAL_YAML.read_text())
+    data = yaml.safe_load(GLOBAL_YAML.read_text(encoding="utf-8"))
     return int(data["measurement"]["repetitions"])
 
 
@@ -42,13 +48,13 @@ def test_config_is_the_single_source_of_truth():
 
 
 def test_readme_section7_matches_the_config():
-    match = re.search(r"(\d+) runs per point after (\d+) discarded warm-ups", README.read_text())
+    match = re.search(r"(\d+) runs per point after (\d+) discarded warm-ups", README.read_text(encoding="utf-8"))
     assert match, "README §7 no longer states 'N runs per point after M discarded warm-ups'"
     assert int(match.group(1)) == _configured_repetitions()
 
 
 def test_readme_failure_policy_matches_the_config():
-    match = re.search(r"re-run to restore n=(\d+)", README.read_text())
+    match = re.search(r"re-run to restore n=(\d+)", README.read_text(encoding="utf-8"))
     assert match, "README §7 no longer states the restore-n failure policy"
     assert int(match.group(1)) == _configured_repetitions()
 
@@ -56,7 +62,7 @@ def test_readme_failure_policy_matches_the_config():
 @pytest.mark.skipif(not MANUSCRIPT.exists(), reason="manuscript not checked out")
 def test_manuscript_section_v_matches_the_config():
     """Section V's claimed replication count is the one a reviewer checks."""
-    match = re.search(r"experiment was repeated (\d+) times", MANUSCRIPT.read_text())
+    match = re.search(r"experiment was repeated (\d+) times", MANUSCRIPT.read_text(encoding="utf-8"))
     assert match, "Section V no longer states 'experiment was repeated N times'"
     assert int(match.group(1)) == _configured_repetitions(), (
         "Section V and global.yaml disagree on the replication count -- "
@@ -89,7 +95,7 @@ def test_no_source_file_still_quotes_the_old_count():
     for path in sorted(REPO.glob("Schemes/**/*.py")) + sorted(REPO.glob("Schemes/**/*.md")):
         if path.name in allowed:
             continue
-        for lineno, line in enumerate(path.read_text().splitlines(), 1):
+        for lineno, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for pattern in claims:
                 found = re.search(pattern, line)
                 if found and int(found.group(1)) != n:

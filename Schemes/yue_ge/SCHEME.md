@@ -3,6 +3,15 @@
 **Back to main README:** [README.md](../../README.md)
 **Paper:** Y. Ge, Y. Gao, J. Ning, J. Ma, and X. Chen, "Verifiable Multilevel Dynamic Searchable Encryption With Forward and Backward Privacy in Cloud-Assisted IoT," *IEEE Internet of Things Journal*, vol. 11, no. 24, pp. 40861–40874, 15 Dec. 2024, doi: `10.1109/JIOT.2024.3457270`. Construction summary, published parameters, and legitimacy assessment: [References/Ref[55]/Ref[55].md](../../References/Ref[55]/Ref[55].md).
 
+> **Citation numbers: this repo says Ref[55], the manuscript says `ref30`.**
+> They are the same paper. The repo's `Ref[NN]` labels are anchored to the
+> `References/Ref[NN]/` folders and are NOT the manuscript's LaTeX keys, which
+> were renumbered when the bibliography was reordered. In
+> `Overleaf/MA-LB-PQ-VDSE.tex`, Ge et al. is `\cite{ref30}` (13 uses) and
+> `ref55` is now a different paper entirely (Cao et al.). Renaming
+> `References/Ref[55]/` would break every link in the repo for no gain, so the
+> mapping is recorded instead of applied. Recorded 2026-09-03.
+
 **Status (2026-08-28): IMPLEMENTED.** `src/` holds the full construction; all five experiment runners execute end to end. 20/20 correctness tests pass, including negative tests for every claimed security property.
 
 ---
