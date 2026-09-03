@@ -1,6 +1,6 @@
-variable_value,primary_mean,primary_ci95,secondary_1_mean,secondary_1_ci95,secondary_2_mean,secondary_2_ci95,n_runs
-10000,375729,610.45,10000,0,1.05e+06,0,30
-50000,1.87864e+06,,50000,,5.25e+06,,0
-100000,3.75729e+06,,100000,,1.05e+07,,0
-500000,1.87864e+07,,500000,,5.25e+07,,0
-1000000,3.75729e+07,,1e+06,,1.05e+08,,0
+variable_value,primary_mean,primary_ci95,secondary_1_mean,secondary_1_ci95,secondary_2_mean,secondary_2_ci95,n_runs,measurement_type
+10000,737651,1506.34,737656,1508.03,1.05e+06,0,10,measured
+50000,3.68678e+06,nan,,,5.25e+06,nan,1,projected
+100000,7.37256e+06,nan,,,1.05e+07,nan,1,projected
+500000,3.68588e+07,nan,,,5.25e+07,nan,1,projected
+1000000,7.37166e+07,nan,,,1.05e+08,nan,1,projected

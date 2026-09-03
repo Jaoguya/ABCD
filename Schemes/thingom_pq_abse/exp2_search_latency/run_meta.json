@@ -1,12 +1,12 @@
 {
   "scheme": "thingom_pq_abse",
   "experiment": "exp2",
-  "started_utc": "2026-08-28T21:54:22.334539+00:00",
-  "git_commit": "55aa3c8289e616b90c7741b18d3ccb4c6f18cd23",
+  "started_utc": "2026-09-02T17:48:08.137275+00:00",
+  "git_commit": "ad6486f01a001a72c1b24880a4efabfea63004d7",
   "reportable": true,
   "reportable_blockers": [],
   "parameters": {
-    "repetitions": 30,
+    "repetitions": 10,
     "warmups_discarded": 5,
     "q_default": 5,
     "attribute_count_u": 10,
@@ -14,13 +14,63 @@
     "pairing_type": "type-1",
     "seed": 20260804,
     "keyword_universe_size": 2023,
-    "max_seconds_per_run": 1800.0,
+    "max_seconds_per_run": 7200.0,
     "multi_keyword_mode": "native: q independent trapdoors + q independent searches, client-side intersection (Ref[41] is single-keyword)",
     "exp2_search_processes": 2,
     "exp3_search_processes": 1,
     "exp2_index_sizes": [
-      10000
+      10000,
+      50000,
+      100000,
+      500000,
+      1000000
     ],
+    "exp2_projection": {
+      "method": "projected from a measured unit cost",
+      "anchors": [
+        {
+          "n": 1000,
+          "mean_ms": 74083.8771211,
+          "ci95_ms": 210.6127311503906,
+          "n_runs": 10,
+          "pairings_mean": 105000.0
+        },
+        {
+          "n": 5000,
+          "mean_ms": 370716.88331989996,
+          "ci95_ms": 709.5376824826824,
+          "n_runs": 10,
+          "pairings_mean": 525000.0
+        },
+        {
+          "n": 10000,
+          "mean_ms": 737651.1346378999,
+          "ci95_ms": 1506.3449832106696,
+          "n_runs": 10,
+          "pairings_mean": 1050000.0
+        }
+      ],
+      "anchor_search_processes": 1,
+      "anchor_repetitions": 10,
+      "anchor_warmups": 5,
+      "fit": {
+        "slope_ms_per_record": 73.7156442543967,
+        "intercept_ms": 1000.5290028509335,
+        "model": "cost(N) = intercept + slope * N"
+      },
+      "linearity_residuals_ms": [
+        -632.2961361476337,
+        1138.133045065566,
+        -505.8369089178741
+      ],
+      "linearity_residuals_relative": [
+        -0.008534868323833282,
+        0.0030700868945411513,
+        -0.0006857400269114758
+      ],
+      "max_abs_relative_residual": 0.008534868323833282,
+      "note": "Points at the published sweep sizes are PROJECTED, not measured. The intercept is the per-query fixed cost (trapdoor generation and query planning); projecting from cost(1)*N would have charged it once per record and inflated this baseline."
+    },
     "exp3_total_index_size": 2000,
     "exp3_domain_counts": [
       2,
@@ -35,15 +85,15 @@
     ],
     "columns": {
       "variable": "N (index size)",
-      "primary": "search_latency_ms",
-      "secondary_1": "entries_traversed",
+      "primary": "search_cpu_time_ms",
+      "secondary_1": "wall_clock_ms",
       "secondary_2": "pairings_computed"
     }
   },
   "config_hashes": {
-    "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+    "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
     "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-    "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+    "global.yaml": "032de0d9dcaf5b48863521375564ac4208ca72db8e7e3925ab9d755f59c6bffe",
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
   },
@@ -76,17 +126,20 @@
       "kyber_py": false
     },
     "config_hashes": {
-      "crypto.yaml": "5cc3770c83a0b8d81447913bc871a55e83c1b779c10a8998b8e12ba175551d32",
+      "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
       "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-      "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+      "global.yaml": "032de0d9dcaf5b48863521375564ac4208ca72db8e7e3925ab9d755f59c6bffe",
       "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
       "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
     },
     "experiment_host": {
-      "expected_instance_type": "m6i.xlarge",
+      "expected_instance_type": null,
       "detected_instance_type": "m6i.xlarge",
       "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
-      "is_pinned_experiment_host": true
+      "pin_configured": false,
+      "is_pinned_experiment_host": false,
+      "host_check_satisfied": true,
+      "metadata_reachable": true
     }
   },
   "dataset": {
@@ -95,22 +148,5 @@
     "records": 1143792,
     "keyword_universe_size": 2023,
     "domains": 10
-  },
-  "extrapolation": {
-    "anchor_variable_value": "10000",
-    "anchor_n_runs": 30,
-    "scaled_columns": [
-      "primary_mean",
-      "secondary_1_mean",
-      "secondary_2_mean"
-    ],
-    "factors": {
-      "50000": 5.0,
-      "100000": 10.0,
-      "500000": 50.0,
-      "1000000": 100.0
-    },
-    "model": "linear in the sweep variable",
-    "note": "Rows with n_runs=0 are COMPUTED from the anchor, not measured. They carry no confidence interval because they have no variance. Disclose in section V."
   }
 }
