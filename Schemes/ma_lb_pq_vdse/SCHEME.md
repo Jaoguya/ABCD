@@ -73,7 +73,7 @@ the Phase IV/VI token relation (settled as Option D) and Phase VIII Step 2's
 | 3 | Cross-Domain Search Scalability | Single authorization-bound trapdoor reused across domains |
 | 4 | Verification Overhead | Client-side Merkle proof check |
 | 5 | Dynamic Keyword Update | Participant |
-| 6 | Authorization Synchronization | IAS end-to-end |
+| 6 | Authorization Synchronization | **IAS ablation** (3 variants) |
 | 7 | Search Throughput under Workload | **Scheduler ablation** (4 variants) |
 | 8 | Load-Balancing Effectiveness | **Scheduler ablation** (4 variants) |
 
@@ -84,8 +84,41 @@ the Phase IV/VI token relation (settled as Option D) and Phase VIII Step 2's
 - **Exp. 3** — Issues **one** authorization-bound trapdoor reused across domains. Count trapdoors issued as a secondary metric.
 - **Exp. 4** — Verification is client-side: Merkle proof check, `Commit_i*` recomputation, and blockchain-consistency check. IPFS fetch and decryption are **excluded**.
 - **Exp. 5** — Measure incremental update only. A global index rebuild indicates a Phase VII implementation bug.
-- **Exp. 6** — Measure IAS end-to-end: authority commitment recomputation → Merkle path update → IAS message → selective FSN propagation, until all affected FSNs report the new `VID`. Report FSNs touched.
+- **Exp. 6** — Measure IAS **propagation**: authority commitment recomputation → Merkle path update → IAS message → selective FSN propagation, until all affected FSNs report the new `VID`. **Phase VII Step 7 (anchoring `BC_i'`) is excluded** and reported separately as a per-update constant, the same treatment Exp. 1 gives ML-KEM encapsulation. Report FSNs touched — but see the ablation below: reported alone the number is a constant 1 and evidences nothing.
 - **Exp. 7–8** — Closed-loop load generator with fixed concurrency and a recorded arrival trace, which all 4 variants replay. The trace is identical in *content* — keyword tokens, authorization root, user id, AIM decision — and deliberately NOT byte-identical, since every `SearchToken` carries a fresh random nonce that must vary. Utilization sampled every 100 ms.
+
+### IAS Ablation (Exp. 6)
+
+| Variant | Propagation rule |
+|---------|------------------|
+| `broadcast` | Deliver `IAS_i` to **every** FSN — the alternative `:1111` names and rejects. Tests **selective**. |
+| `full_rebuild` | **Every** authority recomputes `C_k^auth` and the AIM republishes it — the alternative `:1045` rejects. Tests **incremental**. |
+| `ias` (proposed) | Selective delivery to the FSNs holding the affected shard; only the affected authority evolves. |
+
+**Why this ablation exists.** `fsns_touched` was reported alone in every campaign
+through 2026-09-03 and was a constant `1.000` at every δ.
+`fsn.py::assign_domains_to_fsns` gives each domain to exactly **one** node, and an
+`IASMessage` carries exactly **one** domain, so selective delivery touches one node
+for any `d` and `m`. The constant is a property of the design, not a measurement of
+it — the claim is only observable against `broadcast`'s `m`.
+
+`full_rebuild` calls the same `Authority.commitment()` the proposed path calls and
+differs only in **how many authorities** it calls it for. The superseded O(δ²)
+`RevocationList` is deliberately **not** the comparison: measuring against a fixed
+bug would overstate the advantage.
+
+`synchronize()` takes an injected `select_nodes`, the same shape as
+`verify_bundle`'s injected Step 3 check; the default is `affected_nodes`, the
+published rule. `apply_ias`'s `require_shard` guard is relaxed **only** on the
+injected path, so selective propagation cannot silently accept a misrouted message.
+
+The Exp. 7–8 scheduler variants are **refused** here. A scheduler decides which FSN
+serves a *query* and plays no part in propagating an authorization change; passing
+one previously ran the identical measurement under a different directory name,
+which is what `exp6_authorization_sync__no_lb` is — within 3% of the main run at
+every point. That directory is kept as the record of the independence check.
+
+Run with `--experiment 6 --variant all`.
 
 ### Scheduler Ablation (Exp. 7 & 8)
 
@@ -186,6 +219,17 @@ IPFS adapters, and shard distribution is neither. Fabric v2.5 implements
 reportable numbers; the in-process adapter is a real append-only hash chain, so
 the Phase VIII Step 3 consistency check does the work Exp. 4 times rather than
 being a no-op that Fabric later makes expensive.
+
+**Exp. 6 does not wait on Fabric** (changed 2026-09-03). It was gated alongside
+Exp. 4 until then, justified by "Exp. 6 times IAS through to blockchain
+anchoring" — but `sync/ias.py::synchronize` takes `ledger` as **optional** and
+anchors only inside `if ledger is not None`, and the Exp. 6 runner has never
+passed one. That justification cited a protocol step rather than a measurement
+boundary. README §5 ends Exp. 6 at "until all affected FSNs report the new
+`VID`", and `tab:cost`'s authorization-synchronization row is
+`O(δ)T_H + O(log d)T_MT` with no chain term. If Step 7 is ever brought inside the
+boundary, the runner must pass a ledger and `exp6_authorization_sync` must go back
+into the gate — `test_exp6_propagation_ablation.py` pins both directions.
 
 ### Tests
 

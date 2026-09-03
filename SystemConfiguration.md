@@ -66,10 +66,18 @@ Those decisions are recorded in `Experiment Configuration/crypto.yaml` with a da
 and a reason each. If a reviewer asks "where did n = 768 come from", the answer is
 in that file, not in anyone's head.
 
-**9. Exp. 4 and Exp. 6 currently understate their cost.** They run against an
-in-process hash chain, not the Hyperledger Fabric deployment the specification
-names. The runs complete and `run_meta.json` says so. The Fabric adapter is not
-written yet.
+**9. Exp. 4 understates its cost.** It runs against an in-process hash chain, not
+the Hyperledger Fabric deployment the specification names. The run completes and
+`run_meta.json` says so. The Fabric adapter is not written yet.
+
+**Exp. 6 was gated alongside it until 2026-09-03 and should not have been.** Its
+timed path never anchors: `sync/ias.py::synchronize` takes `ledger` as *optional*
+and the Exp. 6 runner passes none, so Phase VII Step 7 is outside the boundary —
+which is also where README §5 and `tab:cost`'s sync row put it. **Exp. 6 is
+reportable without Fabric.** The general lesson is worth more than the fix: that
+gate was justified by a *protocol step* rather than a *measurement boundary*, and
+nobody checked the runner. When a gate blocks something, confirm its premise
+against the code before accepting it.
 
 **10. Never edit `README.md` casually.** It is the
 specification's source of truth.
@@ -164,8 +172,12 @@ numbers *mean*, and getting one wrong silently produces a plausible, wrong figur
   is excluded.
 - **Exp. 5** — incremental update only. If a scheme rebuilds the whole index, that
   is a bug, not a slow update.
-- **Exp. 6** — the full incremental path, end to end, until every affected node
-  reports the new version.
+- **Exp. 6** — the incremental propagation path, until every affected node reports
+  the new version. Blockchain anchoring (Phase VII Step 7) is **excluded** and
+  reported separately, as ML-KEM encapsulation is for Exp. 1. Runs as a three-way
+  ablation — `ias` / `broadcast` / `full_rebuild` — because `fsns_touched` alone is
+  a constant 1 by construction and evidences nothing without `broadcast` to read it
+  against.
 - **Exp. 7–8** — the *same runs* produce both. Throughput alone can hide congestion:
   a scheduler can post good aggregate numbers while pinning one node at saturation,
   which is exactly what Exp. 8 exists to expose.
@@ -255,8 +267,10 @@ reasons. The conditions:
 - Corpus SHA-256 matches `dataset.yaml`'s frozen pin
 - A faithful cryptographic backend, not a development stand-in
   (a real Type-III pairing for ours; a real ML-KEM/ML-DSA backend for Ref[54])
-- The ledger is the real Fabric deployment — **currently failing for everyone**
-  (see flag point 9)
+- The ledger is the real Fabric deployment — **currently failing, but only for
+  Exp. 4** (see flag point 9). Scoped to the experiments whose *measured path*
+  touches the chain: it was a blanket blocker until `451df65`, then Exp. 4 + Exp. 6
+  until 2026-09-03, and is now Exp. 4 alone.
 - For ours: scheduler weights fixed (not `pending_sweep`), tokens scheme-keyed,
   fog nodes in independent processes
 
@@ -445,7 +459,14 @@ scheme's tests, which is what makes the omission honest rather than convenient.
 ## 11. What is not done
 
 - **Fabric ledger adapter.** `infra/fabric/` brings the network up; nothing reads
-  it. Exp. 4 and Exp. 6 therefore understate chain cost, and every run says so.
+  it. **Exp. 4** therefore understates chain cost, and every run says so. Exp. 6
+  does not depend on it (flag point 9).
+- **Exp. 6's ablation has never been run.** The `ias` / `broadcast` /
+  `full_rebuild` variants landed 2026-09-03 and the existing
+  `exp6_authorization_sync/` results are single-variant, so §5's "selective
+  propagation is the claim" still has no measurement behind it. The 17 tests in
+  `test_exp6_propagation_ablation.py` have also never executed — pytest is not
+  installed on the dev host. Run `--experiment 6 --variant all` on a real host.
 - **The campaign has not been run.** No `results.csv` in the repo is reportable yet.
 - **`guo_vdsse`'s 25.0 h carries an unverified 1.5× derate** from a development
   host to the pinned instance. Confirm it on the real host before planning around it.

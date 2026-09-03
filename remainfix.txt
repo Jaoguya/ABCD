@@ -137,8 +137,11 @@ and disclose prominently. All three change published numbers.
 ================================================================================
 BUILD-1 — Fabric ledger adapter                                         [BUILD]
 ================================================================================
-Exp. 4 and Exp. 6 are stamped reportable:false on the FRESH runs. Reason
-recorded in run_meta.json:
+SCOPE NARROWED 2026-09-03, commit fb4433a: this blocks Exp. 4 ONLY. Exp. 6 was
+listed here too and should not have been -- see the note at the end of this item.
+
+Exp. 4 is stamped reportable:false on the FRESH runs. Reason recorded in
+run_meta.json:
 
     "the ledger is an in-process hash chain, not the Hyperledger Fabric v2.5
      deployment README §1 specifies; Exp. 4's chain-consistency cost is
@@ -150,6 +153,85 @@ Until the adapter exists, the proposed scheme's Exp. 4 headline number
 
 This is already §14/§15 in the README; repeated here because it now gates the
 one experiment everyone is arguing about.
+
+WHY EXP. 6 CAME OFF THIS BLOCKER. The gate was added as a BLANKET blocker, then
+narrowed to Exp. 4 + Exp. 6 (451df65) on the grounds that "Exp. 6 times IAS
+through to blockchain anchoring (README S5, Phase VII Step 7)". It does not.
+sync/ias.py::synchronize takes `ledger` as OPTIONAL and anchors only inside
+`if ledger is not None`; the Exp. 6 runner has never passed one, so Step 7 was
+never on its timed path. That justification cited a PROTOCOL STEP, not a
+MEASUREMENT BOUNDARY, and the commit verified only that the gate fired -- never
+that the premise held. Two independent sources put anchoring outside the
+boundary: README S5 ends Exp. 6 at "until all affected FSNs report the new VID",
+and tab:cost's authorization-synchronization row is O(delta)T_H + O(log d)T_MT
+with no chain term. Exp. 4 keeps the gate because S5 puts "chain consistency"
+INSIDE its boundary in as many words.
+
+  ACTION FOR SECTION V: state that Phase VII Step 7 is excluded from Exp. 6 and
+  report the anchor cost separately as a per-update constant -- the treatment
+  README S5 already gives ML-KEM encapsulation in Exp. 1. Anchoring costs the
+  same under all three Exp. 6 variants, so excluding it cannot change which one
+  wins; that is what makes the exclusion defensible rather than convenient. Do
+  NOT describe Exp. 6 as "end-to-end" -- that wording is what invited the gate.
+
+  GENERAL LESSON: when a gate blocks something, check its premise against the
+  code before accepting it. A gate that fires when it should not trains readers
+  to ignore it -- 451df65's own commit message says exactly that, about the
+  blanket version it was replacing.
+
+
+================================================================================
+BUILD-1b — Exp. 6's ablation is written but has NEVER RUN            [BUILD]
+================================================================================
+Landed 2026-09-03, commit fb4433a. Code only -- no results, no test execution.
+
+THE PROBLEM IT FIXES. README S5 says of Exp. 6: "Report FSNs touched; selective
+propagation is the claim." Every campaign to date reported fsns_touched = 1.000
+at every delta and treated that as the evidence. It is not evidence of anything.
+fsn.py::assign_domains_to_fsns gives each domain to exactly ONE node and an
+IASMessage carries exactly ONE domain, so selective delivery touches one node for
+ANY d and m. The constant is a property of the design, not a measurement of it.
+
+So one of the paper's three headline contributions -- IAS, alongside PDSI and
+AASS -- currently has no measurement behind it. That is a bigger exposure than
+anything in Exp. 4: a comparison can be lost gracefully, a contribution cannot be
+left unevidenced.
+
+WHAT WAS ADDED. One variant per half of the claim:
+
+    broadcast      deliver IAS_i to every FSN          tests SELECTIVE   (:1111)
+    full_rebuild   every authority recomputes C^auth   tests INCREMENTAL (:1045)
+    ias            the published rule (default)
+
+synchronize() now takes an injected select_nodes, the same shape as
+verify_bundle's injected Step 3 check; the default is unchanged. full_rebuild
+calls the SAME Authority.commitment() the proposed path calls and differs only in
+how many authorities it calls it for -- the superseded O(delta^2) RevocationList
+is deliberately NOT the comparison, since measuring against a fixed bug would
+overstate the advantage.
+
+WHAT IS OWED, in order:
+  1. Run the suite. pytest is not installed on the dev host, so the 17 tests in
+     test_exp6_propagation_ablation.py have never executed. TWO THINGS ARE MOST
+     LIKELY TO BREAK FIRST:
+       - broadcast depends on Phase II Step 4 (initial_synchronization) having
+         synced every authority to every node. If it did not, synchronize's VID
+         postcondition raises IASError and the variant dies immediately.
+       - full_rebuild's expected touched count of 1 + (A-1)*m assumes
+         build_deployment's authority and node counts.
+  2. Run `--experiment 6 --variant all` on the pinned host. Exp. 6 is
+     proposed-scheme-only and took ~35 s/run at delta=10^5, so this is cheap.
+  3. The figure that makes the claim: latency vs delta with full_rebuild beside
+     ias (evidences INCREMENTAL), and FSNs touched with broadcast beside ias
+     (evidences SELECTIVE).
+  4. Measure ONE anchor operation and report it as the separate per-update
+     constant BUILD-1's note above commits Section V to.
+
+NOT DONE, and deliberately: exp6_authorization_sync__no_lb is left in place. It
+is stale (n_runs=30, commit 9f3ea00) and within 3% of the main run at every
+point, because scheduler variants do not touch the sync path -- but it is the
+record of that independence check, so it was kept rather than deleted. Plotting
+ignores it: generate_plots.py now reads Exp. 6's own variant vocabulary.
 
 
 ================================================================================
