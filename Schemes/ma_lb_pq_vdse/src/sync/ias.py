@@ -553,7 +553,11 @@ class ApplyResult:
 
 
 def apply_ias(
-    node: FogSearchNode, message: IASMessage, *, domain: Optional[str] = None
+    node: FogSearchNode,
+    message: IASMessage,
+    *,
+    domain: Optional[str] = None,
+    require_shard: bool = True,
 ) -> ApplyResult:
     """``Shard_j' = ApplyIAS(Shard_j, IAS_i)`` — Step 6, on one node.
 
@@ -573,11 +577,20 @@ def apply_ias(
     gap-tolerant, at the cost of departing from the published tuple.
     """
     domain = domain or message.domain
-    if not node.serves_domain(domain):
+    if require_shard and not node.serves_domain(domain):
         raise IASError(
             f"{node.node_id} serves {sorted(node.domains)} and is not an "
             f"affected node for domain {domain!r}"
         )
+    # ``require_shard=False`` exists ONLY for Exp. 6's `broadcast` ablation, which
+    # models the alternative Phase VII rejects: forwarding IAS_i to every FSN
+    # instead of the ones holding the affected shard. A node without the shard
+    # still pays the authorization-state update below -- ``ordinals_for_cid``
+    # simply finds nothing to repolicy, so ``entries_rewritten`` stays 0. That is
+    # the honest cost of a broadcast, not a shortcut around the guard: the
+    # SELECTIVE path keeps it, and the AIM already pushes Meta to every node at
+    # Phase II Step 4 (``initial_synchronization``), so this is not a new
+    # capability.
 
     rewritten = 0
     if message.carries_index_delta:
@@ -694,6 +707,7 @@ def synchronize(
     aim: Optional[AuthorizationIndexManager] = None,
     ledger: Optional[Ledger] = None,
     token_for: Optional[callable] = None,
+    select_nodes: Optional[callable] = None,
 ) -> IASReceipt:
     """Phase VII Steps 2-7 end to end — the path Exp. 6 times.
 
@@ -735,8 +749,26 @@ def synchronize(
     )
 
     # Step 6 — selective propagation.
-    targets = affected_nodes(message, nodes)
-    applied = tuple(apply_ias(node, message) for node in targets)
+    #
+    # ``select_nodes`` is injected for the SAME reason ``verify_bundle`` takes its
+    # Step 3 check as a callable: it lets Exp. 6's ablation measure the alternative
+    # Phase VII rejects ("rather than broadcasting the complete index state",
+    # :1111) instead of asserting it is worse. The DEFAULT is unchanged and is the
+    # published rule; a caller that passes nothing gets selective propagation.
+    chooser = select_nodes or affected_nodes
+    targets = chooser(message, nodes)
+    if not targets:
+        raise IASError(
+            f"node selection returned no recipient for domain {message.domain!r}; "
+            f"the update would be applied nowhere"
+        )
+    # An injected selector picks recipients by its OWN rule, so the shard guard in
+    # apply_ias would reject the very nodes it deliberately chose. Relaxed only on
+    # that path; the default keeps it.
+    applied = tuple(
+        apply_ias(node, message, require_shard=select_nodes is None)
+        for node in targets
+    )
 
     # The postcondition README §5 states: propagation continues "until all
     # affected FSNs report the new VID". Verified rather than assumed — a node

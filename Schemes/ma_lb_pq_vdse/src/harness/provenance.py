@@ -329,13 +329,27 @@ def reportability(
         )
 
     # Scoped to the experiments whose MEASURED path actually touches the chain,
-    # rather than blanket. Exp. 4 times "Merkle proof, Commit_i* recomputation,
-    # CHAIN CONSISTENCY" and Exp. 6 times IAS through to blockchain anchoring
-    # (README §5, Phase VII Step 7). Exp. 1/2/3/5/7/8 never read or write the
-    # ledger on a timed path, so blocking them on it would be a false blocker --
-    # and a gate that fires when it should not trains readers to ignore it.
-    if experiment in ("exp4_verification_overhead", "exp6_authorization_sync") \
-            and not ledger_faithful:
+    # rather than blanket. Exp. 1/2/3/5/6/7/8 never read or write the ledger on a
+    # timed path, so blocking them on it would be a false blocker -- and a gate
+    # that fires when it should not trains readers to ignore it.
+    #
+    # Exp. 6 WAS listed here (451df65, 2026-08-28) on the grounds that it "times
+    # IAS through to blockchain anchoring (README §5, Phase VII Step 7)". Removed
+    # 2026-09-03: that justification cited a PROTOCOL STEP, not a measurement
+    # boundary, and it does not hold against the code. ``sync/ias.py::synchronize``
+    # takes ``ledger`` as OPTIONAL and anchors only inside ``if ledger is not
+    # None``; Exp. 6's runner has never passed one, so Step 7 is not on its timed
+    # path. Two independent sources agree it is outside the boundary: README §5
+    # ends Exp. 6 at "until all affected FSNs report the new VID", and
+    # ``tab:cost``'s authorization-synchronization row is O(delta)T_H +
+    # O(log d)T_MT with no chain term. Exp. 4 keeps the gate because §5 puts
+    # "chain consistency" INSIDE its boundary in as many words.
+    #
+    # §V must state the exclusion and report anchoring separately -- the treatment
+    # README §5 already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 7
+    # is ever brought inside the boundary, the runner must pass a ledger and
+    # ``exp6_authorization_sync`` must come back into this tuple.
+    if experiment in ("exp4_verification_overhead",) and not ledger_faithful:
         # README §1 states the ledger is Hyperledger Fabric v2.5, but the
         # harness runs chain.ledger.InProcessLedger -- whose OWN docstring says
         # it is "NOT a substitute for Fabric once Fog Search Nodes become

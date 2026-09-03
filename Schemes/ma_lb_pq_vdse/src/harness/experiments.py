@@ -1033,14 +1033,65 @@ class Exp5KeywordUpdate:
 # ===========================================================================
 # Exp. 6 — Authorization Synchronization
 # ===========================================================================
+#: Exp. 6 ablation — one variant per half of the IAS claim.
+#:
+#:   ``ias``          the published rule: selective delivery, and only the
+#:                    affected authority evolves. The default.
+#:   ``broadcast``    tests SELECTIVE. IAS_i goes to every FSN rather than only
+#:                    those holding the affected shard — the alternative
+#:                    ``:1111`` names and rejects.
+#:   ``full_rebuild`` tests INCREMENTAL. Every authority recomputes its
+#:                    commitment and the AIM republishes it, instead of
+#:                    ``:1045``'s "only the affected authority updates its
+#:                    commitment, while all other authorities retain their
+#:                    existing authorization states".
+#:
+#: These are ABLATIONS of the proposed scheme, not baselines from other papers,
+#: exactly as Exp. 7-8's four scheduler variants are. Neither is a strawman built
+#: on a known-slow implementation: ``full_rebuild`` calls the SAME
+#: ``Authority.commitment()`` the proposed path calls and differs only in how many
+#: authorities it calls it for. The superseded O(delta^2) ``RevocationList`` is
+#: deliberately NOT used here — measuring against an old bug would overstate the
+#: advantage.
+VARIANT_IAS = "ias"
+VARIANT_BROADCAST = "broadcast"
+VARIANT_FULL_REBUILD = "full_rebuild"
+EXP6_VARIANTS: Tuple[str, ...] = (
+    VARIANT_IAS, VARIANT_BROADCAST, VARIANT_FULL_REBUILD
+)
+
+
+def _broadcast_selector(message, nodes):
+    """Every FSN, not only those serving the affected domain."""
+    return tuple(nodes)
+
+
 @dataclass
 class Exp6AuthorizationSync:
-    """"IAS end-to-end: authority commitment recomputation → Merkle path update →
-    IAS message → selective FSN propagation, until all affected FSNs report the new
-    VID. Report FSNs touched."
+    """"IAS propagation: authority commitment recomputation → Merkle path update
+    → IAS message → selective FSN propagation, until all affected FSNs report the
+    new VID. Report FSNs touched."
 
     ``synchronize`` verifies that postcondition itself, so a run that returns has
     reached it.
+
+    **Boundary.** Phase VII Step 7 (anchoring ``BC_i'``) is OUTSIDE this
+    measurement: no ledger is passed to ``synchronize``, so nothing is anchored on
+    the timed path. That matches README §5, whose Exp. 6 boundary ends at "until
+    all affected FSNs report the new ``VID``", and ``tab:cost``'s authorization-
+    synchronization row ``O(delta)T_H + O(log d)T_MT``, which carries no chain
+    term. Anchoring is also identical across all three variants, so including it
+    could not change which one wins — only add a constant. §V must state the
+    exclusion and report the anchor cost separately, the way README §5 already
+    handles ML-KEM encapsulation for Exp. 1.
+
+    **What ``fsns_touched`` can and cannot show.** ``assign_domains_to_fsns`` gives
+    each domain to exactly ONE node, and an ``IASMessage`` carries exactly one
+    domain, so selective delivery touches exactly one node for ANY ``d`` and ``m``.
+    Under ``ias`` the metric is therefore a constant 1 BY CONSTRUCTION, and is
+    evidence of nothing unless read against ``broadcast``'s ``m``. Every run before
+    2026-09-03 reported it alone, which is why README §5's "selective propagation
+    is the claim" had no measurement behind it.
     """
 
     config: scheme_config.Configuration
@@ -1049,6 +1100,7 @@ class Exp6AuthorizationSync:
     number: int = 6
     variable: str = "authorization_updates"
     values: Tuple[Any, ...] = ()
+    variant: str = VARIANT_IAS
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("ias_message_size", KB),
@@ -1058,6 +1110,11 @@ class Exp6AuthorizationSync:
     def __post_init__(self) -> None:
         if not self.values:
             self.values = tuple(self.config.experiment("exp6").values)
+        if self.variant not in EXP6_VARIANTS:
+            raise ValueError(
+                f"unknown Exp. 6 variant {self.variant!r}; "
+                f"valid: {', '.join(EXP6_VARIANTS)}"
+            )
 
     def prepare(self, value: Any) -> Any:
         deployment = build_deployment(
@@ -1070,6 +1127,11 @@ class Exp6AuthorizationSync:
         record = d.records[0]
         domain = record["record"].domain
         authority = d.authorities[domain]
+        others = tuple(a for dom, a in d.authorities.items() if dom != domain)
+        selector = (
+            _broadcast_selector if self.variant == VARIANT_BROADCAST else None
+        )
+        rebuild = self.variant == VARIANT_FULL_REBUILD
         total_bytes = 0.0
         touched = 0
         started = time.perf_counter_ns()
@@ -1086,9 +1148,21 @@ class Exp6AuthorizationSync:
                 entries=record["entries"],
                 auth_root_do=d.owner_profile.auth_root,
                 aim=d.aim,
+                select_nodes=selector,
             )
             total_bytes += receipt.message.size_kb
             touched += receipt.touched_count
+            if rebuild:
+                # Global authorization reconstruction: every OTHER authority
+                # recomputes C_k^auth and the AIM republishes it to every node.
+                # Authority.commitment() is uncached by design, so this is the
+                # real recomputation rather than a re-read of a stored value.
+                for other in others:
+                    meta = other.meta()
+                    d.aim.register_meta(other.authority_id, meta)
+                    for node in d.nodes:
+                        node.apply_meta(other.authority_id, meta)
+                        touched += 1
         elapsed = time.perf_counter_ns() - started
         updates = max(1, prepared["updates"])
         return Sample(

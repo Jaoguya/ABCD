@@ -318,6 +318,23 @@ ABLATION_VARIANTS: Tuple[Tuple[str, str], ...] = (
     ("aass", "AASS (proposed)"),
 )
 
+#: Exp. 6 ablates IAS PROPAGATION, not the scheduler, so it has its own
+#: vocabulary. `ias` is the published rule; `broadcast` is the alternative
+#: :1111 rejects (deliver to every FSN); `full_rebuild` is the alternative
+#: :1045 rejects (every authority recomputes its commitment). Added 2026-09-03 --
+#: before that Exp. 6 plotted one series with no comparison, so README §5's
+#: "selective propagation is the claim" had nothing to read it against.
+EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
+    ("broadcast", "Broadcast to all FSNs"),
+    ("full_rebuild", "Global authorization rebuild"),
+    ("ias", "IAS (proposed)"),
+)
+
+
+def variants_for(number: int) -> Tuple[Tuple[str, str], ...]:
+    """Which variant vocabulary an experiment's ablation figure uses."""
+    return EXP6_VARIANTS if number == 6 else ABLATION_VARIANTS
+
 
 def _variant_of(exp_dir: Path) -> Optional[str]:
     """Which scheduler produced this directory.
@@ -338,6 +355,18 @@ def _variant_of(exp_dir: Path) -> Optional[str]:
     return exp_dir.name.rsplit("__", 1)[-1] if "__" in exp_dir.name else None
 
 
+def _has_variant_dirs(input_root: Path, spec: ExperimentSpec) -> bool:
+    """Whether any directory names a variant this experiment's ablation knows."""
+    if not input_root.is_dir():
+        return False
+    known = dict(variants_for(spec.number))
+    for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
+        for exp_dir in scheme_dir.glob(f"exp{spec.number}_*__*"):
+            if exp_dir.is_dir() and _variant_of(exp_dir) in known:
+                return True
+    return False
+
+
 def collect_ablation(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     """One series per scheduler variant, for Exp. 7-8.
 
@@ -356,9 +385,9 @@ def collect_ablation(input_root: Path, spec: ExperimentSpec) -> List[Series]:
                 continue
             variant = _variant_of(exp_dir)
             # Skips the `__points-<N>` sweep shards, which are not variants.
-            if variant in dict(ABLATION_VARIANTS):
+            if variant in dict(variants_for(spec.number)):
                 by_variant.setdefault(variant, exp_dir)
-    for variant, label in ABLATION_VARIANTS:
+    for variant, label in variants_for(spec.number):
         exp_dir = by_variant.get(variant)
         if exp_dir is None:
             print(f"  NOTE exp{spec.number}: no directory for variant "
@@ -382,6 +411,12 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     """
     found: List[Series] = []
     if spec.number in (7, 8):
+        return collect_ablation(input_root, spec)
+    if spec.number == 6 and _has_variant_dirs(input_root, spec):
+        # Exp. 6 gained an ablation on 2026-09-03 (ias / broadcast /
+        # full_rebuild). Probed rather than assumed so results predating it still
+        # plot as a single series instead of emitting three "missing variant"
+        # notes for directories that were never supposed to exist.
         return collect_ablation(input_root, spec)
     if not input_root.is_dir():
         return found

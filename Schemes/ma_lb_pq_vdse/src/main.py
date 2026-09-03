@@ -97,11 +97,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--variant", default=None,
         help=(
-            "scheduler variant for Exp. 7-8's four-way ablation: no_lb, "
-            "round_robin, least_loaded, aass, or 'all' to run each in turn. "
-            "Ignored for Exp. 1-6. Defaults to aass, which is what every "
-            "campaign before 2026-08-29 measured -- the other three had no CLI "
-            "route and the ablation README §5 describes had never been run."
+            "ablation variant, or 'all' to run each in turn. Exp. 7-8 take the "
+            "SCHEDULER variants (no_lb, round_robin, least_loaded, aass; "
+            "default aass). Exp. 6 takes the IAS PROPAGATION variants (ias, "
+            "broadcast, full_rebuild; default ias). Ignored for Exp. 1-5. The "
+            "two vocabularies are not interchangeable: a scheduler decides "
+            "which FSN serves a QUERY and has no effect on how an authorization "
+            "change propagates."
         ),
     )
     parser.add_argument(
@@ -191,16 +193,34 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                     _aass.VARIANT_LEAST_LOADED, _aass.VARIANT_AASS)
 
     def _variants_for(number: int):
-        """Which scheduler variants to run for this experiment."""
-        if number == 6 and args.variant:
-            # Exp. 6 measures IAS propagation and the scheduler decides which
-            # FSN serves a QUERY, so the four variants should be
-            # indistinguishable here. Run them anyway when asked: an ablation
-            # that shows no effect is a result, and asserting independence is
-            # weaker than measuring it.
+        """Which variants to run for this experiment.
+
+        Exp. 6 and Exp. 7-8 have DIFFERENT variant vocabularies. Exp. 7-8 ablate
+        the SCHEDULER (no_lb / round_robin / least_loaded / aass); Exp. 6 ablates
+        IAS PROPAGATION (ias / broadcast / full_rebuild). They were previously
+        conflated: passing a scheduler variant to Exp. 6 ran the same measurement
+        under a different directory name, because the scheduler decides which FSN
+        serves a QUERY and plays no part in propagating an authorization change.
+        The stale ``exp6_authorization_sync__no_lb`` directory is what that
+        produced -- within 3% of the main run at every point.
+        """
+        if number == 6:
+            if args.variant in (None, ""):
+                return [experiments_mod.VARIANT_IAS]
             if args.variant.lower() == "all":
-                return list(ALL_VARIANTS)
-            return [v.strip() for v in args.variant.split(",") if v.strip()]
+                return list(experiments_mod.EXP6_VARIANTS)
+            chosen = [v.strip() for v in args.variant.split(",") if v.strip()]
+            unknown = [
+                v for v in chosen if v not in experiments_mod.EXP6_VARIANTS
+            ]
+            if unknown:
+                raise SystemExit(
+                    f"unknown Exp. 6 variant(s) {unknown}; valid: "
+                    f"{', '.join(experiments_mod.EXP6_VARIANTS)}, or 'all'. "
+                    f"The scheduler variants ({', '.join(ALL_VARIANTS)}) belong "
+                    f"to Exp. 7-8 and have no effect on IAS propagation."
+                )
+            return chosen
         if number not in (7, 8):
             return [None]                 # scheduler is not on their path
         if args.variant in (None, ""):

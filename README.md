@@ -224,6 +224,30 @@ Each experiment varies one variable and holds the rest at §6 defaults.
 | 7 | Search Throughput | concurrency | 100 → 5000 | throughput (q/s) | p50/p95 latency, rejected | Ours — ablation |
 | 8 | Load Balancing | concurrency | 100 → 5000 | std dev of FSN utilization | max-node util, peak queue depth | Ours — ablation |
 
+### IAS ablation (Exp. 6)
+
+Internal ablation, not a cross-scheme comparison — Exp. 6 has no baseline (§8).
+One variant per half of the IAS claim, so each half has something to be measured
+against:
+
+| Variant | Propagation |
+|---------|-------------|
+| `broadcast` | deliver `IAS_i` to every FSN — the alternative `:1111` rejects; tests **selective** |
+| `full_rebuild` | every authority recomputes `C_k^auth` and the AIM republishes it — the alternative `:1045` rejects; tests **incremental** |
+| `ias` | the published rule: selective delivery, only the affected authority evolves |
+
+`full_rebuild` calls the same `Authority.commitment()` the proposed path calls
+and differs only in how many authorities it calls it for. The superseded
+O(δ²) `RevocationList` (§14 item 10) is deliberately **not** used as the
+comparison — measuring against a fixed bug would overstate the result.
+
+Run with `--experiment 6 --variant all`. The scheduler variants belong to
+Exp. 7–8 and are refused here: they decide which FSN serves a *query* and have
+no effect on how an authorization change propagates, so running them produced a
+second copy of the same measurement under a different directory name (that is
+what `exp6_authorization_sync__no_lb` is — within 3% of the main run at every
+point, and superseded by this ablation).
+
 ### Scheduler ablation (Exp. 7–8)
 
 Internal ablation, not a cross-scheme comparison. Four variants over one workload trace:
@@ -246,7 +270,7 @@ These decide what the numbers mean.
 - **Exp. 3** — baselines issue `d` trapdoors and `d` searches; ours issues one reused across domains. Count trapdoors issued so the mechanism is visible.
 - **Exp. 4** — client-side verification only: Merkle proof, `Commit_i*` recomputation, chain consistency. IPFS fetch and decryption excluded.
 - **Exp. 5** — incremental update only. A global rebuild means Phase VII is implemented wrong. `k` counts (keyword, document) pairs — the corpus has 18.8M of them, so 10⁵ is available; read as distinct keywords it would be impossible against a 2,102 vocabulary.
-- **Exp. 6** — IAS end-to-end: commitment recomputation → Merkle path update → IAS message → selective FSN propagation until all affected FSNs report the new `VID`. Report FSNs touched; selective propagation is the claim.
+- **Exp. 6** — IAS **propagation**: commitment recomputation → Merkle path update → IAS message → selective FSN propagation until all affected FSNs report the new `VID`. **Phase VII Step 7 (anchoring `BC_i'`) is outside this boundary** and is reported separately as a per-update constant, the same treatment Exp. 1 gives ML-KEM encapsulation — `tab:cost`'s authorization-synchronization row is `O(δ)T_H + O(log d)T_MT` with no chain term, and anchoring costs the same under every variant, so including it could not change which one wins. Was called "end-to-end", which read as "all of Phase VII" and is why the ledger gate wrongly blocked this experiment until 2026-09-03. Report FSNs touched; selective propagation is the claim — but **only against the `broadcast` variant**: each domain lives on exactly one node and an `IASMessage` carries one domain, so selective delivery touches one node for any `d` and `m`, and the bare number is a property of the design rather than a measurement of it.
 - **Exp. 7–8** — closed-loop generator, fixed concurrency per point, recorded arrival trace so all variants see identical workloads. Utilization sampled every 100 ms. Index size is the §6 default 10⁵, sized as Exp. 2 sizes it (`index_size // keywords_per_record`) so `N` means the same thing in both. The 30 s ramp runs once per sweep point inside setup, not once per run — "warm after a ramp" means the 10 retained runs all see a warm system, and ramping per run would time a warm-up 10 times over.
   - **Query domain span is a benchmark choice, not published.** §V fixes `d = 4` but never says how many domains one query touches. The Data User population is uniform over spans 1…`d` with the starting domain rotated, so every domain appears equally often and no FSN is structurally favoured. A single user authorized across all domains — which is what this was — makes `C^auth` constant on every node and leaves the scheduler nothing to discriminate on.
   - **Cross-node forwards is not reported, and cannot be.** At `d = m = 4` each FSN holds exactly one domain, and the scheduler only ever considers nodes serving an authorized domain, so the chosen node serves exactly one of a request's `k` domains *whichever node it is* — the forward count is `k−1` under all four variants, measured identically at 600 over 400 requests. Peak queue depth replaces it: it measures node congestion, which is what the claim is actually about, and it is only measurable now that the FSN queue is fed by the dispatch path.
@@ -517,7 +541,9 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 | 2026-08-29 | **`synthetic_generator.py` no longer overwrites the frozen corpus manifest.** `--manifest` defaults to the committed `Dataset/dataset_manifest.json`, so making a dev corpus silently replaced the campaign's provenance pin. Now refused unless `--force`. |
 | 2026-08-29 | **`SystemConfiguration.md` added** — operator's guide for anyone new to the project. |
 | 2026-09-03 | **Two measurement defects found and fixed; the 30 → 10 change finished; full first-to-last audit.** Exp. 2 had been querying `keywords[0]` of the first record — one arbitrary keyword, unchanged across every run of every point — while `guo` and `yue_ge` each draw a NEW keyword per run. Peony++ is output-sensitive (`O(n_w^l)` is literally the matching-file count), so its ten runs at N=10⁶ spanned **0.33–1408.65 ms** and its mean sits **16.9× its median**; our flat ±2% curve was an artefact of never varying the query, and whichever keyword `keywords[0]` happened to be silently set the published figure. Now draws `warmup_runs + repetitions` keywords at the baselines' own selectivity bounds (copied verbatim from `yue_ge/src/workload.py`) and rotates one per call; warm-ups consume the first entries so retained runs align with the baselines'. Separately, Exp. 4 was recomputing Phase VIII Steps 2–3 once per index ENTRY when both depend only on the RECORD — 1000 bundles cover 167 records at `keywords_per_record = 6`, making 67% of runtime redundant; amortised for **2.08× at r=1000**, Step 1 deliberately left per-bundle. The 30 → 10 repetition change was completed across 18 stale claims in 13 files (worst: `global.yaml`'s own comment on the `repetitions: 10` line reading "§V still says 30") and is now pinned by `test_repetition_count_agreement.py`. Audit of all eight experiments against `tab:cost`: Exp. 4, 5, 6 match; Exp. 7–8 have no table row; Exp. 1's `O(1)`/`O(q)` baseline claims and Exp. 3's assumed linearity do not hold. **[results-affecting: ma_lb_pq_vdse Exp. 2 and Exp. 4 both need rerunning — see §17]** |
+| 2026-09-03 | **Exp. 6 unblocked and given the ablation its claim needs.** The ledger gate blocked Exp. 6 on the Fabric adapter, justified (`451df65`) by "Exp. 6 times IAS through to blockchain anchoring". It does not: `sync/ias.py::synchronize` takes `ledger` as **optional** and anchors only inside `if ledger is not None`, and the Exp. 6 runner has never passed one — so Phase VII Step 7 was never on its timed path. That justification cited a protocol step rather than a measurement boundary; §5 ends Exp. 6 at "until all affected FSNs report the new `VID`" and `tab:cost`'s sync row has no chain term. **Exp. 6 is reportable without the Fabric adapter**; Exp. 4 still is not, because §5 puts "chain consistency" inside its boundary explicitly. Separately, `fsns_touched` was a constant 1.000 at every δ in every campaign to date — `assign_domains_to_fsns` gives each domain to one node and an `IASMessage` carries one domain, so selective delivery touches one node for any `d` and `m`. Reported alone it evidenced nothing, leaving §5's "selective propagation is the claim" unmeasured. Added the `ias` / `broadcast` / `full_rebuild` ablation (`synchronize` now takes an injected `select_nodes`, the way `verify_bundle` takes its Step 3 check) so each half of the claim has a contrast. Exp. 6's variant vocabulary is now separate from Exp. 7–8's and scheduler names are refused there. **Not yet run or tested — pytest is not installed on the dev host; the 17 tests in `test_exp6_propagation_ablation.py` have never executed.** **[results-affecting: Exp. 6 needs rerunning across three variants]** |
 
+---
 ## 17. Session Handoff — 2026-09-03
 
 **Read this before touching the fleet or quoting any number.** Written for
