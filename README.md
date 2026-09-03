@@ -554,46 +554,123 @@ Two consequences worth carrying forward:
 * **The watchdogs now commit results locally** before stopping, precisely so a
   finished run cannot be destroyed this way again.
 
-### 17.3 Fleet state at hand-off (06:17 UTC)
+### 17.3 Fleet state — all campaigns finished
 
-| Node | IP | Running | Watchdog |
-|------|----|---------|----------|
-| `i-0d9b2c6e1776c6f84` | 34.228.75.48 | **proposed scheme**, Exp. 8 (Exp. 1–7 done) | ARMED |
-| `i-0c376b61dae6fed24` | 54.87.2.31 | **perera restore**, Exp. 3 | ARMED |
-| `i-0e5ae20e113bae9f7` | 54.144.93.141 | **guo**, Exp. 3 (then 4, 5) | ARMED |
-| `i-025c809974bbf7511` | — | stopped — yue_ge complete, harvested | — |
-| `i-0b3030b5bd768536e` | — | stopped — thingom complete, harvested | — |
+| Node | Scheme | Outcome |
+|------|--------|---------|
+| `i-0d9b2c6e1776c6f84` | **proposed** | complete 06:33:00Z, `rc(7-8)=0`, all 8 experiments — harvested, stopped |
+| `i-0c376b61dae6fed24` | **perera** | complete 06:38:33Z, `rc=0`, Exp. 1–3 — harvested, stopped |
+| `i-0e5ae20e113bae9f7` | **guo** | Exp. 1–5 finished ~08:4x; **HARVEST PENDING — see below** |
+| `i-025c809974bbf7511` | yue_ge | complete, harvested, stopped |
+| `i-0b3030b5bd768536e` | thingom | complete, harvested, stopped |
 
-**Every watchdog waits for the DRIVER to exit, not a single python process.**
-The proposed scheme's run is two invocations (Exp. 1–6, then 7–8); a watchdog
-watching "is the python alive" would fire in the gap between them and stop the
-box with the ablation unrun. On stop, each watchdog commits results locally,
-writes `~/results-<scheme>-<ts>.bundle`, and attempts a push.
-
-**The nodes cannot push.** The remote is `git@github.com:Jaoguya/ABCD` over SSH
-and no node holds a private key. Copying a personal key onto a cloud instance was
-deliberately not done. **To enable real auto-push, add a GitHub deploy key with
-write access to each node** — until then, fetch the bundle and push from a
-machine that holds a credential:
+**OPEN: guo's results are still only on its node.** Its watchdog fired and
+stopped the instance correctly, but on restart the box came back `running` with
+`ok/ok` status checks and **sshd never answered** (same security group as nodes
+that connect fine, so it is the host, not access). Its Exp. 1–4 numbers in
+§17.4 were read before it stopped; **Exp. 5 has been neither read nor
+harvested.** Recover with:
 
 ```bash
-scp -i ~/.ssh/ojcoms.pem ubuntu@<ip>:~/results-<scheme>-*.bundle /tmp/
-git fetch /tmp/results-<scheme>-*.bundle HEAD:refs/remotes/node/main
+aws ec2 stop-instances  --instance-ids i-0e5ae20e113bae9f7   # clean stop
+aws ec2 start-instances --instance-ids i-0e5ae20e113bae9f7   # then retry ssh
+# if sshd still refuses, take the console output before doing anything drastic:
+aws ec2 get-console-output --instance-id i-0e5ae20e113bae9f7 --output text | tail -50
+scp -i ~/.ssh/ojcoms.pem "ubuntu@<ip>:results-guo-*.bundle" /tmp/
 ```
 
-A stop preserves EBS and every result. **A terminate destroys them** —
-`DeleteOnTermination: true` on these volumes. Do not terminate.
+**Do NOT terminate it.** `DeleteOnTermination: true` on these volumes — a stop
+preserves every result, a terminate destroys them, and guo's are unbacked.
 
-### 17.4 New numbers from the fixed code (proposed scheme, 10 reps, m6i.xlarge)
+**Watchdog design, for whoever writes the next one.** Each waits for the
+DRIVER to exit, not a single python process: the proposed scheme's run is two
+invocations (Exp. 1–6, then 7–8), so watching "is the python alive" fires in the
+gap between them and stops the box with the ablation unrun. On exit it commits
+results locally, writes `~/results-<scheme>-<ts>.bundle`, attempts a push, then
+stops.
 
-| Exp | Before (30 rep, pre-fix) | After | Note |
-|-----|--------------------------|-------|------|
-| 2 @ N=10⁶ | 24.995 **± 39.34** | **6.040 ± 0.386** | CI was 157% of the mean; the "8.8× blow-up" was one 582 ms run |
+**The nodes cannot push.** Remote is `git@github.com:Jaoguya/ABCD` over SSH and
+no node holds a private key; copying a personal key onto a cloud instance was
+deliberately not done. **For real auto-push, add a GitHub deploy key with write
+access per node.** Until then, fetch the bundle and push from a machine that
+holds a credential:
+
+```bash
+scp -i ~/.ssh/ojcoms.pem "ubuntu@<ip>:results-<scheme>-*.bundle" /tmp/
+git fetch /tmp/results-<scheme>-*.bundle HEAD:refs/node/<scheme>
+git checkout refs/node/<scheme> -- Schemes/<that-scheme-only>/
+```
+
+**That last line matters.** Each watchdog runs `git add -A Schemes/`, which is
+too broad: perera's node commit also carried 39 stale 2026-08-29
+`ma_lb_pq_vdse` files that were dirty in its working tree. **Merging its bundle
+would have overwritten the fresh proposed-scheme results with month-old data.**
+Always check `git diff --name-only <ref>~1 <ref>` and extract per-scheme paths
+rather than merging. Narrowing that `git add` to the scheme the node actually
+ran is a one-line fix worth making.
+
+### 17.4 Results after the fixes — measured, 10 repetitions
+
+**Everything below is fresh 10-repetition data.** Every scheme was re-run; the
+proposed scheme had never been measured at 10 repetitions at all before this
+(its previous results were all `n_runs=30` from commits `d65df6b`/`55aa3c8`,
+predating both the repetition change and both fixes).
+
+**The two fixes, before and after:**
+
+| Exp | Before (30 rep, pre-fix) | After (10 rep, fixed) | Note |
+|-----|--------------------------|-----------------------|------|
+| 2 @ N=10⁶ | 24.995 **± 39.34** | **6.040 ± 0.386** | old CI was 157% of its own mean |
 | 4 @ r=1000 | 28.027 | **15.411 ± 0.072** | **1.82×** faster |
 
-**Exp. 4 is still 3rd of 3** — 15.411 against Scheme [30]'s 9.058 and Scheme
-[35]'s 5.171. The amortisation narrowed the gap from 3.09× to 1.70× and was
-never expected to close it.
+Exp. 2's "8.8× blow-up at the top of the sweep" was one 582.81 ms run against a
+5.698 ms median; 29 of 30 runs had been 5.63–7.31 ms. The new curve is monotonic:
+0.486, 0.611, 0.853, 2.539, 6.040.
+
+**Exp. 4 head-to-head, all three schemes at 10 repetitions:**
+
+| r | Proposed | Scheme [30] | Scheme [35] | our rank |
+|---:|---:|---:|---:|---|
+| 10 | 0.172 ±0.011 | 0.135 ±0.005 | **0.062 ±0.002** | 3 of 3 |
+| 100 | 1.505 ±0.005 | 0.963 ±0.027 | **0.524 ±0.006** | 3 of 3 |
+| 1000 | 15.411 ±0.072 | 9.139 ±0.047 | **5.195 ±0.015** | 3 of 3 |
+
+**We are 3rd of 3 at every point, and it is not close.** Every interval is under
+3% of its mean. The amortisation narrowed the gap to Scheme [30] from 3.09× to
+1.69× and was never expected to close it — **only the aggregate proof (§17.5
+item 1) reaches 2nd.** The baselines barely moved between 30 and 10 repetitions
+(guo 5.171 → 5.195, yue_ge 9.058 → 9.139), which is a useful check that the
+repetition change disturbed nothing.
+
+**Proposed-scheme data quality: clean.** All 27 result directories, zero
+outlier-distorted points, mean/median 1.00–1.05 throughout.
+
+### 17.4.1 guo Exp. 3 is NOT publishable as it stands
+
+This is fresh 10-repetition data, not the stale campaign — **the defect
+survived the re-run.**
+
+| d | median | published mean | ±CI | max |
+|---:|---:|---:|---:|---:|
+| 2 | 36.555 | **53.786** | ±46.238 | 194.118 |
+| 6 | 21.302 | **53.394** | ±46.814 | 193.964 |
+| 10 | 18.538 | **42.816** | ±43.343 | 193.356 |
+
+* **9 of 9 points distorted; the CI is ~86% of the mean.**
+* **The max is ~194 ms at every single `d`** — a hard ceiling, which is guo's
+  `EDBcache` miss cost (its own Alg. 3 lines 25/28). The other runs hit the cache
+  at 18–36 ms.
+* **The mean destroys the actual finding.** Medians fall cleanly with `d` —
+  36.6 → 21.3 → 18.5, which is the scaling Exp. 3 exists to show. The mean is
+  flat near 50 ms and hides it completely.
+
+This is the sharpest instance of the open decision in §17.6: reporting
+mean ± 95% CI here publishes a number whose interval is 86% of itself and whose
+trend is invisible.
+
+**perera Exp. 1 also still has 5 of 20 points distorted** (worst 4.2×,
+mean/median 1.20) after its re-run — improved from 12 of 20, but this was never
+purely an artefact of the 30-repetition campaign. Its Exp. 2 and 3 are clean.
 
 ### 17.5 What remains — code
 
