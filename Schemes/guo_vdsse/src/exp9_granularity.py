@@ -68,9 +68,18 @@ VARIABLE_RANGE = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
 #: compares nothing.
 RETURNED_RESULTS = 20_000
 
-#: Index size. Larger than exp4's 10^5 because the sweep needs ONE keyword that
-#: genuinely matches RETURNED_RESULTS documents; see the note in `run`.
-DEFAULT_N = 300_000
+#: Index size. HELD at exp4's 10^5 and not raised, for a hard memory reason:
+#: Guo's forward index stores a t-punctured GGM key per document -- ~50.5 KB at
+#: the configured 64-bit domain and corpus v4's 31.7 keywords/document. That is
+#: ~5 GB at 10^5 and ~15 GB at 3x10^5, against 16 GiB on m6i.xlarge; indexing
+#: the full corpus was OOM-killed (rc=137) twice for exactly this reason, and
+#: exp4_verify.py carries the same cap and the same note.
+#:
+#: The cost is that the pinned RETURNED_RESULTS may not be reachable here. That
+#: is reported, never papered over -- see the NOTE in `run`. If this arm cannot
+#: reach the pinned size, the honest fix is to re-pin all three schemes to the
+#: smallest denominator any of them can reach, not to raise this number.
+DEFAULT_N = 100_000
 
 
 def _keyword_nearest(records: List[Record], target: int) -> tuple[str, int]:
