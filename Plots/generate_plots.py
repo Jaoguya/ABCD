@@ -663,6 +663,22 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 f"exp{spec.number}: log y-axis requested but data contains "
                 f"non-positive values; drew linear instead so nothing is hidden"
             )
+    # X-AXIS BREATHING ROOM. Matplotlib fits the axis tightly to the data, so
+    # the first and last swept points sit exactly on the frame edge -- every
+    # figure's leftmost/rightmost marker reads as clipped by the border. Same
+    # fix as the Y-axis headroom below: extend the LIMITS symmetrically, never
+    # crop a point or hide data.
+    if ax.get_xscale() == "log":
+        lo, hi = ax.get_xlim()
+        if lo > 0 and hi > lo:
+            pad = 0.06 * (math.log10(hi) - math.log10(lo))
+            ax.set_xlim(10 ** (math.log10(lo) - pad), 10 ** (math.log10(hi) + pad))
+    else:
+        lo, hi = ax.get_xlim()
+        if hi > lo:
+            pad = 0.05 * (hi - lo)
+            ax.set_xlim(lo - pad, hi + pad)
+
     ax.grid(True, which="major", linewidth=0.3, alpha=0.5)
     if spec.log_x or spec.log_y:
         ax.grid(True, which="minor", linewidth=0.2, alpha=0.3)
