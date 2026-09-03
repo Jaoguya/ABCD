@@ -95,9 +95,15 @@ def run(
         )
 
     probe = build_workload(records, params)
-    candidates = [
-        kw for kw, n in probe.keyword_freq.most_common(50) if n >= 10
-    ]
+    # Scan the FULL keyword universe (2023 distinct keywords -- trivial), not
+    # just the most-common few. This corpus's top ~46 keywords all sit at
+    # 150k-400k document frequency (Dataset/dataset_manifest.json), a flat
+    # plateau of common EHR codes, not a smooth Zipf tail -- so a top-N
+    # shortlist misses everything near the pinned RETURNED_RESULTS=20,000
+    # entirely and silently reports over a wildly different denominator than
+    # Guo's and ma_lb's arms, which is exactly the comparison this experiment
+    # exists to avoid.
+    candidates = [kw for kw, n in probe.keyword_freq.items() if n >= 10]
     if not candidates:
         raise RuntimeError("corpus produced no keyword with >= 10 matches")
     keyword = min(
