@@ -10,10 +10,14 @@ HOW TO READ THIS
   [FIX]     mechanical correction, no judgement needed
   [OPS]     infrastructure / data safety
 
-State at time of writing: ALL FIVE SCHEMES COMPLETE AND HARVESTED at 10
-repetitions. Nothing is running; all nine instances are stopped. Every item
-below is DECIDE, BUILD or FIX work — none of it is blocked on infrastructure
-any more.
+State at time of writing: ALL FIVE SCHEMES COMPLETE, HARVESTED AND COMMITTED at
+10 repetitions. Nothing is running; all nine instances are stopped; the
+temporary SSH rule was revoked. Every item below is DECIDE, BUILD or FIX work —
+none of it is blocked on infrastructure any more.
+
+Two exceptions to "everything is at 10 repetitions", both benign and both
+recorded: the stale merged Exp. 7-8 directories (FIX-4), and thingom's Exp. 2
+points at n=1, which is a documented cost cap for that scheme.
 
 
 ================================================================================
@@ -257,6 +261,40 @@ answer.
 
 
 ================================================================================
+FIX-4 — two stale merged directories in the proposed scheme          [FIX]
+================================================================================
+    Schemes/ma_lb_pq_vdse/exp7_search_throughput/
+    Schemes/ma_lb_pq_vdse/exp8_load_balance/
+
+Both still read n_runs=30 and carry git_commit 55aa3c8. They are MERGED
+aggregates built by infra/merge_points.py from an old sharded run
+(merged_from: exp7_search_throughput__points-100, __points-500, ...), and the
+2026-09-03 campaign did not regenerate them -- it wrote the four per-variant
+directories instead (__aass, __least_loaded, __no_lb, __round_robin), which are
+correctly at n_runs=10.
+
+NOT a figure problem. Plots/generate_plots.py::collect_ablation reads the
+per-VARIANT directories for Exp. 7-8 (see _variant_of, which splits on "__"),
+so the published figures use the fresh data. The stale merged directories are
+not read.
+
+It IS a trap for a human. Anyone opening exp7_search_throughput/results.csv
+expecting current data gets 30-repetition numbers from a superseded sharded run.
+Either regenerate them from the new per-variant data, or delete them and say so.
+They were left in place rather than deleted on the assistant's own judgement --
+deleting results is exactly the class of action that destroyed perera's run
+earlier in the same session.
+
+Everything else in the repository is at n_runs=10:
+    ma_lb_pq_vdse    Exp. 1-6 and the eight per-variant Exp. 7-8 directories
+    guo_vdsse        Exp. 1-5
+    yue_ge           Exp. 1-5
+    thingom_pq_abse  Exp. 1-3   (its Exp. 2 has points at n=1 by design -- a
+                                 documented cost cap, see its src/main.py)
+    perera_lv_pqabse Exp. 1-3
+
+
+================================================================================
 OPS-1 — nodes cannot push their own results                              [OPS]
 ================================================================================
 The git remote is git@github.com:Jaoguya/ABCD over SSH and NO fleet node holds a
@@ -332,6 +370,15 @@ WHAT IS ALREADY DONE — do not redo these
   3fc6b52  guo's full 10-rep campaign, Exp. 1-5, recovered from the stranded
            node. Extracted the 15 result files BY NAME rather than by directory,
            applying the OPS-2 lesson.
+  22fe09d  yue_ge and thingom 10-rep results -- which had been harvested during
+           the session and then NEVER COMMITTED. The repository still held their
+           2026-08-29 30-rep data while every other scheme had moved on. Found
+           by auditing n_runs across all five schemes rather than trusting that
+           "harvested" meant "landed". Worth repeating that audit at the end of
+           any campaign; the check is one line and it caught a real gap:
+               sed -n 2p <results.csv> | tr -d '\r' | awk -F, '{print $NF}'
+           (note the tr -d '\r' -- these CSVs are CRLF, and without it every
+           comparison against "10" silently fails.)
 
   Test suite: 567 passed, 1 skipped.
 
