@@ -21,7 +21,8 @@ Legend: `[DECIDE]` needs a human call · `[BUILD]` engineering with a known targ
 | DECIDE-2 | What statistic do the baselines get reported with? | open |
 | FIX-1 | `tab:cost` claims `O(d)T_Ver` but no such operation exists | **fixed 2026-09-03** — removed from the table cell, the paragraph under it, and the Fig. 5 discussion. `T_Ver` now appears only where Scheme [54] legitimately uses it |
 | FIX-2 | Manuscript claims contradicted by measurement | open |
-| BUILD-2 | Exp. 4 aggregate proof ("Tier 2") | open — the only change that moves us from 3rd to 2nd |
+| BUILD-2 | Exp. 4 aggregate proof ("Tier 2") | open — **re-measured 2026-09-03: NOT sufficient alone.** Projects to 9.08 ms against [30]'s 9.139 — a 0.6% margin, i.e. a tie. Needs the batched chain lookup with it (see BUILD-2b) |
+| BUILD-2b | Batch Exp. 4's chain lookup: one ledger query for all records, not one per record | open — **this is what actually reaches 2nd.** Floor becomes ~6.15 ms host. Also the only version that survives BUILD-1: 167 real Fabric RPCs would dominate everything |
 
 ## Needs a machine (one trip)
 
