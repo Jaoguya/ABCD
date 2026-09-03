@@ -3,11 +3,11 @@
   "config_hashes": {
     "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
     "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-    "global.yaml": "931f49a6eada36370856b998585dff6683e6ba215933b84860356e43ffc26738",
+    "global.yaml": "ac5568611661bda29fe1dd77baeb0fc64b6dabfc77e5fff42c777e463ac25b2f",
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21",
     "workload/exp78_sweep_holdout.yaml": "716c19ccacb1f1854f01d42f9d7740e77f87666736ff612c3b3829274c864fae",
-    "workload/exp78_workload.yaml": "804afa7719e4e6851b548c39d56b9195d338effd7ee3c078cd8e921b92b5e8c3"
+    "workload/exp78_workload.yaml": "7b2bef17d296639ed2afb1f552868a268e1f4e8bc2266162c378753deec5ed7c"
   },
   "corpus_sha256": "e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0",
   "corpus_type": "synthea",
@@ -21,15 +21,18 @@
     "config_hashes": {
       "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
       "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-      "global.yaml": "931f49a6eada36370856b998585dff6683e6ba215933b84860356e43ffc26738",
+      "global.yaml": "ac5568611661bda29fe1dd77baeb0fc64b6dabfc77e5fff42c777e463ac25b2f",
       "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
       "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
     },
     "cpu_count": 4,
     "experiment_host": {
       "detected_instance_type": "m6i.xlarge",
-      "expected_instance_type": "m6i.xlarge",
-      "is_pinned_experiment_host": true,
+      "expected_instance_type": null,
+      "host_check_satisfied": true,
+      "is_pinned_experiment_host": false,
+      "metadata_reachable": true,
+      "pin_configured": false,
       "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
     },
     "kem_backends_available": {
@@ -55,9 +58,9 @@
   },
   "dataset_records": null,
   "experiment": "exp8_load_balance",
-  "finished_utc": "2026-09-01T07:17:21.078084+00:00",
-  "git_commit": "6c97ee92a3d5a11fa21f98d0178a3836ba447c3c-dirty",
-  "instance_type": "m6i.xlarge",
+  "finished_utc": "2026-09-03T06:33:00.360635+00:00",
+  "git_commit": "79a5739eab34c9395acd39d74e3c60b7b5413ead",
+  "instance_type": "unknown",
   "libraries": {
     "bitarray": "3.10.1",
     "cryptography": "50.0.0",
@@ -73,9 +76,9 @@
   "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
   "python_version": "3.11.15",
   "reportable": true,
-  "runs": 30,
+  "runs": 10,
   "scheme": "ma_lb_pq_vdse",
-  "started_utc": "2026-09-01T07:10:11.420548+00:00",
+  "started_utc": "2026-09-03T06:28:13.522883+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": null,
     "NUMEXPR_NUM_THREADS": null,

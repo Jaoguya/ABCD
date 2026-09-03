@@ -3,7 +3,7 @@
 Handles the mechanical parts of running benchmark experiments per README §7:
   - Warm-up discarding (5 runs)
   - Per-run recording to raw_runs.csv
-  - Aggregation to results.csv (mean ± 95% CI from 10 retained runs)
+  - Aggregation to results.csv (mean ± 95% CI from 30 retained runs)
   - run_meta.json provenance
 
 NO scheme logic lives here — the harness is agnostic to what is being
@@ -84,7 +84,7 @@ def run_experiment(
     with ``primary_metric`` and ``secondary_metrics`` populated.
 
     The warm-up / retained split follows README §7:
-      "10 runs per point after 5 discarded warm-ups."
+      "30 runs per point after 5 discarded warm-ups."
     """
     all_results: List[RunResult] = []
     for val in variable_values:
@@ -234,7 +234,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
     Deliberately mirrors ma_lb_pq_vdse's provenance.reportability() rather
     than inventing a looser rule -- a baseline held to a weaker standard than
     the proposed scheme would bias the comparison in the proposed scheme's
-    favour, which is a bias defect.
+    favour, which AGENT_RULES "Bias Detection" forbids.
 
     Ref[54] uses no pairing (LWE CP-ABE + ML-KEM-768 + ML-DSA-65), so the
     Ref[41] pairing-backend condition is structurally absent rather than merely
@@ -291,7 +291,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
         from Common.crypto.config import verify_experiment_host
 
         host = verify_experiment_host()
-        if not host["host_check_satisfied"]:
+        if not host["is_pinned_experiment_host"]:
             reasons.append(
                 f"not running on the pinned AWS experiment host: expected "
                 f"{host['expected_instance_type']!r}, detected "

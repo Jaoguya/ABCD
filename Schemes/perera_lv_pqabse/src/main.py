@@ -46,7 +46,7 @@ def _report_setup_cost() -> None:
     from Common.crypto.kem import KEMUnavailableError, measure_setup_cost
 
     try:
-        cost = measure_setup_cost(repetitions=10)
+        cost = measure_setup_cost(repetitions=30)
     except KEMUnavailableError as exc:
         print(f"  session establishment: UNAVAILABLE ({exc})")
         return
@@ -66,7 +66,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument("--experiment", default="all", help="all, or 1,2,3")
-    parser.add_argument("--runs", type=int, default=10,
+    parser.add_argument("--runs", type=int, default=30,
                         help="retained runs per point (README §7 fixes 30)")
     parser.add_argument("--warmup", type=int, default=5,
                         help="discarded warm-ups (README §7 fixes 5)")
