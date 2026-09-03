@@ -1,23 +1,23 @@
 {
   "scheme": "guo_vdsse",
   "experiment": "exp3",
-  "git_commit": "f7458807e1f2fd4f9631241fe790b4ec97a1f29e",
+  "git_commit": "ad6486f01a001a72c1b24880a4efabfea63004d7",
   "python_version": "3.11.15",
   "dataset_sha256": "e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0",
   "corpus_type": "synthea",
   "config_hashes": {
     "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
     "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-    "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+    "global.yaml": "032de0d9dcaf5b48863521375564ac4208ca72db8e7e3925ab9d755f59c6bffe",
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
   },
-  "utc_start_time": "2026-08-29T12:03:08+00:00",
+  "utc_start_time": "2026-09-03T07:05:47+00:00",
   "environment": {
     "python_version": "3.11.15",
     "python_implementation": "CPython",
     "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
-    "cpu_count": 4,
+    "cpu_count": 16,
     "blas_thread_env": {
       "OMP_NUM_THREADS": "UNSET",
       "OPENBLAS_NUM_THREADS": "UNSET",
@@ -44,28 +44,20 @@
     "config_hashes": {
       "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
       "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-      "global.yaml": "ffa9e9274bc5fab4e00b91cf6007a1551aeb21693fa6c72d8df51d7855a200b6",
+      "global.yaml": "032de0d9dcaf5b48863521375564ac4208ca72db8e7e3925ab9d755f59c6bffe",
       "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
       "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
     },
     "experiment_host": {
-      "expected_instance_type": "m6i.xlarge",
-      "detected_instance_type": "m6i.xlarge",
+      "expected_instance_type": null,
+      "detected_instance_type": "r6i.4xlarge",
       "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
-      "is_pinned_experiment_host": true
+      "pin_configured": false,
+      "is_pinned_experiment_host": false,
+      "host_check_satisfied": true,
+      "metadata_reachable": true
     }
   },
   "reportable": true,
-  "not_reportable_because": [],
-  "merged_from": [
-    "exp3_crossdomain_scalability__points-10",
-    "exp3_crossdomain_scalability__points-2",
-    "exp3_crossdomain_scalability__points-3",
-    "exp3_crossdomain_scalability__points-4",
-    "exp3_crossdomain_scalability__points-5",
-    "exp3_crossdomain_scalability__points-6",
-    "exp3_crossdomain_scalability__points-7",
-    "exp3_crossdomain_scalability__points-8",
-    "exp3_crossdomain_scalability__points-9"
-  ]
+  "not_reportable_because": []
 }
