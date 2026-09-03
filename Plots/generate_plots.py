@@ -174,6 +174,15 @@ MARKERS = ("o", "s", "^", "D", "v", "P", "X")
 LINESTYLES = ("-", "--", "-.", ":", (0, (3, 1, 1, 1)), (0, (5, 2)), (0, (1, 1)))
 COLORS = ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#56B4E9", "#E69F00", "#000000")
 
+# Legend/draw order only -- kept separate from STYLE_ORDER so reordering the
+# legend can never reassign a scheme's marker/color/linestyle (that mapping is
+# pinned by STYLE_ORDER's index and must stay fixed across every figure).
+# Proposed first, then baselines by citation number: [30], [35], [41], [54].
+LEGEND_ORDER: Tuple[str, ...] = (
+    "ma_lb_pq_vdse", "yue_ge", "guo_vdsse", "thingom_pq_abse",
+    "perera_lv_pqabse",
+)
+
 
 #: Exp. 7-8 are an ABLATION of one scheme, so their four series are variant
 #: LABELS rather than scheme keys and would all miss STYLE_ORDER -- every curve
@@ -565,8 +574,8 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
     _all_x = [v for s in series_list for v in s.x]
     max_x = max(_all_x) if _all_x else None
     for series in sorted(series_list,
-                         key=lambda s: STYLE_ORDER.index(s.scheme)
-                         if s.scheme in STYLE_ORDER else 99):
+                         key=lambda s: LEGEND_ORDER.index(s.scheme)
+                         if s.scheme in LEGEND_ORDER else 99):
         label = SCHEME_LABELS.get(series.scheme, series.scheme)
         # A series that stops short of the sweep is a DISCLOSED CAP, not missing
         # data -- guo_vdsse's Exp. 2 ends at N=2e5 because its forward index is
