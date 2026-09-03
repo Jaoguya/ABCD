@@ -10,44 +10,43 @@ HOW TO READ THIS
   [FIX]     mechanical correction, no judgement needed
   [OPS]     infrastructure / data safety
 
-State at time of writing: all five schemes have finished their 10-repetition
-campaigns. The proposed scheme, yue_ge, thingom and perera are harvested and
-committed. guo is finished but NOT harvested — see OPS-1.
+State at time of writing: ALL FIVE SCHEMES COMPLETE AND HARVESTED at 10
+repetitions. Nothing is running; all nine instances are stopped. Every item
+below is DECIDE, BUILD or FIX work — none of it is blocked on infrastructure
+any more.
 
 
 ================================================================================
-BLOCKER 0 — guo's results are stranded on its node          [OPS]  do this first
+BLOCKER 0 — guo's results stranded on its node          [OPS]  ** RESOLVED **
 ================================================================================
-guo finished Exp. 1-5 and its watchdog stopped the instance correctly. Exp. 1-4
-numbers were read before it stopped and are quoted in README §17.4. Exp. 5 has
-never been read or harvested.
+RESOLVED 2026-09-03, commit 3fc6b52. guo's Exp. 1-5 are harvested, committed and
+pushed. All five n_runs=10, reportable=true.
 
-Why it is stuck: security group sg-0dea7cf940668cddb allows SSH from 7 fixed
-/32 addresses. The assistant's public IP rotated out of that list mid-session,
-so SSH times out (a TIMEOUT, not "connection refused" — packets dropped at the
-firewall, the host itself is healthy and boots to a login prompt).
+Kept as a record because the failure mode will recur. guo finished correctly
+("All experiments complete", 08:42:10Z) and its watchdog stopped the instance as
+designed. What broke was ACCESS: security group sg-0dea7cf940668cddb allows SSH
+from 7 fixed /32 addresses, and the operator's public IP rotated out of that
+list mid-session. Symptom was a TIMEOUT, not "connection refused" — packets
+dropped at the firewall while the host itself booted fine to a login prompt.
+`aws ec2 get-console-output` confirmed a healthy boot and is the right first
+diagnostic when a node is `running`/`ok`/`ok` but will not accept ssh.
 
-Anyone on an already-allowed address can just connect. Otherwise:
+Recovery used, for next time:
 
     aws ec2 authorize-security-group-ingress --group-id sg-0dea7cf940668cddb \
         --protocol tcp --port 22 --cidr <your-ip>/32
-    aws ec2 start-instances --instance-ids i-0e5ae20e113bae9f7
-    # wait for ssh, then:
-    scp -i ~/.ssh/ojcoms.pem "ubuntu@<ip>:results-guo-*.bundle" /tmp/
-    git fetch /tmp/results-guo-*.bundle HEAD:refs/node/guo
-    git diff --name-only refs/node/guo~1 refs/node/guo    # CHECK THIS FIRST
-    git checkout refs/node/guo -- Schemes/guo_vdsse/exp1_trapdoor_generation \
-        Schemes/guo_vdsse/exp2_search_latency \
-        Schemes/guo_vdsse/exp3_crossdomain_scalability \
-        Schemes/guo_vdsse/exp4_verification_overhead \
-        Schemes/guo_vdsse/exp5_keyword_update
-    aws ec2 stop-instances --instance-ids i-0e5ae20e113bae9f7
+    # ... start, harvest, stop ...
+    aws ec2 revoke-security-group-ingress --group-id sg-0dea7cf940668cddb \
+        --security-group-rule-ids <the-rule-id>
 
-DO NOT TERMINATE i-0e5ae20e113bae9f7. Volume vol-088174b61159549f0 carries
-DeleteOnTermination=true and guo's results have no other copy. A stop preserves
-them; a terminate destroys them.
+REVOKE THE RULE AFTERWARDS. A dynamic address that later gets reassigned should
+not retain SSH access to the fleet. This was done; the group is back to its
+original 7 entries.
 
-Check the "git diff --name-only" line before checking anything out. See OPS-2.
+STILL TRUE AND STILL IMPORTANT: do not terminate any of these instances.
+The volumes carry DeleteOnTermination=true. A stop preserves every result; a
+terminate destroys them. Results are committed to git now, so the exposure is
+smaller than it was, but the raw node state is not backed up anywhere else.
 
 
 ================================================================================
@@ -90,7 +89,19 @@ DECIDE-2 — What statistic do the baselines get reported with?          [DECIDE
 README §7 mandates "mean ± 95% CI" with outliers kept. For two baselines that
 produces numbers that cannot be defended.
 
-  guo Exp. 3 (FRESH 10-rep data, 9 of 9 points distorted):
+CONFIRMED ON FINAL DATA (commit 3fc6b52). This is the last campaign data that
+will exist, so this is no longer deferrable. Full guo audit at 10 repetitions:
+
+      exp3_crossdomain_scalability   9 of 9 distorted   mean/median 2.19
+      exp2_search_latency            3 of 5 distorted   mean/median 1.39
+      exp1_trapdoor_generation       1 of 20            mean/median 1.05  (minor)
+      exp4_verification_overhead     0 of 7             mean/median 1.01  (clean)
+      exp5_keyword_update            0 of 10            mean/median 1.00  (clean)
+
+  So it is not guo as a whole -- Exp. 4 and 5 are clean. It is specifically the
+  two experiments whose cost depends on which keyword got drawn.
+
+  guo Exp. 3 (FINAL 10-rep data, 9 of 9 points distorted):
       d=2   median  36.555   mean 53.786 ± 46.238   max 194.118
       d=6   median  21.302   mean 53.394 ± 46.814   max 193.964
       d=10  median  18.538   mean 42.816 ± 43.343   max 193.356
@@ -107,8 +118,10 @@ produces numbers that cannot be defended.
       count, so every one of those runs is a CORRECT measurement of a different
       keyword.
 
-NEITHER IS A BUG. Re-running reproduces both exactly. This is a reporting
-decision, not a defect to fix.
+NEITHER IS A BUG. Re-running reproduces both exactly -- and it HAS been re-run:
+these numbers are from the final campaign, not the old 30-repetition one. This
+is a reporting decision, not a defect to fix, and there is no further data
+coming that would change it.
 
 Note the 30 -> 10 repetition change makes this WORSE, not better: fewer samples
 from a heavy-tailed distribution make the MEAN less stable.
@@ -315,6 +328,10 @@ WHAT IS ALREADY DONE — do not redo these
   7481a61  Proposed scheme's first-ever 10-rep data, all 8 experiments; perera
            restored.
   5c73cc5  Regression fix (INCIDENT 3) + README §17.3/§17.4 results.
+  03c4f2a  This file.
+  3fc6b52  guo's full 10-rep campaign, Exp. 1-5, recovered from the stranded
+           node. Extracted the 15 result files BY NAME rather than by directory,
+           applying the OPS-2 lesson.
 
   Test suite: 567 passed, 1 skipped.
 
@@ -333,10 +350,14 @@ THE RESULT NOBODY IS USING
 Exp. 5 (dynamic keyword update) is the strongest unqualified result in the
 campaign and nothing in the paper leans on it.
 
-    per updated (keyword, document) pair:
-        Proposed     18.8 us
-        Scheme [30]   289 us     ->  we are 15x better
-        Scheme [35]   607 us     ->  we are 32x better
+    per updated (keyword, document) pair, all measured at 10 repetitions:
+        Proposed      18.8 us
+        Scheme [30]  293.9 us    ->  we are 15.6x better
+        Scheme [35]  601.9 us    ->  we are 32.0x better
+
+    guo's Exp. 5 was the last result to arrive (it finished after that node
+    went unreachable) and it is clean: 10 points, 0 distorted, mean/median 1.00,
+    59.138 ms at k=100 rising linearly to 60207.869 ms at k=10^5.
 
 All three are the same complexity class and all three fits are R^2 >= 0.9998.
 Clean data, zero distorted points, no reportability caveat, no ledger
