@@ -194,6 +194,13 @@ ABLATION_STYLE_SLOT: Dict[str, int] = {
     "Round robin": 1,
     "Least loaded": 2,
     "No load balancing": 3,
+    # Exp. 6 uses its own vocabulary (EXP6_VARIANTS) -- none of these matched
+    # the slots above, so all three fell through to the same fallback index
+    # and drew identically (same color/marker). "IAS (proposed)" gets slot 0,
+    # the same blue circle the proposed scheme holds everywhere else.
+    "IAS (proposed)": 0,
+    "Broadcast to all FSNs": 1,
+    "Global authorization rebuild": 2,
 }
 
 
