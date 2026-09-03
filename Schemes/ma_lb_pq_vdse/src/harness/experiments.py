@@ -32,6 +32,7 @@ import dataclasses
 import statistics
 import sys
 import time
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
@@ -39,6 +40,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from Common.crypto import hashes  # noqa: E402
+from Common.crypto.rng import DeterministicRNG  # noqa: E402
 
 from .. import config as scheme_config  # noqa: E402
 from .. import types  # noqa: E402
@@ -633,6 +635,45 @@ class Exp1TrapdoorGeneration:
 # ===========================================================================
 # Exp. 2 — Search Latency
 # ===========================================================================
+#: Seed for Exp. 2's query draw. Fixed so a sweep is reproducible, and separate
+#: from the corpus seed so re-drawing queries cannot change which records exist.
+EXP2_QUERY_SEED = 20260903
+
+#: A keyword must appear in at least this many records to be worth querying, and
+#: in at most this share of them. Both bounds are taken verbatim from
+#: ``yue_ge/src/workload.py::select_keywords``, which in turn mirrors
+#: ``guo_vdsse/src/exp2_search.py`` -- the point is that all three schemes draw
+#: queries at comparable selectivity, so the numbers compare.
+QUERY_MIN_FREQUENCY = 5
+QUERY_MAX_SHARE = 0.5
+
+
+def select_query_keywords(
+    freq: "Counter[str]",
+    rng: DeterministicRNG,
+    count: int,
+    *,
+    total_records: Optional[int] = None,
+) -> List[str]:
+    """Draw ``count`` query keywords at the selectivity the baselines use.
+
+    Skip keywords too rare to produce a measurable traversal, and ones so common
+    they swamp the scan and hide the scaling. Falls back to the whole vocabulary
+    when the bounds leave too few -- a small point must still produce a query
+    rather than failing the sweep.
+    """
+    ceiling = total_records * QUERY_MAX_SHARE if total_records else float("inf")
+    eligible = [
+        kw for kw, n in freq.items() if n >= QUERY_MIN_FREQUENCY and n <= ceiling
+    ]
+    if len(eligible) < count:
+        eligible = sorted(freq)
+    if not eligible:
+        raise ValueError("no keyword in the built index is queryable")
+    eligible.sort()
+    return list(rng.choice(eligible, size=min(count, len(eligible)), replace=False))
+
+
 @dataclass
 class Exp2SearchLatency:
     """"the full online path: AIM authorization check → AASS selection → shard
@@ -669,20 +710,47 @@ class Exp2SearchLatency:
         profile, authority_ids, attributes, resolver = _enrol(
             deployment, "DU-1", (domain,)
         )
-        target = next(
-            r for r in deployment.records if r["record"].domain == domain
+        # WAS: keywords[0] of the FIRST record in the domain, reused for every
+        # run. That made this experiment measure the repeatability of one
+        # arbitrary query while guo and yue_ge each draw a NEW keyword per run
+        # (yue_ge/exp2_search_latency/runner.py:130,158). The two are not the
+        # same estimand: Peony++ is output-sensitive, so its spread across a
+        # keyword draw is the measurement, and our flat curve was an artefact of
+        # never varying the query rather than evidence of stable latency.
+        #
+        # Now: draw warmups+repetitions keywords at the baselines' selectivity
+        # and advance one per call, so all three schemes answer the same
+        # question. n_eff varies run to run as a result -- that is the point.
+        frequency: "Counter[str]" = Counter()
+        in_domain = 0
+        for entry in deployment.records:
+            if entry["record"].domain == domain:
+                in_domain += 1
+                frequency.update(entry["record"].keywords)
+        measurement = self.config.measurement
+        draws = measurement.warmup_runs + measurement.repetitions
+        rng = DeterministicRNG(EXP2_QUERY_SEED).spawn(f"exp2/N={value}")
+        keywords = select_query_keywords(
+            frequency, rng, draws, total_records=in_domain
         )
-        keyword = target["record"].keywords[0]
         return dict(
             deployment=deployment, profile=profile, authority_ids=authority_ids,
-            attributes=attributes, resolver=resolver, keyword=keyword,
+            attributes=attributes, resolver=resolver,
+            keywords=keywords, cursor=[0],
         )
 
     def measure(self, prepared: Any) -> Sample:
         d = prepared["deployment"]
+        # One keyword per call, cycling. Warm-ups consume the first entries, as
+        # they do for yue_ge, so the retained runs see the same draw the
+        # baselines' retained runs see.
+        pool = prepared["keywords"]
+        cursor = prepared["cursor"]
+        keyword = pool[cursor[0] % len(pool)]
+        cursor[0] += 1
         started = time.perf_counter_ns()
         token = token_mod.generate_search_token(
-            d.scheme, prepared["profile"], [prepared["keyword"]]
+            d.scheme, prepared["profile"], [keyword]
         )
         decision = authz_mod.verify_search_request(          # AIM check
             d.aim, token, prepared["profile"],
