@@ -74,8 +74,21 @@ experiments:
     variable: returned_results
     values: [10, 50, 100, 500, 1000]              # published: §V "10 to 1000"
     # yue_ge (Ref[55]) added 2026-08-28 -- Peony++ has a scheme-native Verify
-    # (SS VI-A), so Exp. 4 finally has a third participant. Ref[41] and Ref[54]
-    # have no result-verification primitive at all.
+    # (SS VI-A), so Exp. 4 finally has a third participant.
+    #
+    # Ref[41] has no result-verification primitive at all.
+    #
+    # Ref[54] DOES have one, and this comment used to say otherwise. Its
+    # Algorithm 3 `retrieve_verify` is implemented -- ML-DSA-65 signature
+    # verification, Merkle inclusion, and a freshness check against the latest
+    # on-chain root. DECIDE-1, settled 2026-09-03: it stays OUT, on time, not on
+    # capability. Its cost is reported analytically in tab:cost and Section V
+    # says plainly that it was not measured. Two things would have to happen
+    # first: `retrieve_verify` rebuilds the whole partition tree per call
+    # (O(N), not O(log N)), which would overstate the baseline unless the proof
+    # is precomputed server-side; and this repo's Exp. 4 boundary is defined
+    # against ma_lb_pq_vdse's verification path, so including it needs that
+    # boundary restated rather than assumed.
     schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
   exp9_verification_granularity:
     variable: tampered_records

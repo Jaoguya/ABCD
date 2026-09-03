@@ -21,7 +21,9 @@ Zhuang's `exp2_search_latency/runner.py` never built a real N-record index — i
 | 2 | Search Latency | Fog-offloaded hybrid index (B⁺-tree + bitmap + n-gram); client only generates tokens |
 | 3 | Cross-Domain Search Scalability | Paper has no native multi-domain notion — same native-mode treatment (independent per-domain trapdoors/searches, client-side aggregation) as `thingom_pq_abse` and `guo_vdsse` will be needed; not detailed by the paper, a benchmark decision |
 
-**Not** Exp. 4 (verification overhead is comparable in spirit — partitioned Merkle proofs — but this repo's Exp. 4 boundary is defined against `ma_lb_pq_vdse`'s own verification path; needs a decision before inclusion, not defaulted to "yes").
+**Not** Exp. 4 — **decided 2026-09-03, and the decision is "no".** Verification overhead is comparable in spirit (partitioned Merkle proofs, and `retrieve_verify` really is implemented: ML-DSA-65 verify, Merkle inclusion, freshness check). It is excluded on TIME, not on capability, and Section V now states its cost analytically while saying explicitly that it was not measured.
+
+If this is ever revisited, one thing must be fixed first: `retrieve_verify` rebuilds the whole partition tree on every call (`tree = MerkleTree(leaves)`), which is O(N) where the paper claims O(log N). Measuring it as written would make this baseline look far more expensive than its published construction — the kind of accidental strawman the roster rules exist to prevent. The inclusion proof has to be precomputed server-side first. This repo's Exp. 4 boundary is also defined against `ma_lb_pq_vdse`'s verification path and would need restating, not assuming.
 
 **Excluded 2026-08-27, was in Zhuang's slot:**
 - **Exp. 5 (Dynamic Keyword Update)** — the paper defines no incremental-update algorithm. Indexes are constructed fresh at Phase 3 (fog-side); there is no update primitive to measure. Including it would mean measuring a full rebuild and calling it an "update," which is exactly the kind of mischaracterization README §13 forbids.

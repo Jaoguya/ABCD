@@ -17,7 +17,7 @@ Legend: `[DECIDE]` needs a human call · `[BUILD]` engineering with a known targ
 
 | ID | Task | State |
 |----|------|-------|
-| DECIDE-1 | Does Scheme [54] belong in Exp. 4? | open — the *prose* no longer implies it is plotted (Fig. 5 now says "not plotted… stated analytically… not measured"), so the paper is no longer self-contradictory. The design question stands: measure it, or leave it analytical |
+| DECIDE-1 | Does Scheme [54] belong in Exp. 4? | **DECIDED 2026-09-03: no.** Excluded on time, not capability — `retrieve_verify` is implemented. Section V states its cost analytically and says it was not measured; `global.yaml` and `perera_lv_pqabse/SCHEME.md` now carry the reason, including the O(N) tree rebuild that must be fixed first if it is ever revisited |
 | DECIDE-2 | What statistic do the baselines get reported with? | open |
 | FIX-1 | `tab:cost` claims `O(d)T_Ver` but no such operation exists | **fixed 2026-09-03** — removed from the table cell, the paragraph under it, and the Fig. 5 discussion. `T_Ver` now appears only where Scheme [54] legitimately uses it |
 | FIX-2 | Manuscript claims contradicted by measurement | open |

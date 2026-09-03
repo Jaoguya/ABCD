@@ -54,8 +54,28 @@ smaller than it was, but the raw node state is not backed up anywhere else.
 
 
 ================================================================================
-DECIDE-1 — Does Scheme [54] belong in Exp. 4?                          [DECIDE]
+DECIDE-1 — Does Scheme [54] belong in Exp. 4?      [DECIDE]  ** DECIDED: NO **
 ================================================================================
+DECIDED 2026-09-03: Scheme [54] stays OUT of Exp. 4, and out of Exp. 9. The
+call was made on TIME, not on capability, and the distinction matters because
+the rationale in global.yaml was factually wrong until today -- it claimed [54]
+"has no result-verification primitive at all". It has one: Algorithm 3
+`retrieve_verify`, implemented, doing ML-DSA-65 signature verification, Merkle
+inclusion and a freshness check against the latest on-chain root.
+
+What changed instead of a measurement: Section V no longer implies [54] is
+plotted. It states the analytical cost and says explicitly that it was not
+measured, so the paper is no longer self-contradictory.
+
+If this is revisited, fix this first: `retrieve_verify` rebuilds the entire
+partition tree on every call (`tree = MerkleTree(leaves)`) -- O(N) where the
+paper claims O(log N). Measured as written, [54] would look far more expensive
+than its published construction. The inclusion proof has to be precomputed
+server-side. The Exp. 4 boundary is also defined against ma_lb_pq_vdse's own
+verification path and would need restating.
+
+The original analysis follows.
+
 Exp. 4 currently has 3 of 5 schemes. global.yaml:79 pins the roster to
 [ma_lb_pq_vdse, guo_vdsse, yue_ge]. ZERO source files in thingom_pq_abse or
 perera_lv_pqabse mention exp4 — there is no code to run.
