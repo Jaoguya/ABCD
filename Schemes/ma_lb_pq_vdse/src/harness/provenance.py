@@ -153,7 +153,15 @@ class RunMetadata:
     git_commit: str
     python_version: str
     platform: str
+    #: What the config PINNED, or "unknown" once c457e28 dropped the pin. It is
+    #: not what the run executed on, so it cannot answer "which host produced
+    #: this number" -- see ``experiment_host``.
     instance_type: str
+    #: What the run ACTUALLY executed on, from the EC2 metadata service. Every
+    #: baseline scheme has recorded this since c457e28; this scheme did not, so
+    #: with the pin dropped its results carried no recoverable host at all. §V
+    #: discloses the host per scheme, which needs it recorded per run.
+    experiment_host: Dict[str, Any]
     libraries: Dict[str, str]
     crypto_backends: Dict[str, Any]
     config_hashes: Dict[str, str]
@@ -455,6 +463,7 @@ def build_metadata(
         python_version=platform.python_version(),
         platform=platform.platform(),
         instance_type=str(config.environment.get("instance_type", "unknown")),
+        experiment_host=verify_experiment_host(),
         libraries=library_versions(),
         crypto_backends=environment_report(),
         config_hashes=scheme_config.config_hashes(),

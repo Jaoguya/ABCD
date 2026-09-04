@@ -104,6 +104,75 @@ def test_broadcast_carries_the_same_message_it_just_sends_it_further():
 
 
 # ===========================================================================
+# DELIVERED PAYLOAD — the figure's panel (b)
+# ===========================================================================
+def test_selective_delivers_exactly_one_copy_of_the_message():
+    _, _, sample = _measure(exp_mod.VARIANT_IAS)
+    assert sample.secondaries["delivered_kb"] == pytest.approx(
+        sample.secondaries["ias_message_size"]
+    )
+
+
+def test_broadcast_delivers_one_copy_per_node():
+    """The 4x that IS the selective claim, in bytes rather than node count."""
+    _, prepared, sample = _measure(exp_mod.VARIANT_BROADCAST)
+    nodes = len(prepared["deployment"].nodes)
+    assert sample.secondaries["delivered_kb"] == pytest.approx(
+        sample.secondaries["ias_message_size"] * nodes
+    )
+
+
+def test_full_rebuild_payload_is_not_the_message_size_times_nodes_touched():
+    """The bug this metric replaced.
+
+    Panel (b) was ``ias_message_size x fsns_touched`` until 2026-09-04. That is
+    exact for ``ias`` and ``broadcast``, which send the same message to 1 and m
+    recipients, and WRONG for ``full_rebuild``: only 1 of its 1+(d-1)m deliveries
+    is an IASMessage. The rest are ``AuthorizationMeta`` republishes, and
+    ``Meta_i = (Dom_i, VID_i, C_i^auth)`` is a fraction of a message that also
+    carries the entries, the root and the commit. The product therefore charged
+    the rebuild several times the bytes it actually sends.
+    """
+    _, _, sample = _measure(exp_mod.VARIANT_FULL_REBUILD)
+    product = (
+        sample.secondaries["ias_message_size"] * sample.secondaries["fsns_touched"]
+    )
+    assert sample.secondaries["delivered_kb"] < product, (
+        "a republish is smaller than a message; if this ever holds with "
+        "equality the two metrics have collapsed and panel (b) is derivable again"
+    )
+
+
+def test_full_rebuild_payload_is_one_message_plus_the_republishes():
+    """Every byte accounted for, against the encodings themselves."""
+    _, prepared, sample = _measure(exp_mod.VARIANT_FULL_REBUILD)
+    d = prepared["deployment"]
+    domain = d.records[0]["record"].domain
+    others = [a for dom, a in d.authorities.items() if dom != domain]
+    republished = sum(
+        len(other.meta().encode()) / 1024.0 for other in others
+    ) * len(d.nodes)
+    assert sample.secondaries["delivered_kb"] == pytest.approx(
+        sample.secondaries["ias_message_size"] + republished
+    )
+
+
+def test_rebuild_sizing_stays_off_the_timed_path():
+    """``encode()`` per update would charge full_rebuild for measurement work.
+
+    The republish size is constant while the loop runs — only the affected
+    authority's VID advances, and it is not in this sum — so it is computed once
+    before ``perf_counter_ns``. Inside the loop it would inflate panel (a).
+    """
+    import inspect
+
+    src = inspect.getsource(exp_mod.Exp6AuthorizationSync.measure)
+    sizing = src.index("rebuild_kb_per_update = sum(")
+    timer = src.index("started = time.perf_counter_ns()")
+    assert sizing < timer, "the republish sizing moved onto the timed path"
+
+
+# ===========================================================================
 # INCREMENTAL — the half `full_rebuild` tests
 # ===========================================================================
 def test_full_rebuild_recomputes_every_authority():
@@ -154,10 +223,13 @@ def test_every_variant_reaches_the_same_authorization_state(variant):
 
 
 @pytest.mark.parametrize("variant", exp_mod.EXP6_VARIANTS)
-def test_every_variant_reports_both_secondaries(variant):
+def test_every_variant_reports_every_secondary(variant):
     _, _, sample = _measure(variant)
     assert sample.secondaries["ias_message_size"] > 0
     assert sample.secondaries["fsns_touched"] >= 1.0
+    assert sample.secondaries["delivered_kb"] >= (
+        sample.secondaries["ias_message_size"]
+    )
     assert sample.primary > 0
 
 

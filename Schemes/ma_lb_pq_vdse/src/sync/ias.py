@@ -678,6 +678,17 @@ class IASReceipt:
         return self.message.size_kb
 
     @property
+    def delivered_kb(self) -> float:
+        """Bytes that leave the AIM for this cycle: one message PER recipient.
+
+        ``message_size_kb`` is what one FSN receives; this is what the network
+        carries. They differ by ``touched_count``, which is the whole selective-
+        propagation claim — under ``ias`` the two are equal, under a broadcast
+        selector they differ by the FSN count.
+        """
+        return self.message.size_kb * self.touched_count
+
+    @property
     def elapsed_ms(self) -> float:
         return self.elapsed_ns / 1e6
 

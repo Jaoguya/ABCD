@@ -1092,6 +1092,16 @@ class Exp6AuthorizationSync:
     evidence of nothing unless read against ``broadcast``'s ``m``. Every run before
     2026-09-03 reported it alone, which is why README §5's "selective propagation
     is the claim" had no measurement behind it.
+
+    **Why ``delivered_kb`` is measured and not derived.** It is the quantity the
+    selective claim is actually about: the bytes the network carries per update.
+    ``ias_message_size x fsns_touched`` looks like the same number and is not,
+    because under ``full_rebuild`` only ONE of the deliveries is an IAS message.
+    The other ``(d-1) x m`` are ``AuthorizationMeta`` republishes, which are a
+    third the size — ``Meta_i = (Dom_i, VID_i, C_i^auth)`` against a message that
+    also carries the entries, the root and the commit. The product therefore
+    charges full_rebuild ~3x the bytes it sends. Summing the real encodings here
+    is the only way the panel says what it claims to.
     """
 
     config: scheme_config.Configuration
@@ -1105,6 +1115,7 @@ class Exp6AuthorizationSync:
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("ias_message_size", KB),
         MetricSpec("fsns_touched", COUNT),
+        MetricSpec("delivered_kb", KB),
     )
 
     def __post_init__(self) -> None:
@@ -1132,8 +1143,20 @@ class Exp6AuthorizationSync:
             _broadcast_selector if self.variant == VARIANT_BROADCAST else None
         )
         rebuild = self.variant == VARIANT_FULL_REBUILD
+        # Sized BEFORE the timer, not inside the loop. Meta_i is
+        # (Dom_i, VID_i, C_i^auth) and none of the three changes length while
+        # the loop runs -- only `authority` is revoked, and its VID is not in
+        # this sum -- so one encoding is the size of every republish. Doing it
+        # per update would put an encode() on the timed path and charge
+        # full_rebuild for measurement work the other two variants do not do.
+        rebuild_kb_per_update = 0.0
+        if rebuild:
+            rebuild_kb_per_update = sum(
+                len(other.meta().encode()) / 1024.0 for other in others
+            ) * len(d.nodes)
         total_bytes = 0.0
         touched = 0
+        delivered = 0.0
         started = time.perf_counter_ns()
         for index in range(prepared["updates"]):
             receipt = ias_mod.synchronize(
@@ -1152,6 +1175,7 @@ class Exp6AuthorizationSync:
             )
             total_bytes += receipt.message.size_kb
             touched += receipt.touched_count
+            delivered += receipt.delivered_kb
             if rebuild:
                 # Global authorization reconstruction: every OTHER authority
                 # recomputes C_k^auth and the AIM republishes it to every node.
@@ -1163,6 +1187,7 @@ class Exp6AuthorizationSync:
                     for node in d.nodes:
                         node.apply_meta(other.authority_id, meta)
                         touched += 1
+                delivered += rebuild_kb_per_update
         elapsed = time.perf_counter_ns() - started
         updates = max(1, prepared["updates"])
         return Sample(
@@ -1170,6 +1195,7 @@ class Exp6AuthorizationSync:
             secondaries={
                 "ias_message_size": total_bytes / updates,
                 "fsns_touched": touched / updates,
+                "delivered_kb": delivered / updates,
             },
         )
 
