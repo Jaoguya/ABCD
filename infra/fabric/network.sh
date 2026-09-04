@@ -23,6 +23,9 @@ cd "$HERE"
 CHANNEL="${ABCD_CHANNEL:-abcd}"
 CC_NAME="${ABCD_CC_NAME:-abcdledger}"
 CC_VERSION="${ABCD_CC_VERSION:-1.0}"
+# The orderer speaks TLS (cluster type requires it); the peer does not. Every
+# peer->orderer call therefore needs the orderer CA, and peer->peer calls do not.
+ORDERER_CA="/work/crypto-config/ordererOrganizations/abcd.local/orderers/orderer.abcd.local/tls/ca.crt"
 FABRIC_TAG="2.5"
 DOCKER="${DOCKER:-sudo docker}"
 
@@ -84,8 +87,6 @@ cmd_up() {
     --config-block /work/channel-artifacts/$CHANNEL.block \
     -o orderer:7053 >/dev/null
   sleep 3
-  peer_cli channel fetch 0 /work/channel-artifacts/$CHANNEL-peer.block \
-    -c "$CHANNEL" -o orderer:7050 >/dev/null 2>&1 || true
   peer_cli channel join -b /work/channel-artifacts/$CHANNEL.block >/dev/null
   sleep 3
   echo "    peer joined: $(peer_cli channel list 2>/dev/null | tail -n +2 | tr -d '\r' | paste -sd, -)"
@@ -121,9 +122,11 @@ deploy_chaincode() {
   [ -z "$pkg" ] && { echo "    chaincode install failed"; return 1; }
   echo "    package $pkg"
   peer_cli lifecycle chaincode approveformyorg -o orderer:7050 \
+    --tls --cafile "$ORDERER_CA" \
     --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" \
     --package-id "$pkg" --sequence 1 >/dev/null
   peer_cli lifecycle chaincode commit -o orderer:7050 \
+    --tls --cafile "$ORDERER_CA" \
     --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" \
     --sequence 1 >/dev/null
   echo "    committed $CC_NAME v$CC_VERSION on $CHANNEL"
