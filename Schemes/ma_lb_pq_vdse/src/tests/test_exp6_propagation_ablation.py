@@ -303,3 +303,38 @@ def test_exp6_runner_passes_no_ledger():
         "Exp. 6 now anchors on its timed path; restore the ledger gate in "
         "provenance.reportability()"
     )
+
+
+# ===========================================================================
+# Exp. 4 — r must count RETURNED RECORDS, the way §V and the baselines do
+# ===========================================================================
+def test_exp4_sweeps_records_not_index_entries():
+    """§V: "the number of returned encrypted RECORDS r".
+
+    prepare() used to size the deployment as ceil(r / keywords_per_record) and
+    take r BUNDLES from it, so r=1000 meant 32 records carrying 1000 index
+    entries. The per-record half of Phase VIII then ran 32 times instead of
+    1000, and the figure compared that against baselines which all sweep r as
+    records.
+    """
+    experiment = exp_mod.build_experiment(4, CONFIG, SOURCE)
+    for r in (3, 7):
+        prepared = experiment.prepare(r)
+        assert len(prepared["bundles"]) == r, (
+            f"r={r} produced {len(prepared['bundles'])} bundles"
+        )
+        assert len(prepared["deployment"].records) == r, (
+            f"r={r} built {len(prepared['deployment'].records)} records; the "
+            f"sweep variable must be the record count"
+        )
+
+
+def test_exp4_verifies_one_bundle_per_record():
+    """One returned ciphertext, one verification bundle."""
+    experiment = exp_mod.build_experiment(4, CONFIG, SOURCE)
+    prepared = experiment.prepare(5)
+    cids = [b.cid for b in prepared["bundles"]]
+    assert len(set(cids)) == len(cids), (
+        "two bundles name the same CID, so a record is verified twice and the "
+        "per-record work is undercounted at the same x"
+    )

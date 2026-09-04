@@ -906,17 +906,38 @@ class Exp4Verification:
             self.values = tuple(self.config.experiment("exp4").values)
 
     def prepare(self, value: Any) -> Any:
+        """``r`` RETURNED RECORDS, one verification bundle each.
+
+        This used to size the deployment as ``ceil(r / keywords_per_record)``
+        and then take ``r`` BUNDLES from it. With the frozen corpus's
+        ``|W_i| ~= 32`` that made r=1000 into 32 records carrying 1000 index
+        entries, so the per-record half of Phase VIII -- the commitment
+        recomputation and the chain-consistency check -- ran 32 times where §V
+        says it runs once per returned ciphertext, and the figure's x-axis
+        counted index entries under a caption reading "returned results".
+
+        It also broke the comparison the figure exists to make. Every baseline
+        sweeps r as RECORDS -- perera slices ``verifiable[:r]``, yue_ge returns
+        r result ids, guo picks a keyword matching ~r documents -- so at the
+        same x, Scheme [54] verified 1000 signatures while we checked 32
+        commitments. That is not a like-for-like point on a shared axis.
+
+        Now r records produce r bundles, one per record, which is what §V
+        describes and what the baselines measure.
+        """
         wanted = int(value)
-        per_record = self.source.keywords_per_record
-        record_count = max(1, -(-wanted // per_record))
         deployment = build_deployment(
-            config=self.config, source=self.source, records=record_count
+            config=self.config, source=self.source, records=wanted
         )
         bundles: List[proof_mod.VerificationBundle] = []
         for record in deployment.records:
-            bundles.extend(
-                proof_mod.build_response(record["commitment"], record["entries"])
+            responses = proof_mod.build_response(
+                record["commitment"], record["entries"]
             )
+            if responses:
+                # ONE bundle per returned ciphertext. Taking every entry's
+                # bundle is what conflated entries with records above.
+                bundles.append(responses[0])
             if len(bundles) >= wanted:
                 break
         return dict(
