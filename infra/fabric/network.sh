@@ -158,7 +158,7 @@ gen_pyproto() {
   mkdir -p "$out"
   ( cd /tmp/fabric-protos && "$py" -m grpc_tools.protoc -I. \
       --python_out="$out" --grpc_python_out="$out" \
-      $(find common msp peer gateway -name "*.proto") )
+      $(find common msp peer gateway orderer -name "*.proto") )
   # protoc emits implicit-namespace packages; the adapter imports `common.x`
   # and `peer.y`, which resolve without __init__.py on 3.3+, but an explicit
   # marker keeps them importable if anything ever prepends a path.
