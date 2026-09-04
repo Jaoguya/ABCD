@@ -26,6 +26,7 @@ CC_VERSION="${ABCD_CC_VERSION:-1.0}"
 # The orderer speaks TLS (cluster type requires it); the peer does not. Every
 # peer->orderer call therefore needs the orderer CA, and peer->peer calls do not.
 ORDERER_CA="/work/crypto-config/ordererOrganizations/abcd.local/orderers/orderer.abcd.local/tls/ca.crt"
+PEER_CA="/work/crypto-config/peerOrganizations/org1.abcd.local/peers/peer0.org1.abcd.local/tls/ca.crt"
 FABRIC_TAG="2.5"
 DOCKER="${DOCKER:-sudo docker}"
 
@@ -107,7 +108,8 @@ peer_cli() {
     -v "$HERE:/work" -w /work \
     --network abcd_fabric \
     -e FABRIC_CFG_PATH=/etc/hyperledger/fabric \
-    -e CORE_PEER_TLS_ENABLED=false \
+    -e CORE_PEER_TLS_ENABLED=true \
+    -e CORE_PEER_TLS_ROOTCERT_FILE="$PEER_CA" \
     -e CORE_PEER_LOCALMSPID=Org1MSP \
     -e CORE_PEER_ADDRESS=peer:7051 \
     -e CORE_PEER_MSPCONFIGPATH=/work/crypto-config/peerOrganizations/org1.abcd.local/users/Admin@org1.abcd.local/msp \
