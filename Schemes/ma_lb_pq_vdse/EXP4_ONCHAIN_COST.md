@@ -76,6 +76,12 @@ measuring the same quantity, and **the asymmetry ran in our favour**.
 
 ## 3. Measured result
 
+> **Superseded 2026-09-04 by `7994188`.** Everything in this section is the
+> per-record-fetch measurement at `d1cdf9c`. The numbers below are still what
+> that code did; §3.1 has what the code does now. The *conclusions* — O(r) in
+> on-chain reads, 4th of four, `tab:cost` owes an `O(r)T_BC` term — all survive.
+
+
 `ABCD_LEDGER=fabric`, 10 runs + 5 warm-ups, m6i.xlarge, commit `d1cdf9c`,
 `reportable: true` with an empty blocker list — **the first reportable Exp. 4
 this project has produced**.
@@ -103,7 +109,52 @@ reads at ~1.67 ms plus the crypto, and it means **verification is O(r) in
 blockchain round trips**, which dominates everything else in the row.
 
 For scale, the same sweep against the in-process ledger is 15.04 ms at r=1000.
-The chain is ~99% of the corrected cost.
+The chain is ~99% of the corrected cost. (At `7994188` it is 1632.63 ms against
+the same 15.04 ms, so the chain is still ~99%.)
+
+---
+
+## 3.1 Re-measured after the batched fetch (`7994188`)
+
+`e252cc9` replaced the per-record anchor fetch with `batched_chain_checker`,
+which resolves every anchor in ONE namespace pass. Re-run on the same host
+against the same live Fabric network, 10 runs + 5 warm-ups, `reportable: true`,
+empty blocker list:
+
+| r | `d1cdf9c` | `7994188` | gain | ms/record | [54] | vs [54] |
+|---|---|---|---|---|---|---|
+| 10 | 35.59 | **18.19 ms** | 1.96x | 1.819 | 2.20 | 8.3x |
+| 50 | 181.17 | **85.32 ms** | 2.12x | 1.706 | 10.99 | 7.8x |
+| 100 | 354.01 | **163.54 ms** | 2.16x | 1.635 | 21.98 | 7.4x |
+| 500 | 1781.67 | **816.06 ms** | 2.18x | 1.632 | 110.34 | 7.4x |
+| 1000 | 3578.13 | **1632.63 ms** | 2.19x | 1.633 | 220.66 | 7.4x |
+
+**2.19x, not the 3.7x the dev host predicted.** That gap is the finding, not a
+disappointment: the dev-host figure in `e252cc9` was measured against
+`InProcessLedger`, where a namespace walk and a `get()` cost the same
+microseconds. On real Fabric they do not.
+
+**The cost is still exactly linear in `r`** — 1.633 ms/record at r=100, 500 and
+1000, flat across an order of magnitude. `lookup_anchor` was `keys()` + `get()`,
+**two** Fabric round trips per record. Batching removed the `keys()` walk and
+left the `get()`, so verifying r records still costs r on-chain reads. Halving
+the round trips halved the latency, and that is all it did:
+
+| | on-chain reads per record | r=1000 |
+|---|---|---|
+| `d1cdf9c` | 2 (`keys()` + `get()`) | 3578.13 ms |
+| `7994188` | **1** (`get()`) | **1632.63 ms** |
+| one root over all records (§4, not scheduled) | **O(1) total** | not measured |
+
+So **`e252cc9` removed the O(r^2) term but not the O(r) one.** Section 4 below
+is unchanged and is still the only thing that reaches O(1).
+
+**Ranking is unchanged: 4th of four, by 7.4x over Scheme [54].** Every
+manuscript edit in §5 stands exactly as written — `tab:cost` still owes
+`O(r)T_BC`, because the term is still there.
+
+Data quality: 10/10 runs `ok` at every point, mean/median 1.00-1.02, worst
+max/median 1.13.
 
 ---
 
