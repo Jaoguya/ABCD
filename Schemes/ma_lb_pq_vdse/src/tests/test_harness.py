@@ -325,6 +325,60 @@ def test_results_columns_match_readme_section_9():
     assert int(rows[0]["n_runs"]) == 6
 
 
+@dataclass
+class ThreeSecondaryExperiment(ScriptedExperiment):
+    """Three recorded secondaries — Exp. 6 after `delivered_kb` was added."""
+
+    secondaries: Tuple[runner.MetricSpec, ...] = (
+        runner.MetricSpec("secondary_a", "count"),
+        runner.MetricSpec("secondary_b", "KB"),
+        runner.MetricSpec("secondary_c", "KB"),
+    )
+
+    def measure(self, prepared: Any) -> runner.Sample:
+        index = self.measured_count
+        self.measured_count += 1
+        value = self.samples[index % len(self.samples)]
+        return runner.Sample(
+            primary=value,
+            secondaries={"secondary_a": 7.0, "secondary_b": 8.0, "secondary_c": 9.0},
+        )
+
+
+def test_a_third_secondary_reaches_results_csv():
+    """The truncation this widening removed.
+
+    Both writers hardcoded two secondary columns, so an experiment declaring a
+    third measured it, aggregated it, and then dropped it on the way to disk
+    with nothing said. Exp. 6's panel (b) reads `delivered_kb`, the third; under
+    the cap the figure would have been empty and the run wasted.
+    """
+    directory, _ = written_outputs(ThreeSecondaryExperiment(samples=[1.0, 2.0]))
+    with (directory / "results.csv").open() as handle:
+        reader = csv.DictReader(handle)
+        assert "secondary_3_mean" in (reader.fieldnames or [])
+        rows = list(reader)
+    assert float(rows[0]["secondary_3_mean"]) == 9.0
+
+
+def test_a_third_secondary_reaches_raw_runs_csv():
+    directory, _ = written_outputs(ThreeSecondaryExperiment(samples=[1.0, 2.0]))
+    with (directory / "raw_runs.csv").open() as handle:
+        reader = csv.DictReader(handle)
+        assert "secondary_metric_3" in (reader.fieldnames or [])
+        rows = list(reader)
+    assert float(rows[0]["secondary_metric_3"]) == 9.0
+    # `status` stays last however many secondaries are inserted before it.
+    assert (reader.fieldnames or [])[-1] == "status"
+
+
+def test_two_or_fewer_secondaries_keep_the_exact_readme_shape():
+    """The floor. §9's printed header must stay literally correct for these."""
+    directory, _ = written_outputs(ScriptedExperiment(samples=[1.0]))
+    with (directory / "raw_runs.csv").open() as handle:
+        assert csv.DictReader(handle).fieldnames == list(runner.RAW_COLUMNS)
+
+
 def test_results_n_runs_is_the_retained_count():
     """n_runs must be what was retained, not what was requested."""
     experiment = FlakyExperiment(samples=[1.0], failures=2)

@@ -48,6 +48,32 @@ RAW_COLUMNS = (
     "status",
 )
 
+#: README §9 illustrates both CSVs with exactly two secondaries, and the writers
+#: below took that as a CAP: ``[:2]`` on the metric names, ``range(1, 3)`` on the
+#: columns. An experiment declaring a third recorded it in memory and then had it
+#: dropped on the way to disk, with no warning — the same silent-loss class of
+#: defect as a deploy that reports a commit it did not install. Exp. 6's
+#: ``delivered_kb`` is the first metric to hit it.
+#:
+#: The column count now follows the experiment, floored here so that every
+#: experiment declaring two or fewer keeps the exact shape §9 prints. §9's header
+#: line is therefore still literally correct for all of them, and a run with more
+#: writes a superset. README §9 should say so; that edit is the user's.
+MIN_SECONDARY_COLUMNS = 2
+
+
+def _secondary_count(secondaries: Sequence[Any]) -> int:
+    return max(MIN_SECONDARY_COLUMNS, len(secondaries))
+
+
+def raw_columns(secondaries: Sequence[Any]) -> Tuple[str, ...]:
+    """``RAW_COLUMNS`` widened to hold every secondary this experiment records."""
+    count = _secondary_count(secondaries)
+    head = ("scheme", "experiment", "variable_value", "run_id", "primary_metric")
+    return head + tuple(
+        f"secondary_metric_{i}" for i in range(1, count + 1)
+    ) + ("status",)
+
 STATUS_OK = "ok"
 STATUS_FAILED = "failed"
 
@@ -97,13 +123,14 @@ class RunRecord:
             "primary_metric": "" if self.primary is None else f"{self.primary:.6f}",
             "status": self.status,
         }
-        for index, name in enumerate(secondary_names[:2], start=1):
+        for index, name in enumerate(secondary_names, start=1):
             value = self.secondaries.get(name)
             row[f"secondary_metric_{index}"] = (
                 "" if value is None else f"{value:.6f}"
             )
         # README §9: "Blank secondary columns where a metric doesn't apply."
-        for index in range(len(secondary_names) + 1, 3):
+        for index in range(len(secondary_names) + 1,
+                           _secondary_count(secondary_names) + 1):
             row[f"secondary_metric_{index}"] = ""
         return row
 
@@ -358,7 +385,7 @@ def write_raw_runs(result: ExperimentResult, path: Path) -> Path:
     names = [spec.name for spec in result.experiment.secondaries]
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(RAW_COLUMNS))
+        writer = csv.DictWriter(handle, fieldnames=list(raw_columns(names)))
         writer.writeheader()
         for point in result.points:
             for record in point.records:
@@ -368,9 +395,10 @@ def write_raw_runs(result: ExperimentResult, path: Path) -> Path:
 
 def write_results(result: ExperimentResult, path: Path) -> Path:
     """``results.csv`` — the aggregate ``Plots/generate_plots.py`` reads."""
-    names = [spec.name for spec in result.experiment.secondaries][:2]
+    names = [spec.name for spec in result.experiment.secondaries]
+    count = _secondary_count(names)
     columns = ["variable_value", "primary_mean", "primary_ci95"]
-    for index in range(1, 3):
+    for index in range(1, count + 1):
         columns += [f"secondary_{index}_mean", f"secondary_{index}_ci95"]
     columns.append("n_runs")
 
@@ -385,7 +413,7 @@ def write_results(result: ExperimentResult, path: Path) -> Path:
                 "primary_ci95": f"{point.primary.ci95:.6f}",
                 "n_runs": point.retained,
             }
-            for index in range(1, 3):
+            for index in range(1, count + 1):
                 name = names[index - 1] if index <= len(names) else None
                 summary = point.secondaries.get(name) if name else None
                 row[f"secondary_{index}_mean"] = (
@@ -422,6 +450,8 @@ def write_outputs(
 
 __all__ = [
     "RAW_COLUMNS",
+    "MIN_SECONDARY_COLUMNS",
+    "raw_columns",
     "STATUS_OK",
     "STATUS_FAILED",
     "MAX_RETRIES_PER_RUN",
