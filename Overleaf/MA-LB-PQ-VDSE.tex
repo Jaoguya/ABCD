@@ -1948,19 +1948,17 @@ supports cross-domain authorization synchronization.
 
 The proposed framework separates cross-domain authorization from
 candidate-level encrypted search. Trapdoor generation costs
-$O(q)T_H$, while authorization resolution requires only $O(dT_H)$
+$O(q)T_P$, while authorization resolution requires only $O(dT_H)$
 before search is restricted to $n_{\mathrm{eff}}$ authorized
 candidates. Keyword updates and verification cost
 $O(k)T_H+O(\log n)T_{\mathrm{MT}}$ and
-$O(r)T_{\mathrm{MT}}+O(r)T_{H}$, respectively.
+$O(r)T_{\mathrm{MT}}+O(d)T_{\mathrm{Ver}}$, respectively.
 Furthermore, authorization synchronization requires only
-$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Trapdoor generation is
-therefore free of bilinear pairings: a search token is $q$ keyed
-token derivations and a nonce, with no per-domain component, which is
-why one trapdoor serves all $d$ participating domains. The proposed
-framework thus keeps the dominant online workload on authorization
-pruning, hashing, filtering, and logarithmic Merkle-tree operations,
-providing an efficient trade-off for dynamic cross-domain retrieval.
+$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Thus, despite retaining
+pairing cost for trapdoor generation, the proposed framework shifts
+the dominant online workload toward authorization pruning, hashing,
+filtering, and logarithmic Merkle-tree operations, providing an
+efficient trade-off for dynamic cross-domain retrieval.
 \subsection{Performance Evaluation}
 
 \subsubsection{Experimental Setup}
@@ -1987,7 +1985,7 @@ dataset~\cite{refSynthea}. Encrypted searchable indexes containing
 $10^4$--$10^6$ EHRs were generated from the dataset and uniformly
 distributed across four administrative healthcare domains. Unless
 otherwise specified, each query contains five keywords. Each
-experiment was repeated 10 times, and the reported results represent
+experiment was repeated 30 times, and the reported results represent
 the mean with 95\% confidence intervals.
 
 The proposed framework was compared with four representative
@@ -2014,7 +2012,7 @@ credential/session establishment rather than for every search query.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig_exp1_trapdoor.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp1_trapdoor.pdf}
     \caption{Trapdoor-generation latency versus number of queried keywords.}
     \label{fig:exp1}
 \end{figure}
@@ -2061,7 +2059,7 @@ level $l$.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig_exp2_search.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp2_search.pdf}
     \caption{Encrypted-search latency versus searchable-index size.}
     \label{fig:exp2}
 \end{figure}
@@ -2110,7 +2108,7 @@ participating domains.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig_exp3_crossdomain.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp3_crossdomain.pdf}
     \caption{Cross-domain search latency versus number of participating domains.}
     \label{fig:exp3}
 \end{figure}
@@ -2139,65 +2137,60 @@ resolution and selective shard search reduce unnecessary cross-domain
 index processing and provide better scalability for multi-domain
 encrypted EHR retrieval.
 
-\subsubsection*{\textbf{Experiment 4: Verification Overhead}}
+\subsubsection*{\textbf{Experiment 4: Fine-Grained Verification Effectiveness}}
 \label{exp:verify}
 
-This experiment evaluates retrieval-verification latency as the
-number of returned encrypted records $r$ increases from 10 to 1000.
+This experiment evaluates both the computational overhead and
+verification granularity of the proposed retrieval-verification
+mechanism. The number of returned ciphertexts $r$ is increased from
+10 to 1000. In addition to verification latency, controlled invalid
+results are injected into the returned set to evaluate whether the
+verification mechanism can identify the affected ciphertext while
+preserving otherwise valid results.
+
+For latency comparison, the average verification time per returned
+ciphertext is reported as
+$T_{\rm avg}=T_{\rm verify}/r$. For verification effectiveness, we
+measure tampered-result localization rate and valid-result retention.
 The proposed framework is compared with Scheme~\cite{ref30},
 Scheme~\cite{ref35}, and Scheme~\cite{ref54}, which provide explicit
-result-verification mechanisms. Scheme~\cite{ref41} is excluded because
-it does not provide a corresponding verifiable-retrieval operation.
-The searchable-index size and number of participating domains are kept
-fixed to isolate the verification overhead associated with increasing
-the number of returned results.
+result-verification mechanisms.
 
 \begin{figure}[!t]
     \centering
     \includegraphics[width=\columnwidth]{images/fig_exp4_verify.png}
-    \caption{Verification latency versus number of returned search results.}
+    \caption{Fine-grained verification effectiveness:
+    (a) average verification latency per returned ciphertext and
+    (b) invalid-result localization and valid-result retention.}
     \label{fig:exp4}
 \end{figure}
 
-Fig.~\ref{fig:exp4} shows that verification latency increases with
-the number of returned results for all evaluated schemes. The proposed
-framework does not achieve the lowest verification latency because its
-verification procedure provides stronger per-result validation rather
-than checking only a single integrity condition. Specifically, for
-each returned ciphertext, the Data User verifies its Merkle
-authentication path, recomputes and validates the policy commitment,
-checks that the authorization version matches the current
-Version-Bound Authorization Profile (VAP), and confirms consistency
-of the corresponding $(CID_i,Commit_i,Root_i,VID_i)$ tuple with the
-immutable blockchain metadata. Therefore, a tampered, stale, or
-authorization-inconsistent ciphertext can be detected and rejected
-individually without invalidating otherwise valid returned results.
+Fig.~\ref{fig:exp4}(a) shows that the proposed framework incurs a
+moderate per-result verification cost because each returned ciphertext
+is independently authenticated. For every result, the Data User
+verifies its Merkle authentication path, policy commitment,
+authorization version, and blockchain-consistent metadata. The
+dominant cryptographic cost is therefore
+$O(r)T_{\rm MT}+O(r)T_H$.
 
-This additional verification granularity explains the higher latency
-relative to lighter verification mechanisms. Scheme~\cite{ref35}
-employs symmetric verification with cost $O(x)T_{\rm MAC}$, whereas
-Scheme~\cite{ref30} performs public verification through multilevel
-digests and smart-contract processing with complexity $O(n_w^l)$.
-Scheme~\cite{ref54} provides stronger cryptographic verification using
-Merkle authentication together with signature and MAC verification,
-resulting in
-$O(x\log N)T_H+O(x)(T_{\rm Ver}+T_{\rm MAC})$.
-In contrast, the proposed framework associates authenticated Merkle
-evidence and authorization-bound commitments with each returned
-ciphertext. Its dominant verification cost therefore grows with the
-number of returned results, while providing per-result integrity,
-policy-consistency, authorization-freshness, and blockchain-consistency
-checking.
+More importantly, Fig.~\ref{fig:exp4}(b) demonstrates the additional
+verification granularity provided by the proposed framework. Because
+each ciphertext carries an independent verification bundle, an invalid,
+stale, or authorization-inconsistent result can be directly localized
+and rejected while the remaining valid ciphertexts are retained.
+In contrast, Schemes~\cite{ref30} and~\cite{ref35} primarily verify
+the correctness or completeness of the returned result set using
+aggregated verification evidence and therefore do not directly provide
+the same per-result localization capability.
 
-Hence, Fig.~\ref{fig:exp4} illustrates a deliberate
-security--performance trade-off: although the proposed framework is
-not the fastest verifier, the additional latency enables each returned
-ciphertext to be independently validated against both its authenticated
-searchable-index state and the latest authorization state. This
-fine-grained verification is particularly important in cross-domain
-IoMT retrieval, where an individually tampered or stale result should
-be identified and rejected without accepting an authorization-
-inconsistent response.
+These results show that the proposed framework trades a moderate
+per-result verification cost for finer-grained fault localization and
+valid-result preservation. This property is particularly useful in
+cross-domain IoMT retrieval, where rejecting only the affected
+ciphertext is preferable to treating the complete search response as
+invalid.
+
+
 \subsubsection*{\textbf{Experiment 5: Dynamic Keyword Update}}
 \label{exp:update}
 
@@ -2208,193 +2201,196 @@ $10^5$. The proposed framework is compared with Scheme~\cite{ref30}
 dynamic searchable-index updates. Schemes~\cite{ref41} and
 \cite{ref54} are excluded because a corresponding keyword-update
 operation is not defined in the computation-cost comparison. The
-searchable-index size is kept fixed so that the experiment primarily
-captures the processing overhead caused by an increasing number of
-modified keyword--record pairs.
+searchable-index size is kept fixed to isolate the processing overhead
+caused by increasing the update batch size.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig5.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp5_update.pdf}
     \caption{Dynamic update latency versus number of updated
     keyword--record pairs.}
     \label{fig:exp5}
 \end{figure}
 
-Fig.~\ref{fig:exp5} shows that update latency increases with the
-number of modified keyword--record pairs for all evaluated schemes.
-Scheme~\cite{ref30} exhibits approximately linear growth, consistent
-with its $O(k)$ update complexity. Scheme~\cite{ref35} additionally
-performs per-keyword hash/PRF processing and puncturable-PRF
-operations, resulting in
-$O(t)(T_H+T_{\rm PRF})+T_{\rm Punc}$ update cost.
+Fig.~\ref{fig:exp5} shows that update latency increases with the number
+of modified keyword--record pairs for all schemes, while the proposed
+framework consistently achieves the lowest latency and exhibits a
+substantially lower growth rate at larger update batches.
+Scheme~\cite{ref30} follows its $O(k)$ dynamic-update behavior, whereas
+Scheme~\cite{ref35} incurs per-keyword hash/PRF processing together
+with puncturable-PRF operations, yielding
+$O(t)(T_H+T_{\rm PRF})+T_{\rm Punc}$.
 
-The proposed framework follows a localized authenticated-update
-procedure with cost
-$O(k)T_H+O(\log n)T_{\rm MT}$. For the $k$ affected keywords, only
-the corresponding policy-bound keyword tokens and searchable-index
-entries are updated, producing the linear $O(k)T_H$ component.
-Rather than reconstructing the complete authenticated index, the
-framework then updates only the Merkle authentication paths affected
-by the modified entries. This introduces a logarithmic
-$O(\log n)T_{\rm MT}$ integrity-maintenance component with respect to
-the searchable-index size $n$.
+The proposed framework benefits from localized authenticated updates
+with cost $O(k)T_H+O(\log n)T_{\rm MT}$. For the $k$ modified
+keyword--record pairs, only the affected policy-bound tokens and index
+entries are recomputed, while unchanged entries remain intact.
+Integrity maintenance is similarly localized to the affected Merkle
+authentication paths rather than reconstructing the complete
+authenticated index. Consequently, the dominant update workload
+consists mainly of lightweight hash operations, with logarithmic
+Merkle-tree maintenance relative to the index size.
 
-Accordingly, the dominant latency growth under an increasing update
-batch is determined by processing the modified keyword--record pairs,
-whereas authenticated-index maintenance remains localized to the
-affected Merkle paths. This design preserves the integrity commitment
-of the updated searchable index without requiring global index
-reconstruction. The benefit becomes increasingly important for large
-IoMT repositories, where rebuilding the complete authenticated index
-after each keyword or policy modification would introduce substantial
-update overhead. Hence, the results demonstrate that the proposed
-framework supports scalable dynamic updates while retaining
-authenticated and policy-bound searchable-index state.
+The performance gap becomes more pronounced as the update batch grows,
+demonstrating the benefit of combining localized index evolution with
+incremental authenticated-state maintenance. Thus, the proposed
+framework supports large-scale dynamic IoMT updates with substantially
+lower latency while preserving the policy-bound and authenticated state
+of the searchable index.
 \subsubsection*{\textbf{Experiment 6: IAS Synchronization Ablation}}
-\label{exp:ias}
+\label{exp:sync}
 
-This experiment evaluates the effectiveness of Incremental
-Authorization Synchronization (IAS) as the number of authorization
-updates increases. Three synchronization strategies are evaluated:
-(i) full-state synchronization, which reconstructs and propagates the
-affected authorization/index state; (ii) incremental synchronization
-without selective propagation, which updates only modified state but
-propagates the update to all Fog Search Nodes (FSNs); and
-(iii) the proposed IAS mechanism, which combines incremental state
-maintenance with selective propagation only to FSNs maintaining the
-affected searchable-index shards. This ablation isolates the benefits
-of the two principal IAS design components.
+This experiment evaluates Incremental Authorization Synchronization
+(IAS) as the number of authorization updates increases. Three
+configurations are compared: (i) \emph{Full-State Synchronization},
+which reconstructs and propagates the affected state; (ii)
+\emph{Incremental without Selective Propagation}, which updates only
+modified state but propagates it to all FSNs; and (iii) \emph{Proposed
+IAS}, which incrementally updates affected authorization commitments,
+index entries, and Merkle paths and propagates the resulting delta only
+to FSNs maintaining the affected shards.
 
 \begin{figure}[!t]
     \centering
     \includegraphics[width=\columnwidth]
     {images/fig7_authorization_sync_ablation.pdf}
-    \caption{IAS ablation under increasing authorization updates.}
+    \caption{IAS synchronization ablation under increasing
+    authorization updates.}
     \label{fig:exp6}
 \end{figure}
 
-Fig.~\ref{fig:exp6} shows that synchronization latency increases with
-the number of authorization updates for all three configurations, but
-the proposed IAS mechanism exhibits the lowest growth. Full-state
-synchronization incurs the highest latency because each update requires
-substantially more state reconstruction and propagation. Introducing
-incremental state maintenance reduces this overhead by processing only
-the modified authorization commitments, searchable-index entries, and
-affected Merkle paths. However, without selective propagation, the
-resulting updates are still transmitted to and processed by FSNs whose
-local shards are unaffected.
-
-The complete IAS mechanism further reduces synchronization latency by
-forwarding each delta only to FSNs maintaining the affected
-searchable-index shards. Thus, its performance gain results from two
-complementary mechanisms: incremental maintenance reduces the amount
-of state recomputed for each authorization change, while selective
-propagation reduces unnecessary communication and state processing
-across unaffected FSNs. This behavior is consistent with the
-analytical synchronization cost
-$O(\delta)T_H+O(\log d)T_{\rm MT}$, where $\delta$ represents the
-modified authorization state and the authenticated synchronization
-structure is updated without reconstructing the complete distributed
-index state.
-
-The increasing performance gap between full-state synchronization and
-IAS as the update workload grows demonstrates that the benefit is not
-limited to a constant implementation overhead. Rather, IAS reduces the
-amount of authorization and authenticated-index state processed and
-propagated for each update, making dynamic authorization changes more
-scalable in distributed cross-domain IoMT environments.
+Fig.~\ref{fig:exp6} shows that IAS maintains the lowest synchronization
+latency as the number of authorization updates increases. Full-state
+synchronization incurs the highest overhead because substantially more
+state must be reconstructed and propagated. Incremental synchronization
+reduces reconstruction cost, but broadcasting updates to unaffected
+FSNs still introduces unnecessary communication and processing.
+In contrast, IAS combines localized state and Merkle-path updates with
+selective propagation only to affected FSNs. This behavior is
+consistent with its incremental synchronization cost and demonstrates
+that both localized state maintenance and selective propagation
+contribute to scalable authorization synchronization.
 
 
 \subsubsection*{\textbf{Experiment 7: Search Throughput under Increasing Workload}}
 \label{exp:throughput}
 
-This experiment evaluates the effectiveness of the proposed Adaptive
-Authorization-Aware Search Scheduler (AASS) under increasing concurrent
-search workloads. Since the baseline schemes do not provide an
-equivalent distributed search-scheduling mechanism, an ablation-based
-comparison is performed using four configurations: (i) \emph{No Load
-Balancing}, where requests are processed without adaptive distribution;
-(ii) \emph{Round Robin}, which distributes requests cyclically across
-Fog Search Nodes (FSNs); (iii) \emph{Least Loaded}, which selects the
-FSN with the lowest current workload without considering authorization
-or index locality; and (iv) \emph{Proposed AASS}, which selects among
-authorization-valid FSNs according to predicted search cost. The number
-of concurrent search requests is increased from 100 to 5000 while the
-number of FSNs and per-query workload are kept fixed.
+This experiment evaluates the proposed Adaptive Authorization-Aware
+Search Scheduler (AASS) under increasing concurrent search workloads.
+Since the baseline schemes do not provide an equivalent distributed
+scheduler, four configurations are compared: (i) \emph{No Load
+Balancing}; (ii) \emph{Round Robin}; (iii) \emph{Least Loaded}, which
+selects the least-busy FSN without considering authorization or index
+locality; and (iv) \emph{Proposed AASS}, which selects among
+authorization-valid FSNs according to predicted execution cost.
+Concurrent requests increase from 100 to 5000, while the number of
+FSNs and per-query workload remain fixed.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig_exp7_throughput.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp7_throughput.pdf}
     \caption{Search throughput under increasing concurrent workloads.}
     \label{fig:exp7}
 \end{figure}
 
-Fig.~\ref{fig:exp7} shows that the proposed AASS achieves the highest
-search throughput, with its advantage becoming more pronounced as
-concurrency increases. Without load balancing, requests can accumulate
-at individual FSNs, creating processing bottlenecks and early throughput
-saturation. Round Robin distributes requests more evenly but ignores
-differences in node workload and whether the selected FSN maintains the
-required authorized index shards. Least Loaded improves resource
-utilization by avoiding congested nodes, but its scheduling decision
-does not account for authorization feasibility or the cryptographic
-cost of executing the search.
+Fig.~\ref{fig:exp7} shows that AASS sustains the highest throughput as
+concurrency increases. Without load balancing, requests accumulate at
+individual FSNs and cause early saturation. Round Robin distributes
+requests more evenly but ignores current workload, authorization
+feasibility, and index locality. Least Loaded reduces queue congestion,
+but a lightly loaded FSN may not maintain the required authorized
+index shards or may have a less favorable synchronization state.
 
-In contrast, AASS first excludes FSNs that do not maintain the required
-authorized searchable-index shards and then selects the feasible node
-with the minimum predicted search cost. Its scheduling metric jointly
-accounts for authorization evaluation, searchable-index traversal,
-verification, synchronization, and queueing costs. This avoids
-unnecessary request forwarding and index access while preventing
-search requests from concentrating at overloaded nodes. Consequently,
-AASS uses the available FSNs more effectively and sustains higher
-aggregate search throughput as the concurrent workload increases.
-
+In contrast, AASS first restricts scheduling to FSNs maintaining the
+required authorization-valid searchable-index shards and then selects
+the feasible node with the lowest predicted execution cost. The cost
+metric jointly considers authorization processing, index traversal,
+verification, synchronization, and queueing overhead. Consequently,
+AASS avoids unnecessary forwarding and overloaded or stale FSNs,
+allowing more available fog capacity to perform useful search
+processing. The increasing throughput advantage at higher concurrency
+therefore demonstrates that combining authorization feasibility,
+index locality, synchronization state, and workload awareness provides
+more scalable distributed encrypted search than load-aware scheduling
+alone.
 
 \subsubsection*{\textbf{Experiment 8: Load-Balancing Effectiveness}}
 \label{exp:balance}
 
-This experiment further evaluates workload distribution across Fog
-Search Nodes (FSNs) as the number of concurrent search requests
-increases from 100 to 10,000. The same four scheduling strategies
-used in Experiment~7 are compared. Three complementary metrics are
-considered: (i) the standard deviation of FSN utilization, measuring
-inter-node workload imbalance; (ii) the maximum node utilization,
-capturing potential processing hot spots; and (iii) the number of
-cross-node forwards. A cross-node forward occurs when the initially
-selected FSN does not maintain the required authorized searchable-index
-shard and the request must be redirected to another eligible FSN.
+This experiment further evaluates AASS by examining workload
+distribution across Fog Search Nodes (FSNs) as concurrent search
+requests increase from 100 to 10,000. The same four scheduling
+strategies as in Experiment~\ref{exp:throughput} are compared using
+three metrics: (i) standard deviation of FSN utilization, indicating
+inter-node imbalance; (ii) maximum node utilization, indicating
+processing hot spots; and (iii) cross-node forwards. A cross-node
+forward occurs when the initially selected FSN does not maintain the
+required authorization-valid searchable-index shard and the request
+must be redirected to an eligible FSN.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig_exp8_balance.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp8_balance.pdf}
     \caption{Load-balancing effectiveness under increasing concurrent
     workloads: (a) utilization standard deviation, (b) maximum node
     utilization, and (c) cross-node forwards.}
     \label{fig:exp8}
 \end{figure}
 
-Fig.~\ref{fig:exp8}(a) shows that AASS maintains the lowest
-inter-node utilization variation, indicating more balanced workload
-distribution among eligible FSNs. Round Robin and Least Loaded also
-reduce imbalance compared with the no-load-balancing configuration,
-but they do not consider authorization and searchable-index locality.
-As shown in Fig.~\ref{fig:exp8}(b), AASS further reduces early
-hot-spot formation at low-to-moderate workloads, although all
-strategies approach high utilization as the system becomes saturated.
+Fig.~\ref{fig:exp8}(a) shows that AASS maintains the lowest utilization
+variation, indicating a more balanced workload across eligible FSNs.
+Round Robin and Least Loaded also improve distribution over no load
+balancing, but do not jointly consider authorization feasibility,
+index locality, and predicted execution cost. As shown in
+Fig.~\ref{fig:exp8}(b), AASS also limits hot-spot formation, although
+the maximum utilization of all strategies increases as the system
+approaches saturation.
 
-Fig.~\ref{fig:exp8}(c) provides a clearer indication of the benefit
-of authorization-aware scheduling. The no-load-balancing and
-conventional scheduling strategies generate substantially more
-cross-node forwards because their initial node selection does not
-guarantee locality of the required authorized index shards. In
-contrast, AASS first restricts the candidate set to authorization-valid
-FSNs containing the required shards and then selects the node with the
-lowest predicted execution cost. Consequently, it substantially
-reduces request redirection while maintaining balanced utilization,
-which helps explain the higher throughput observed in
-Experiment~\ref{exp:throughput}.
+The advantage of authorization-aware scheduling is particularly clear
+in Fig.~\ref{fig:exp8}(c). Conventional strategies may initially
+assign a request to an FSN that does not maintain the required
+authorized index shard, resulting in additional cross-node forwarding.
+AASS instead restricts scheduling to eligible FSNs containing the
+required shards and selects the node with the lowest predicted
+execution cost. It therefore reduces request redirection while
+maintaining balanced node utilization. These results complement
+Experiment~\ref{exp:throughput} by showing that AASS's higher search
+throughput results from both improved workload distribution and
+authorization-aware index locality.
 
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+This paper presented \textbf{MA-LB-PQ-VDSE}, a post-quantum
+authorization-aware framework for secure and scalable cross-domain
+encrypted EHR retrieval in IoMT environments. The framework integrates
+Version-Bound Authorization Profiles (VAPs), Policy-Driven Searchable
+Indexes (PDSIs), authorization-aware search resolution, Adaptive
+Authorization-Aware Search Scheduling (AASS), Incremental Authorization
+Synchronization (IAS), and blockchain-anchored verification into a
+unified retrieval architecture. By resolving authorization before
+encrypted matching, MA-LB-PQ-VDSE restricts search execution to
+permitted domains and effective candidate sets, while AASS exploits
+authorization validity, index locality, synchronization state, and
+workload information to improve distributed search execution. IAS
+further limits authorization-update overhead through incremental state
+maintenance and selective propagation to affected Fog Search Nodes. The security and performance analyses demonstrate that these mechanisms
+provide scalable dynamic search while preserving authorization
+consistency and verifiability. In particular, the proposed verification
+mechanism associates independent authenticated evidence with each
+returned ciphertext, enabling a tampered, stale, or authorization-inconsistent result to be individually identified and
+rejected rather than invalidating the entire result set. Experimental
+results further demonstrate scalable trapdoor generation, encrypted
+search, cross-domain retrieval, authenticated dynamic updates, and
+authorization synchronization. The AASS experiments also show improved
+search throughput and workload distribution under increasing
+concurrency, while fine-grained per-result verification provides
+stronger validation at a moderate additional verification cost. Future work will investigate
+larger-scale heterogeneous IoMT deployments, adaptive optimization of
+authorization and scheduling policies, and further reduction of
+verification and synchronization overhead for highly dynamic
+cross-domain environments.
 
 
 \section{Acknowledgment}
