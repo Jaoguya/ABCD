@@ -28,29 +28,45 @@ DOCKER="${DOCKER:-sudo docker}"
 
 # Everything below runs the CLI out of the fabric-tools image so the host needs
 # no Fabric binaries -- cryptogen, configtxgen, osnadmin and peer all live there.
+#
+# First argument is the binary, the rest are ITS arguments. Docker options must
+# precede the image name, so the entrypoint cannot be passed through "$@" after
+# it: doing that made `docker run ... -- config --config=...` read `config` as
+# the image and fail with "pull access denied for config".
 tools() {
+  local entry="$1"; shift
+  $DOCKER run --rm \
+    -v "$HERE:/work" -w /work \
+    -e FABRIC_CFG_PATH=/work \
+    --entrypoint "$entry" \
+    hyperledger/fabric-tools:$FABRIC_TAG "$@"
+}
+
+# Same, but joined to the compose network -- only valid once `up` has created
+# it, so cryptogen and configtxgen (which talk to nothing) must not use it.
+tools_net() {
+  local entry="$1"; shift
   $DOCKER run --rm \
     -v "$HERE:/work" -w /work \
     --network abcd_fabric \
     -e FABRIC_CFG_PATH=/work \
-    "$@" hyperledger/fabric-tools:$FABRIC_TAG
+    --entrypoint "$entry" \
+    hyperledger/fabric-tools:$FABRIC_TAG "$@"
 }
 
 cmd_up() {
   echo "==> 1/6 crypto material (cryptogen)"
   rm -rf crypto-config
-  tools --entrypoint cryptogen -- config --config=/work/crypto-config.yaml --output=/work/crypto-config \
-    >/dev/null
-  # cryptogen names the peer dir by template index; the compose mount expects
-  # peer0.org1.abcd.local, which is what Count: 1 produces.
-  $DOCKER run --rm -v "$HERE:/work" alpine:3 sh -c 'chmod -R a+rX /work/crypto-config' 2>/dev/null || true
+  tools cryptogen generate --config=/work/crypto-config.yaml --output=/work/crypto-config >/dev/null
+  # cryptogen writes as root inside the container; the compose mounts are :ro
+  # but still need to be readable by the fabric user in the peer/orderer images.
+  tools chmod -R a+rX /work/crypto-config >/dev/null 2>&1 || sudo chmod -R a+rX crypto-config
   echo "    $(find crypto-config -name '*.pem' | wc -l | tr -d ' ') certificates"
 
   echo "==> 2/6 channel genesis block (configtxgen)"
   mkdir -p channel-artifacts
-  tools --entrypoint configtxgen -- \
-    -profile AbcdChannel -outputBlock /work/channel-artifacts/$CHANNEL.block \
-    -channelID "$CHANNEL" >/dev/null
+  tools configtxgen -profile AbcdChannel \
+    -outputBlock /work/channel-artifacts/$CHANNEL.block -channelID "$CHANNEL" >/dev/null
   echo "    channel-artifacts/$CHANNEL.block"
 
   echo "==> 3/6 starting orderer, peer, ipfs"
@@ -63,7 +79,7 @@ cmd_up() {
   sleep 5
 
   echo "==> 4/6 joining the channel (osnadmin)"
-  tools --entrypoint osnadmin -- channel join \
+  tools_net osnadmin channel join \
     --channelID "$CHANNEL" \
     --config-block /work/channel-artifacts/$CHANNEL.block \
     -o orderer:7053 >/dev/null
