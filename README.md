@@ -286,7 +286,7 @@ These decide what the numbers mean.
 | Fog Search Nodes `m` | 4 | Paper §V |
 | Index size `N` | 10⁵ | benchmark choice (mid-sweep) |
 | Returned results `r` | 100 | benchmark choice |
-| Repetitions | 30 | Paper §V |
+| Repetitions | 10 | Paper §V ("repeated 10 times") |
 | Confidence interval | 95% | Paper §V |
 | Warm-up runs (discarded) | 5 | benchmark choice |
 | ML-KEM parameter set | ML-KEM-768 | Paper §V |
@@ -357,12 +357,18 @@ ma_lb_pq_vdse,exp2,10000,1,4.812,318,0.968,ok
 **`results.csv`** — aggregated, consumed by the plotting script:
 ```csv
 variable_value,primary_mean,primary_ci95,secondary_1_mean,secondary_1_ci95,secondary_2_mean,secondary_2_ci95,n_runs
-10000,4.79,0.11,318.0,4.2,0.968,0.003,30
+10000,4.79,0.11,318.0,4.2,0.968,0.003,10
 ```
+
+An experiment that records more than two secondaries widens both files rather
+than truncating: Exp. 6 declares three (`ias_message_size`, `fsns_touched`,
+`delivered_kb`) and writes `secondary_3_mean` / `secondary_3_ci95` here and
+`secondary_metric_3` in `raw_runs.csv`, with `status` still last. Two or fewer
+keeps exactly the shape printed above.
 
 **`run_meta.json`** — provenance per §7.
 
-Blank secondary columns where a metric doesn't apply. `n_runs` must be 30 in reportable data. Units: latency **ms**, sizes **KB**, throughput **queries/s**.
+Blank secondary columns where a metric doesn't apply. `n_runs` must be 10 in reportable data. Units: latency **ms**, sizes **KB**, throughput **queries/s**.
 
 ---
 
@@ -398,17 +404,19 @@ docker compose -f infra/fabric/docker-compose.yaml up -d
 ipfs daemon &
 
 # Schemes
-python3 -m Schemes.ma_lb_pq_vdse.src.main    --experiment all       --runs 30 \
+python3 -m Schemes.ma_lb_pq_vdse.src.main    --experiment all       --runs 10 \
     --config "Experiment Configuration/global.yaml" --dataset Dataset/derived
-python3 -m Schemes.guo_vdsse.src.main        --experiment 1,2,3,4,5 --runs 30
-python3 -m Schemes.thingom_pq_abse.src.main  --experiment 1,2,3     --runs 30 \
+python3 -m Schemes.guo_vdsse.src.main        --experiment 1,2,3,4,5 --runs 10
+python3 -m Schemes.thingom_pq_abse.src.main  --experiment 1,2,3     --runs 10 \
     --dataset Dataset/derived
-python3 -m Schemes.perera_lv_pqabse.src.main --experiment all       --runs 30
-python3 -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 30
+python3 -m Schemes.perera_lv_pqabse.src.main --experiment all       --runs 10
+python3 -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 10
 
 # Figures
 python3 Plots/generate_plots.py --input Schemes --output Plots/output
 ```
+
+**`--runs 10` above only restates the configured default.** `measurement.repetitions` in `Experiment Configuration/global.yaml` is the single source of truth and every scheme already defaults to it, so omitting the flag is preferable to typing the number — a literal here is a second place for the count to drift, which is exactly how the 30 → 10 change of 2026-09-03 left `--runs 30` standing in this block.
 
 **Flags are not uniform** — they were written at different times. Only `ma_lb_pq_vdse` and `thingom_pq_abse` accept `--dataset`; the others read the corpus from its configured location. `guo_vdsse` and `yue_ge` use `--output-dir` where the rest use `--output`, and `--warmup` where `ma_lb_pq_vdse` and `thingom_pq_abse` use `--warmups`. See [SystemConfiguration.md §7](SystemConfiguration.md) for the full table.
 

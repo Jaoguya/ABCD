@@ -104,3 +104,53 @@ def test_no_source_file_still_quotes_the_old_count():
         "these still assert a replication count that is not the configured "
         f"{n}:\n" + "\n".join(stale)
     )
+
+
+# ===========================================================================
+# README §8-9 — the three places the 30 -> 10 change missed
+# ===========================================================================
+# The 2026-09-03 migration fixed §7's prose and the provenance gate, and the
+# tests above pin those. It did not reach §8's parameter table, §9's CSV example
+# and reportability sentence, or §11's campaign commands, and nothing here
+# noticed for a day. On 2026-09-04 that stale `n_runs must be 30` was read as
+# authoritative and a rerun was launched at --runs 30; it had to be killed and
+# restarted. A reviewer reading the same line would instead have rejected
+# correct n=10 data. Each is pinned below against global.yaml.
+#
+# Still deliberately NOT asserted, for the reasons in this module's docstring:
+# the `30 s ramp` (seconds), and every historical n=30 measurement in §14-17 --
+# those record what was observed at the time and rewriting them would falsify
+# the record.
+def test_readme_parameter_table_matches_the_config():
+    match = re.search(r"\|\s*Repetitions\s*\|\s*(\d+)\s*\|", README.read_text(encoding="utf-8"))
+    assert match, "README §8's parameter table no longer has a Repetitions row"
+    assert int(match.group(1)) == _configured_repetitions()
+
+
+def test_readme_reportability_sentence_matches_the_config():
+    match = re.search(r"`n_runs` must be (\d+) in reportable data", README.read_text(encoding="utf-8"))
+    assert match, "README §9 no longer states the reportable n_runs requirement"
+    assert int(match.group(1)) == _configured_repetitions()
+
+
+def test_readme_results_csv_example_matches_the_config():
+    """The example row's last column is n_runs; a stale one reads as the spec."""
+    text = README.read_text(encoding="utf-8")
+    match = re.search(r"^10000,4\.79,.*,(\d+)$", text, re.MULTILINE)
+    assert match, "README §9's results.csv example row changed shape"
+    assert int(match.group(1)) == _configured_repetitions()
+
+
+def test_readme_campaign_commands_match_the_config():
+    """Every `--runs N` printed as a runnable command."""
+    n = _configured_repetitions()
+    stale = [
+        line.strip()
+        for line in README.read_text(encoding="utf-8").splitlines()
+        for found in [re.search(r"--runs (\d+)", line)]
+        if found and int(found.group(1)) != n
+    ]
+    assert not stale, (
+        f"README prints commands at a replication count that is not {n}:\n"
+        + "\n".join(stale)
+    )
