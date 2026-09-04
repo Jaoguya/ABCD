@@ -96,6 +96,7 @@ cmd_up() {
   echo "    peer joined: $(peer_cli channel list 2>/dev/null | tail -n +2 | tr -d '\r' | paste -sd, -)"
 
   echo "==> 5/6 packaging and installing chaincode"
+  vendor_chaincode
   deploy_chaincode
 
   echo "==> 6/6 python bindings"
@@ -118,6 +119,28 @@ peer_cli() {
     -e CORE_PEER_MSPCONFIGPATH=/work/crypto-config/peerOrganizations/org1.abcd.local/users/Admin@org1.abcd.local/msp \
     --entrypoint peer \
     hyperledger/fabric-tools:$FABRIC_TAG "$@"
+}
+
+# Vendor the chaincode's dependencies before packaging.
+#
+# Fabric's `lifecycle chaincode package` runs `go list` over the source, and
+# `go list` REFUSES to run against a vendor/ whose modules.txt disagrees with
+# go.mod -- "inconsistent vendoring", one line per module. That is exactly what
+# a `git reset --hard` produced on 2026-09-04: vendor/ and go.sum are ignored by
+# .gitignore so they survived the reset, while go.mod was restored to a version
+# listing only the one DIRECT require. The network had come up on 2026-09-04
+# only because a tidied go.mod happened to be sitting in the tree, uncommitted;
+# `up` was never reproducible from git alone.
+#
+# go.mod now carries the full indirect list, so this step is a no-op against a
+# clean checkout -- it rebuilds vendor/ and go.sum, both ignored, and does NOT
+# touch go.mod. That matters: go.mod is TRACKED, and a modified tracked file
+# stamps every result produced afterwards `-dirty`, which harvest then refuses.
+vendor_chaincode() {
+  $DOCKER run --rm -v "$HERE/chaincode:/src" -w /src golang:1.21 \
+    sh -c 'go mod vendor && chmod -R a+rwX /src' >/dev/null 2>&1 \
+    || { echo "    go mod vendor failed"; return 1; }
+  echo "    vendored $(sed -n 's/^# //p' chaincode/vendor/modules.txt | wc -l | tr -d ' ') modules"
 }
 
 deploy_chaincode() {
