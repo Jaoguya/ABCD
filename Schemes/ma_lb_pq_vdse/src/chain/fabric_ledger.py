@@ -35,6 +35,7 @@ typed ``record`` is left unset and ``payload`` is what callers verify against.
 from __future__ import annotations
 
 import base64
+import dataclasses
 import hashlib
 import json
 import os
@@ -145,6 +146,23 @@ class FabricLedger(Ledger):
         self.run_tag = run_tag or os.environ.get(
             "ABCD_RUN_TAG", base64.b16encode(os.urandom(6)).decode().lower()
         )
+        # Typed records this INSTANCE wrote, by (namespace, key).
+        #
+        # chain/ledger.py's typed accessors (get_registration, get_state, ...)
+        # require entry.record to be the right Record subclass, and Record has
+        # encode() but no decode(): reconstructing one from canonical bytes
+        # needs a per-type decoder that does not exist. That is precisely the
+        # gap ledger.py:105 names as "the one piece of work the interface swap
+        # still requires", and it is NOT closed here.
+        #
+        # What this cache does instead is remember the object on the way in, so
+        # a deployment can read back what it just anchored. It does NOT make the
+        # read cheaper or fake it: get() still performs the full Fabric round
+        # trip and still pays for it, and the cache only supplies the typed view
+        # of bytes Fabric returned. An entry written by a DIFFERENT process
+        # still comes back with record=None, and a typed accessor on it still
+        # raises -- honestly, rather than by guessing a subclass.
+        self._typed: Dict[tuple, Any] = {}
         self._identity, self._key = self._load_identity(msp)
         self._stub = self._connect(tls_ca)
 
@@ -380,6 +398,7 @@ class FabricLedger(Ledger):
             entry_hash.hex(),
         ])
         self._await_commit(namespace, key)
+        self._typed[(namespace, key)] = record
         return LedgerEntry(
             sequence=sequence, namespace=namespace, key=key, payload=payload,
             domain=domain, timestamp_ns=timestamp_ns, previous_hash=previous,
@@ -387,7 +406,13 @@ class FabricLedger(Ledger):
         )
 
     def get(self, namespace: str, key: str) -> LedgerEntry:
-        return _decode_entry(json.loads(self._call("Get", [self._ns(namespace), key])))
+        # The round trip happens first and unconditionally -- this is the call
+        # Exp. 4 times, once per returned record.
+        entry = _decode_entry(json.loads(self._call("Get", [self._ns(namespace), key])))
+        cached = self._typed.get((namespace, key))
+        if cached is None:
+            return entry
+        return dataclasses.replace(entry, record=cached)
 
     def keys(self, namespace: str, *, prefix: str = "") -> List[str]:
         return sorted(json.loads(self._call("Keys", [self._ns(namespace), prefix])))
