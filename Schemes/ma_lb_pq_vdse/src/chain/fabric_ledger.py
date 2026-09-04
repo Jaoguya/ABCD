@@ -74,7 +74,9 @@ def _load_protos():
         import grpc  # noqa: F401
         from common import common_pb2
         from msp import identities_pb2
-        from peer import chaincode_pb2, proposal_pb2, peer_pb2_grpc
+        from peer import (chaincode_pb2, proposal_pb2, peer_pb2_grpc,
+                          transaction_pb2, proposal_response_pb2)
+        from orderer import ab_pb2_grpc
     except ImportError as exc:  # noqa: BLE001
         raise FabricUnavailable(
             f"Fabric bindings unavailable ({exc}). Run "
@@ -82,7 +84,8 @@ def _load_protos():
             f"{_PROTO_DIR}."
         ) from exc
     import grpc
-    return grpc, common_pb2, identities_pb2, chaincode_pb2, proposal_pb2, peer_pb2_grpc
+    return (grpc, common_pb2, identities_pb2, chaincode_pb2, proposal_pb2,
+            peer_pb2_grpc, transaction_pb2, proposal_response_pb2, ab_pb2_grpc)
 
 
 def _low_s(r: int, s: int) -> tuple:
@@ -115,8 +118,8 @@ class FabricLedger(Ledger):
         timeout: float = 30.0,
         run_tag: Optional[str] = None,
     ) -> None:
-        (self._grpc, self._common, self._identities,
-         self._cc, self._proposal, self._peer_grpc) = _load_protos()
+        (self._grpc, self._common, self._identities, self._cc, self._proposal,
+         self._peer_grpc, self._tx, self._presp, self._ab_grpc) = _load_protos()
 
         root = Path(__file__).resolve().parents[4] / "infra" / "fabric"
         crypto = root / "crypto-config" / "peerOrganizations" / "org1.abcd.local"
@@ -231,10 +234,14 @@ class FabricLedger(Ledger):
             payload=payload.SerializeToString(),
         )
         proposal_bytes = proposal.SerializeToString()
-        return self._proposal.SignedProposal(
+        signed = self._proposal.SignedProposal(
             proposal_bytes=proposal_bytes,
             signature=self._sign(proposal_bytes),
         )
+        # The envelope must carry the SAME header and proposal payload the peer
+        # endorsed, or the orderer's validation rejects it as a different
+        # transaction, so they travel back with the signed proposal.
+        return signed, header, payload
 
     def _sign(self, message: bytes) -> bytes:
         from cryptography.hazmat.primitives import hashes as c_hashes
@@ -247,9 +254,8 @@ class FabricLedger(Ledger):
 
     def _call(self, function: str, args: List[str]) -> str:
         """One Endorser round trip. THIS is what Exp. 4 times, once per record."""
-        response = self._stub.ProcessProposal(
-            self._signed_proposal(function, args), timeout=self.timeout
-        )
+        signed, _, _ = self._signed_proposal(function, args)
+        response = self._stub.ProcessProposal(signed, timeout=self.timeout)
         status = response.response.status
         if status != 200:
             message = response.response.message or ""
@@ -259,6 +265,86 @@ class FabricLedger(Ledger):
                 raise NotFoundError(message)
             raise RuntimeError(f"fabric status {status}: {message}")
         return response.response.payload.decode()
+
+    def _submit(self, function: str, args: List[str]) -> str:
+        """Endorse, then order and commit. Used by writes only.
+
+        ProcessProposal alone does NOT write anything: it endorses a proposal
+        and returns the simulated result. Without the broadcast below, append()
+        looked like it worked and committed nothing, and the first read after it
+        failed with NotFoundError.
+        """
+        signed, header, prop_payload = self._signed_proposal(function, args)
+        response = self._stub.ProcessProposal(signed, timeout=self.timeout)
+        if response.response.status != 200:
+            message = response.response.message or ""
+            if "IMMUTABLE" in message:
+                raise ImmutabilityError(message)
+            if "NOTFOUND" in message:
+                raise NotFoundError(message)
+            raise RuntimeError(f"fabric status {response.response.status}: {message}")
+
+        endorsed = self._tx.ChaincodeEndorsedAction(
+            proposal_response_payload=response.payload,
+            endorsements=[response.endorsement],
+        )
+        action_payload = self._tx.ChaincodeActionPayload(
+            chaincode_proposal_payload=prop_payload.SerializeToString(),
+            action=endorsed,
+        )
+        transaction = self._tx.Transaction(actions=[
+            self._tx.TransactionAction(
+                header=header.signature_header,
+                payload=action_payload.SerializeToString(),
+            )
+        ])
+        envelope_payload = self._common.Payload(
+            header=header, data=transaction.SerializeToString()
+        ).SerializeToString()
+        envelope = self._common.Envelope(
+            payload=envelope_payload, signature=self._sign(envelope_payload)
+        )
+        ack = self._orderer().Broadcast(iter([envelope]), timeout=self.timeout)
+        for reply in ack:
+            if reply.status != self._common.SUCCESS:
+                raise RuntimeError(f"orderer rejected the transaction: {reply.status}")
+            break
+        return response.response.payload.decode()
+
+    def _orderer(self):
+        if getattr(self, "_orderer_stub", None) is None:
+            root = Path(__file__).resolve().parents[4] / "infra" / "fabric"
+            ca = (root / "crypto-config" / "ordererOrganizations" / "abcd.local"
+                  / "orderers" / "orderer.abcd.local" / "tls" / "ca.crt")
+            endpoint = os.environ.get("ABCD_FABRIC_ORDERER", "localhost:7050")
+            creds = self._grpc.ssl_channel_credentials(ca.read_bytes())
+            channel = self._grpc.secure_channel(
+                endpoint, creds,
+                options=[("grpc.ssl_target_name_override", "orderer")],
+            )
+            self._orderer_stub = self._ab_grpc.AtomicBroadcastStub(channel)
+        return self._orderer_stub
+
+    def _await_commit(self, namespace: str, key: str, deadline: float = 20.0) -> None:
+        """Block until the write is readable.
+
+        Broadcast returns when the orderer ACCEPTS the transaction, not when the
+        peer has committed it, and BatchTimeout is 1s. Reading straight after a
+        write therefore races the block cut. Polling the value is cruder than
+        subscribing to the commit event but needs no second connection, and this
+        runs only in untimed setup.
+        """
+        started = time.monotonic()
+        while time.monotonic() - started < deadline:
+            try:
+                self._call("Get", [self._ns(namespace), key])
+                return
+            except NotFoundError:
+                time.sleep(0.05)
+        raise RuntimeError(
+            f"{namespace}/{key} did not commit within {deadline}s; the orderer "
+            f"accepted it but the peer never delivered the block"
+        )
 
     # -- storage primitives -------------------------------------------------
     def initialize(self) -> None:
@@ -285,7 +371,7 @@ class FabricLedger(Ledger):
             timestamp_ns=timestamp_ns,
             previous_hash=previous,
         )
-        self._call("Append", [
+        self._submit("Append", [
             self._ns(namespace), key,
             base64.b64encode(payload).decode(),
             base64.b64encode(domain).decode(),
@@ -293,6 +379,7 @@ class FabricLedger(Ledger):
             previous.hex(),
             entry_hash.hex(),
         ])
+        self._await_commit(namespace, key)
         return LedgerEntry(
             sequence=sequence, namespace=namespace, key=key, payload=payload,
             domain=domain, timestamp_ns=timestamp_ns, previous_hash=previous,
