@@ -548,7 +548,7 @@ Newest last. Mark entries that invalidate existing results **[results-affecting]
 | 2026-08-29 | **`--points` sweep splitting** (`infra/sweep.py`) on every scheme, plus `infra/merge_points.py` to reassemble shards by re-aggregating from `raw_runs.csv`. Campaign wall-clock 25 h → ~11 h at unchanged total compute. |
 | 2026-08-29 | **`synthetic_generator.py` no longer overwrites the frozen corpus manifest.** `--manifest` defaults to the committed `Dataset/dataset_manifest.json`, so making a dev corpus silently replaced the campaign's provenance pin. Now refused unless `--force`. |
 | 2026-08-29 | **`SystemConfiguration.md` added** — operator's guide for anyone new to the project. |
-| 2026-09-03 | **Two measurement defects found and fixed; the 30 → 10 change finished; full first-to-last audit.** Exp. 2 had been querying `keywords[0]` of the first record — one arbitrary keyword, unchanged across every run of every point — while `guo` and `yue_ge` each draw a NEW keyword per run. Peony++ is output-sensitive (`O(n_w^l)` is literally the matching-file count), so its ten runs at N=10⁶ spanned **0.33–1408.65 ms** and its mean sits **16.9× its median**; our flat ±2% curve was an artefact of never varying the query, and whichever keyword `keywords[0]` happened to be silently set the published figure. Now draws `warmup_runs + repetitions` keywords at the baselines' own selectivity bounds (copied verbatim from `yue_ge/src/workload.py`) and rotates one per call; warm-ups consume the first entries so retained runs align with the baselines'. Separately, Exp. 4 was recomputing Phase VIII Steps 2–3 once per index ENTRY when both depend only on the RECORD — 1000 bundles cover 167 records at `keywords_per_record = 6`, making 67% of runtime redundant; amortised for **2.08× at r=1000**, Step 1 deliberately left per-bundle. The 30 → 10 repetition change was completed across 18 stale claims in 13 files (worst: `global.yaml`'s own comment on the `repetitions: 10` line reading "§V still says 30") and is now pinned by `test_repetition_count_agreement.py`. Audit of all eight experiments against `tab:cost`: Exp. 4, 5, 6 match; Exp. 7–8 have no table row; Exp. 1's `O(1)`/`O(q)` baseline claims and Exp. 3's assumed linearity do not hold. **[results-affecting: ma_lb_pq_vdse Exp. 2 and Exp. 4 both need rerunning — see §17]** |
+| 2026-09-03 | **Two measurement defects found and fixed; the 30 → 10 change finished; full first-to-last audit.** Exp. 2 had been querying `keywords[0]` of the first record — one arbitrary keyword, unchanged across every run of every point — while `guo` and `yue_ge` each draw a NEW keyword per run. Peony++ is output-sensitive (`O(n_w^l)` is literally the matching-file count), so its ten runs at N=10⁶ spanned **0.33–1408.65 ms** and its mean sits **16.9× its median**; our flat ±2% curve was an artefact of never varying the query, and whichever keyword `keywords[0]` happened to be silently set the published figure. Now draws `warmup_runs + repetitions` keywords at the baselines' own selectivity bounds (copied verbatim from `yue_ge/src/workload.py`) and rotates one per call; warm-ups consume the first entries so retained runs align with the baselines'. Separately, Exp. 4 was recomputing Phase VIII Steps 2–3 once per index ENTRY when both depend only on the RECORD — 1000 bundles cover 167 records at `keywords_per_record = 6`, making 67% of runtime redundant; amortised for **2.08× at r=1000**, Step 1 deliberately left per-bundle. The 30 → 10 repetition change was completed across 18 stale claims in 13 files (worst: `global.yaml`'s own comment on the `repetitions: 10` line reading "§V still says 30") and is now pinned by `test_repetition_count_agreement.py`. Audit of all eight experiments against `tab:cost`: Exp. 4, 5, 6 match; Exp. 7–8 have no table row; Exp. 1's `O(1)`/`O(q)` baseline claims and Exp. 3's assumed linearity do not hold. *(Superseded 2026-09-04: re-derived from the data, those last two DO hold — see §17.7 and `test_cost_table_agreement.py`.)* **[results-affecting: ma_lb_pq_vdse Exp. 2 and Exp. 4 both need rerunning — see §17]** |
 | 2026-09-03 | **Exp. 6 unblocked and given the ablation its claim needs.** The ledger gate blocked Exp. 6 on the Fabric adapter, justified (`451df65`) by "Exp. 6 times IAS through to blockchain anchoring". It does not: `sync/ias.py::synchronize` takes `ledger` as **optional** and anchors only inside `if ledger is not None`, and the Exp. 6 runner has never passed one — so Phase VII Step 7 was never on its timed path. That justification cited a protocol step rather than a measurement boundary; §5 ends Exp. 6 at "until all affected FSNs report the new `VID`" and `tab:cost`'s sync row has no chain term. **Exp. 6 is reportable without the Fabric adapter**; Exp. 4 still is not, because §5 puts "chain consistency" inside its boundary explicitly. Separately, `fsns_touched` was a constant 1.000 at every δ in every campaign to date — `assign_domains_to_fsns` gives each domain to one node and an `IASMessage` carries one domain, so selective delivery touches one node for any `d` and `m`. Reported alone it evidenced nothing, leaving §5's "selective propagation is the claim" unmeasured. Added the `ias` / `broadcast` / `full_rebuild` ablation (`synchronize` now takes an injected `select_nodes`, the way `verify_bundle` takes its Step 3 check) so each half of the claim has a contrast. Exp. 6's variant vocabulary is now separate from Exp. 7–8's and scheduler names are refused there. **Not yet run or tested — pytest is not installed on the dev host; the 17 tests in `test_exp6_propagation_ablation.py` have never executed.** **[results-affecting: Exp. 6 needs rerunning across three variants]** |
 
 ---
@@ -756,24 +756,43 @@ heavy-tailed distribution make the *mean* less stable, not more.
 
 Reported as file + line; not edited by the assistant.
 
-| Where | Says | Measurement |
-|-------|------|-------------|
-| `tab:cost`, [35] trapdoor | `O(1)T_PRF` | rises 61% across q=1..20 (R² 0.879) |
-| `tab:cost`, [30] trapdoor | `O(q)T_CPRF` | step function, jumps at q=5→6 and 13→14; linear fit needs an impossible −3.99 ms intercept |
-| `tab:cost`, Search row (our Exp. 3) | implies linear in `d` | sublinear, 0.076 → 0.154 ms across d=2→10 (R² 0.983) |
-| `tab:cost`, [54] verification | full formula | never measured — see 17.6 |
+**These verdicts are no longer maintained by hand.** `tab:cost` is now checked
+against `results.csv` by
+`Schemes/ma_lb_pq_vdse/src/tests/test_cost_table_agreement.py`, which re-derives
+every one of them each run. Read the test, not this table — a prose verdict
+about a number is stale the moment the number is re-measured, and three of the
+four rows that stood here were false by 2026-09-04:
+
+| Row | Said | Actually measures (2026-09-04) |
+|-----|------|--------------------------------|
+| [35] trapdoor `O(1)T_PRF` | rises 61%, ❌ | rises 53% to q=10 then **flat** — a fixed cost, not growth in `q`. **Holds** |
+| [30] trapdoor `O(q)T_CPRF` | step function, impossible −3.99 ms intercept, ❌ | linear, **R² 0.99913, intercept +0.0008 ms**. **Holds** — and a −3.99 ms intercept is 50× the largest value in the series, so it cannot have come from this data |
+| Search row (Exp. 3) | "implies linear in `d`", sublinear, ❌ | the row is `O(dT_H)+O(n_eff)(T_F+T_H)` — a `d`-linear term **plus a `d`-independent one**. Flattening growth is what two terms predict. **Holds** (R² 0.972, intercept +0.064) |
+| [54] verification | never measured | measured since `6652245`; **R² 1.00000**, exponent 1.001. **Holds** |
+
+One row is genuinely untestable rather than wrong: **[54] trapdoor
+`O(|T|)T_PRF+T_Sig`** carries 32–56% confidence intervals, because ML-DSA-65
+signs by rejection sampling and its iteration count varies per call. No shape
+claim can be confirmed or refuted from that curve, so the test records it as
+`NOT_DISCRIMINABLE` and fails if the measurement is ever tightened enough to
+classify. §V must not cite a shape from it.
 
 ### 17.8 Audit result, Exp. 1 → 8
 
+Superseded 2026-09-04 by `test_cost_table_agreement.py`, which asserts all 11
+measurable cells every run. State below is the last hand-written snapshot; where
+it disagrees with the test, the test is right.
+
 | Exp | Cost table holds? | Data quality |
 |-----|-------------------|--------------|
-| 1 Trapdoor | ours ✅ · [35] ❌ · [30] ❌ | clean (guo 1/20 minor, yue_ge 0/20, thingom 0/20) |
-| 2 Search | ❌ | **defect fixed; rerun in flight** |
-| 3 Cross-domain | ❌ sublinear | thingom 0/9 clean; guo still running |
-| 4 Verify | ⚠️ phantom `T_Ver` | clean; `reportable: false` |
+| 1 Trapdoor | ours ✅ · [35] ✅ · [30] ✅ · [54] not discriminable | clean |
+| 2 Search | ❌ | **defect fixed; rerun done** |
+| 3 Cross-domain | ✅ two-term fit, R² 0.972 | clean |
+| 4 Verify | ✅ all four arms, R² ≥ 0.999 | clean; ours `reportable: false` |
 | 5 Update | ✅ all three | clean |
-| 6 Sync | ✅ | clean; `reportable: false` |
+| 6 Sync | ✅ R² 1.00000 | clean |
 | 7 / 8 | **no table row exists** | clean |
+| 9 | measures a count, not a cost | clean |
 
 **Exp. 5 is the strongest unqualified result in the campaign and nothing in the
 paper leans on it.** Same complexity class as both baselines, our constant
