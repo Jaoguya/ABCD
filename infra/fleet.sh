@@ -68,11 +68,25 @@ cmd_deploy() {
       git remote set-url origin git@github.com:Jaoguya/ABCD 2>/dev/null
       # reset --hard alone resets whatever branch happens to be checked out; it
       # never switches. Nodes were therefore sitting on a local branch named
-      # `final-debug` TRACKING origin/final-debug while their HEAD held
+      # \`final-debug\` TRACKING origin/final-debug while their HEAD held
       # exp78-diagnosis's commit -- correct code under a misleading label, and a
-      # `git pull` on a node would have silently pulled the other branch and
+      # \`git pull\` on a node would have silently pulled the other branch and
       # reverted it. checkout -B fixes the name and the upstream together.
-      git fetch -q origin && git reset -q --hard origin/$BRANCH \
+      #
+      # The backslashes above are load-bearing. This whole block is a
+      # DOUBLE-QUOTED local string, so an unescaped backtick runs its contents
+      # on the LAPTOP before ssh is even invoked: deploy printed
+      # \"final-debug: command not found\" on every call.
+      #
+      # fetch is not -q and its failure is fatal. It was both quiet and joined
+      # by && to the reset, so a fetch that failed -- an ssh agent with no
+      # identity is enough, and that is the default state of a fresh shell --
+      # skipped the reset silently and fell through to the echo below, which
+      # reported the node's UNCHANGED commit as if it were the deployed one.
+      # A deploy that leaves the node on old code and says so in a hash nobody
+      # diffs is how a campaign runs stale.
+      git fetch origin || { echo \"  FETCH FAILED on \$(hostname) -- node NOT deployed\"; exit 1; }
+      git reset -q --hard origin/$BRANCH \
         && git checkout -q -B $BRANCH origin/$BRANCH
       # Restore any result that the reset just clobbered, but ONLY real ones.
       python3 - <<'PY' \$BK
@@ -80,7 +94,7 @@ import json,shutil,sys
 from pathlib import Path
 # ONLY these three. runner.py and __init__.py live in the SAME directory as the
 # results, so copying the whole directory back -- which this did -- reverted
-# scheme SOURCE over the tree `git reset --hard` had just made correct. Measured
+# scheme SOURCE over the tree \`git reset --hard\` had just made correct. Measured
 # on the fleet: four runner.py files came back as blob b18fabc (commit ddc324e),
 # not HEAD's 23edee5, silently dropping sweep.select/--points support. Every run
 # after such a deploy executed stale code for any scheme that had results here.
@@ -103,7 +117,7 @@ for meta in bk.glob('*/*/run_meta.json'):
         print(f'  WARNING unreadable run_meta, restoring anyway: '
               f'{meta.parent} ({type(exc).__name__})')
     if readable:
-        # thingom nests corpus_type under `dataset`; everyone else is top-level.
+        # thingom nests corpus_type under \`dataset\`; everyone else is top-level.
         ds=m.get('dataset') or {}
         ct=m.get('corpus_type') or (ds.get('corpus_type') if isinstance(ds,dict) else None)
         if ct is not None and ct!='synthea':
