@@ -247,5 +247,129 @@ __all__ = [
     "lookup_anchor",
     "verify_blockchain_consistency",
     "chain_checker",
+    "batched_chain_checker",
+    "lookup_anchors",
     "anchor_history",
 ]
+
+
+# ===========================================================================
+# Batched Step 3 — one namespace pass for a whole response
+# ===========================================================================
+def lookup_anchors(
+    ledger: Ledger, cids: Sequence[str]
+) -> Tuple[dict, Tuple[str, ...]]:
+    """Every named CID's latest ``BC_i``, resolved in ONE namespace pass.
+
+    WHY THIS EXISTS. :func:`lookup_anchor` calls ``ledger.keys(prefix=...)``,
+    which walks and sorts the whole namespace, so verifying ``r`` records walked
+    it ``r`` times -- O(r^2), and measured at 99.6% of the chain step's cost
+    against 0.4% for the three comparisons that step actually makes. The
+    comparisons are per record BY CONSTRUCTION (``BC_i`` carries subscript i, and
+    per-record anchoring is what lets a rejected record be NAMED); the retrieval
+    never had to be.
+
+    WHAT IS AND IS NOT UNCHANGED. Every returned record is still checked against
+    its OWN anchor, at the latest anchored version, exactly as
+    :func:`lookup_anchor` resolves it. Nothing is skipped, sampled or shared
+    between records. Only the number of namespace walks changes, from ``r`` to
+    one. That is why this needs no change to Phase VIII and no change to the
+    security argument.
+
+    Returns ``(anchors, missing)``: a ``cid -> AnchorLookup`` map, and the CIDs
+    with no anchor at all. Missing CIDs are RETURNED rather than raised on,
+    because an unanchored record is a verification FAILURE for that record --
+    not an error that should abandon the other ``r-1``.
+    """
+    latest: dict = {}
+    wanted = set(cids)
+    for key in ledger.keys(NS_VERSION_IDENTIFIERS):
+        cid, _, raw_vid = key.partition("#")
+        if cid not in wanted:
+            continue
+        try:
+            vid = int(raw_vid)
+        except ValueError:
+            continue
+        if vid > latest.get(cid, (-1, ""))[0]:
+            latest[cid] = (vid, key)
+
+    anchors: dict = {}
+    for cid, (vid, key) in latest.items():
+        entry = ledger.get(NS_VERSION_IDENTIFIERS, key)
+        anchor = entry.record
+        if not isinstance(anchor, BlockchainAnchor):
+            raise ChainVerificationError(
+                f"the record anchored at {key!r} is not a BlockchainAnchor"
+            )
+        anchors[cid] = AnchorLookup(
+            anchor=anchor, key=key, versions_available=(vid,)
+        )
+    return anchors, tuple(sorted(wanted - set(anchors)))
+
+
+def batched_chain_checker(
+    ledger: Ledger,
+    cids: Sequence[str],
+    *,
+    check_chain_integrity: bool = True,
+) -> Callable[[VerificationBundle], StepResult]:
+    """Step 3 for a whole response, with the anchors fetched once.
+
+    Drop-in for :func:`chain_checker` in ``proof.verify_response``. The fetch is
+    LAZY -- it happens on the first bundle checked, inside whatever region the
+    caller is timing, so a harness cannot make the cost disappear by resolving
+    anchors during an untimed ``prepare``. Its full cost is therefore charged to
+    the first record, which is correct: a client pays it once per response.
+    """
+    resolved: dict = {}
+    missing: set = set()
+    done = False
+
+    def check(bundle: VerificationBundle) -> StepResult:
+        nonlocal done
+        started = time.perf_counter_ns()
+        if not done:
+            anchors, absent = lookup_anchors(ledger, cids)
+            resolved.update(anchors)
+            missing.update(absent)
+            done = True
+
+        lookup = resolved.get(bundle.cid)
+        if lookup is None:
+            return StepResult(
+                name="chain",
+                passed=False,
+                elapsed_ns=time.perf_counter_ns() - started,
+                detail=(
+                    f"no BC_i anchored for CID {bundle.cid!r}. Phase VII Step 7 "
+                    f"anchors updates; the initial anchor is Phase V Step 3."
+                ),
+            )
+
+        anchor = lookup.anchor
+        root_ok = hashes.constant_time_equal(anchor.root, bundle.root)
+        commit_ok = hashes.constant_time_equal(anchor.commit, bundle.commit)
+        cid_ok = anchor.cid == bundle.cid
+        chain_ok = ledger.verify_chain() if check_chain_integrity else True
+        elapsed = time.perf_counter_ns() - started
+
+        if not cid_ok:
+            detail = f"anchor names CID {anchor.cid!r}, bundle names {bundle.cid!r}"
+        elif not root_ok:
+            detail = "Root_i does not match the anchored root"
+        elif not commit_ok:
+            detail = "Commit_i does not match the anchored commitment"
+        elif not chain_ok:
+            detail = "the ledger's hash chain does not verify"
+        else:
+            detail = ""
+
+        return StepResult(
+            name="chain",
+            passed=cid_ok and root_ok and commit_ok and chain_ok,
+            elapsed_ns=elapsed,
+            detail=detail,
+        )
+
+    return check

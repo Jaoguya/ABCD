@@ -948,7 +948,19 @@ class Exp4Verification:
 
     def measure(self, prepared: Any) -> Sample:
         d = prepared["deployment"]
-        checker = vledger_mod.chain_checker(d.ledger, check_chain_integrity=False)
+        # ONE namespace walk for the whole response, not one per record.
+        # `lookup_anchor` sorts the entire version-identifier namespace on every
+        # call, so the per-record checker made Step 3 O(r^2) and, measured, 99.6%
+        # of the chain step against 0.4% for the three comparisons it exists to
+        # make. Those comparisons are still per record -- BC_i carries subscript
+        # i, and per-record anchoring is what lets a rejected record be named --
+        # so nothing about what is verified changes. The fetch is lazy, so its
+        # cost lands inside the timed region below rather than in `prepare`.
+        checker = vledger_mod.batched_chain_checker(
+            d.ledger,
+            [b.cid for b in prepared["bundles"]],
+            check_chain_integrity=False,
+        )
         # Collector paused across the timed region -- see Common/timing.py. This
         # measurement is byte-identical every run (the bundles are an immutable
         # fixture built in prepare), so a gen-2 pause landing in one of the ten
