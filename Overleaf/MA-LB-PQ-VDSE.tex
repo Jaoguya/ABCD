@@ -1903,7 +1903,7 @@ N/A
 
 \textbf{Proposed}
 &
-$O(q)T_P$
+$O(q)T_H$
 &
 \makecell{
 $O(dT_H)$\\
@@ -1915,14 +1915,16 @@ $O(k)T_H$\\
 $+O(\log n)T_{\rm MT}$
 }
 &
-$O(r)T_{\rm MT}$
+\makecell{
+$O(r)T_{\rm MT}$\\
+$+O(r)T_H$
+}
 &
 \makecell{
 $O(\delta)T_H$\\
 $+O(\log d)T_{\rm MT}$
 }
 \\
-
 \hline
 \end{tabular}
 \end{table*}
@@ -1946,17 +1948,19 @@ supports cross-domain authorization synchronization.
 
 The proposed framework separates cross-domain authorization from
 candidate-level encrypted search. Trapdoor generation costs
-$O(q)T_P$, while authorization resolution requires only $O(dT_H)$
+$O(q)T_H$, while authorization resolution requires only $O(dT_H)$
 before search is restricted to $n_{\mathrm{eff}}$ authorized
 candidates. Keyword updates and verification cost
 $O(k)T_H+O(\log n)T_{\mathrm{MT}}$ and
-$O(r)T_{\mathrm{MT}}$, respectively.
+$O(r)T_{\mathrm{MT}}+O(r)T_{H}$, respectively.
 Furthermore, authorization synchronization requires only
-$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Thus, despite retaining
-pairing cost for trapdoor generation, the proposed framework shifts
-the dominant online workload toward authorization pruning, hashing,
-filtering, and logarithmic Merkle-tree operations, providing an
-efficient trade-off for dynamic cross-domain retrieval.
+$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Trapdoor generation is
+therefore free of bilinear pairings: a search token is $q$ keyed
+token derivations and a nonce, with no per-domain component, which is
+why one trapdoor serves all $d$ participating domains. The proposed
+framework thus keeps the dominant online workload on authorization
+pruning, hashing, filtering, and logarithmic Merkle-tree operations,
+providing an efficient trade-off for dynamic cross-domain retrieval.
 \subsection{Performance Evaluation}
 
 \subsubsection{Experimental Setup}
@@ -1999,31 +2003,44 @@ balancing under increasing workloads.
 \subsubsection*{\textbf{Experiment 1: Trapdoor Generation Latency}}
 \label{exp:trapdoor}
 
-This experiment evaluates the trapdoor generation latency as the
-number of queried keywords increases from 1 to 20. The proposed
-framework is compared with Guo \textit{et al}.~\cite{ref35},
+This experiment evaluates the online trapdoor-generation latency as
+the number of queried keywords $q$ increases from 1 to 20. The
+proposed framework is compared with Guo \textit{et al}.~\cite{ref35},
 XB-Muse~\cite{ref36}, Thingom \textit{et al}.~\cite{ref41}, and
-Zhuang \textit{et al}.~\cite{ref52}. Since ML-KEM is executed only
-during session establishment, only online trapdoor generation is
-measured.
+Zhuang \textit{et al}.~\cite{ref52}. To isolate the cost incurred
+during query generation, post-quantum key establishment is excluded
+from the measurement because ML-KEM is executed during secure
+credential/session establishment rather than for every search query.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig2.pdf}
-    \caption{Trapdoor generation latency versus queried keywords.}
+    \includegraphics[width=\columnwidth]{images/fig_exp1_trapdoor.png}
+    \caption{Trapdoor-generation latency versus number of queried keywords.}
     \label{fig:exp1}
 \end{figure}
 
-Fig.~\ref{fig:exp1} compares the trapdoor generation latency under
-increasing query complexity. Although the proposed framework incurs
-slightly higher latency than classical dynamic searchable encryption
-schemes because of authorization-aware trapdoor construction, it
-remains substantially more efficient than pairing-based and
-lattice-based approaches while providing quantum-resistant secure
-communication and multi-domain authorization.
+Fig.~\ref{fig:exp1} shows that trapdoor-generation latency increases
+with the number of queried keywords for all evaluated schemes. In the
+proposed framework, each queried keyword $w_i$ is encoded as
+$H(w_i\parallel VID_U)$ and incorporated into the search token together
+with the precomputed authorization root $AuthRoot_U$, the current
+authorization version $VID_U$, and a fresh nonce. Consequently, the
+dominant online trapdoor-generation cost grows linearly with the query
+size, i.e., $O(q)T_H$, which is consistent with the protocol in
+Phase~VI.
 
-
-
+The proposed framework therefore avoids performing multi-authority
+authorization evaluation or post-quantum key establishment during
+trapdoor generation. Such authorization validation is subsequently
+performed by the Authorization Index Manager before encrypted search
+execution. As a result, the proposed scheme maintains low and
+predictable query-generation overhead as $q$ increases, while still
+binding each search request to the user's current authorization
+version. Compared with schemes whose trapdoor construction involves
+attribute-dependent group operations or lattice-based computations,
+the proposed hash-based generation provides a lightweight online
+search-request preparation procedure suitable for frequent IoMT
+queries.
 
 \subsubsection*{\textbf{Experiment 2: Search Latency}}
 \label{exp:search}
@@ -2033,120 +2050,171 @@ index size increases from $10^4$ to $10^6$ encrypted records. The
 proposed framework is compared with Scheme~\cite{ref30},
 Scheme~\cite{ref35}, Scheme~\cite{ref41}, and
 Scheme~\cite{ref54}. The number of queried keywords and participating
-domains is fixed, while the query selectivity is kept constant so that
-the number of matching records increases proportionally with the index
-size. For Scheme~\cite{ref30}, this is consistent with its
-output-sensitive search complexity $O(n_w^l)$, where $n_w^l$ denotes
-the number of matching records accessible at authorization level $l$.
-:contentReference[oaicite:0]{index=0}
+domains is fixed, while query selectivity is kept constant so that the
+number of matching records increases proportionally with the searchable
+index size. This setting evaluates the scalability of online encrypted
+search while preserving a comparable matching ratio across all index
+sizes. For Scheme~\cite{ref30}, the resulting trend is consistent with
+its output-sensitive search complexity $O(n_w^l)$, where $n_w^l$
+denotes the number of matching records accessible at authorization
+level $l$.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig3.pdf}
+    \includegraphics[width=\columnwidth]{images/fig_exp2_search.png}
     \caption{Encrypted-search latency versus searchable-index size.}
     \label{fig:exp2}
 \end{figure}
 
-Fig.~\ref{fig:exp2} shows that the proposed framework maintains the
-lowest growth in online search latency as the index size increases.
-This improvement results from authorization-aware filtering, which
-first restricts the search to the authorized candidate set
-$n_{\mathrm{eff}}$ before encrypted matching is performed. In contrast,
-Scheme~\cite{ref30} scales with the number of matching accessible
-records, Scheme~\cite{ref54} incurs encrypted-index lookup and bitmap
-filtering costs, and Schemes~\cite{ref35} and~\cite{ref41} involve
-additional pairing-, exponentiation-, or access-structure-dependent
-processing. Consequently, the proposed framework reduces unnecessary
-index traversal and provides better scalability for large searchable
-EHR collections.
+Fig.~\ref{fig:exp2} shows that search latency increases with the
+searchable-index size for all evaluated schemes, while the proposed
+framework exhibits the lowest latency growth. This behavior is
+consistent with its analytical search cost
+$O(dT_H)+O(n_{\mathrm{eff}})(T_F+T_H)$. Before encrypted matching, the
+Authorization Index Manager validates the current authorization state
+and identifies only the searchable-index shards permitted by the
+user's Version-Bound Authorization Profile. The selected Fog Search
+Node therefore processes the authorization-filtered candidate set
+$n_{\mathrm{eff}}$ rather than traversing the complete searchable
+repository.
 
+With the number of participating domains fixed, the authorization
+resolution term $O(dT_H)$ remains nearly constant across the tested
+index sizes, while the dominant search cost grows with
+$n_{\mathrm{eff}}$. Although $n_{\mathrm{eff}}$ also increases under
+constant query selectivity, authorization-aware pruning reduces the
+effective candidate space and prevents search operations over
+unauthorized domains and unrelated index shards. In comparison,
+Scheme~\cite{ref30} scales with the number of accessible matching
+records, Scheme~\cite{ref54} incurs encrypted-index lookup together
+with filter-based candidate processing, and Schemes~\cite{ref35}
+and~\cite{ref41} incur additional query-dependent cryptographic
+processing. These results demonstrate that authorization-aware
+candidate pruning and selective shard search improve the scalability
+of encrypted retrieval over large EHR collections.
 
 \subsubsection*{\textbf{Experiment 3: Cross-Domain Search Scalability}}
 \label{exp:crossdomain}
 
-This experiment evaluates encrypted-search latency as the number of
-participating healthcare domains increases from 2 to 10. The proposed
-framework is compared with Scheme~\cite{ref30},
+This experiment evaluates cross-domain encrypted-search latency as the
+number of participating healthcare domains $d$ increases from 2 to 10.
+The proposed framework is compared with Scheme~\cite{ref30},
 Scheme~\cite{ref35}, Scheme~\cite{ref41}, and
 Scheme~\cite{ref54}. Since these baselines do not natively provide the
-same cross-domain search orchestration, each baseline is evaluated by
-executing an independent domain-local search over every participating
-domain and aggregating the returned results. The query size and
-per-domain searchable-index size are kept fixed so that the experiment
-isolates the effect of increasing the number of domains.
+same authorization-aware cross-domain search orchestration, they are
+evaluated by independently executing their domain-local search over
+each participating domain and aggregating the returned results. The
+query size and per-domain searchable-index size are kept fixed to
+isolate the overhead introduced by increasing the number of
+participating domains.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig4.pdf}
+    \includegraphics[width=\columnwidth]{images/fig_exp3_crossdomain.png}
     \caption{Cross-domain search latency versus number of participating domains.}
     \label{fig:exp3}
 \end{figure}
 
-Fig.~\ref{fig:exp3} shows that the proposed framework exhibits lower
-latency growth as the number of domains increases. Before encrypted
-matching, the Authorization Index Manager resolves the user's valid
-authorization state and restricts the request to authorized
-searchable-index shards. Hence, the domain-dependent overhead is mainly
-$O(dT_H)$, after which search is performed only over
-$n_{\mathrm{eff}}$ authorized candidates. In contrast, the baseline
-schemes require separate search execution for each participating domain
-under the cross-domain emulation, causing their aggregate latency to
-increase with the number of domains. The result therefore demonstrates
-the benefit of authorization-aware domain pruning and selective
-encrypted search for scalable cross-domain retrieval.
+Fig.~\ref{fig:exp3} shows that search latency increases with the number
+of participating domains for all evaluated schemes, while the proposed
+framework exhibits lower latency growth. This trend is consistent with
+its analytical search cost
+$O(dT_H)+O(n_{\mathrm{eff}})(T_F+T_H)$. Before encrypted search, the
+Authorization Index Manager validates the user's current authorization
+state and resolves the administrative domains and searchable-index
+shards permitted by the Version-Bound Authorization Profile. The
+resulting request is therefore restricted to authorization-valid shards
+before encrypted matching is executed.
 
+As $d$ increases, the authorization-resolution overhead grows with the
+number of participating domains, represented by $O(dT_H)$. However,
+encrypted matching is subsequently performed only over the effective
+authorized candidate set $n_{\mathrm{eff}}$, rather than indiscriminately
+searching all domain-local indexes. In contrast, under the cross-domain
+emulation, the baseline schemes independently execute their search
+procedure for each participating domain, causing their aggregate
+search cost to accumulate as additional domains are introduced.
+Consequently, the results demonstrate that authorization-aware domain
+resolution and selective shard search reduce unnecessary cross-domain
+index processing and provide better scalability for multi-domain
+encrypted EHR retrieval.
 
 \subsubsection*{\textbf{Experiment 4: Verification Overhead}}
 \label{exp:verify}
 
 This experiment evaluates retrieval-verification latency as the
-number of returned encrypted records increases from 10 to 1000.
+number of returned encrypted records $r$ increases from 10 to 1000.
 The proposed framework is compared with Scheme~\cite{ref30},
-Scheme~\cite{ref35}, and Scheme~\cite{ref54}, which provide
-explicit result-verification mechanisms. Scheme~\cite{ref41} is
-excluded from this experiment because it does not provide a
-corresponding verifiable-retrieval operation. The searchable-index
-size and number of participating domains are kept fixed so that the
-experiment isolates the effect of increasing the number of returned
-results.
+Scheme~\cite{ref35}, and Scheme~\cite{ref54}, which provide explicit
+result-verification mechanisms. Scheme~\cite{ref41} is excluded because
+it does not provide a corresponding verifiable-retrieval operation.
+The searchable-index size and number of participating domains are kept
+fixed to isolate the verification overhead associated with increasing
+the number of returned results.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig5.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp4_verify.png}
     \caption{Verification latency versus number of returned search results.}
     \label{fig:exp4}
 \end{figure}
 
 Fig.~\ref{fig:exp4} shows that verification latency increases with
-the number of returned results for all evaluated schemes.
-Scheme~\cite{ref35} performs hash-based verification with cost
-$O(x)T_H$, while Scheme~\cite{ref30} performs public verification
-through multilevel digests and a smart contract, with complexity
-$O(n_w^l)$. Scheme~\cite{ref54} is not plotted: its
-$O(x\log N)T_H+O(x)(T_{\rm Ver}+T_{\rm MAC})$ verification cost, which
-combines signature and MAC verification with Merkle authentication, is
-stated analytically for completeness and was not measured.
-The proposed framework verifies returned records using authenticated
-Merkle evidence, recomputing one authentication path and one policy
-commitment per returned record, with cost $O(r)T_{\rm MT}$. Consequently,
-its verification
-overhead grows primarily with the number of returned records while
-retaining efficient authenticated verification under a fixed
-searchable-index size.
+the number of returned results for all evaluated schemes. The proposed
+framework does not achieve the lowest verification latency because its
+verification procedure provides stronger per-result validation rather
+than checking only a single integrity condition. Specifically, for
+each returned ciphertext, the Data User verifies its Merkle
+authentication path, recomputes and validates the policy commitment,
+checks that the authorization version matches the current
+Version-Bound Authorization Profile (VAP), and confirms consistency
+of the corresponding $(CID_i,Commit_i,Root_i,VID_i)$ tuple with the
+immutable blockchain metadata. Therefore, a tampered, stale, or
+authorization-inconsistent ciphertext can be detected and rejected
+individually without invalidating otherwise valid returned results.
+
+This additional verification granularity explains the higher latency
+relative to lighter verification mechanisms. Scheme~\cite{ref35}
+employs symmetric verification with cost $O(x)T_{\rm MAC}$, whereas
+Scheme~\cite{ref30} performs public verification through multilevel
+digests and smart-contract processing with complexity $O(n_w^l)$.
+Scheme~\cite{ref54} provides stronger cryptographic verification using
+Merkle authentication together with signature and MAC verification,
+resulting in
+$O(x\log N)T_H+O(x)(T_{\rm Ver}+T_{\rm MAC})$.
+In contrast, the proposed framework associates authenticated Merkle
+evidence and authorization-bound commitments with each returned
+ciphertext. Its dominant verification cost therefore grows with the
+number of returned results, while providing per-result integrity,
+policy-consistency, authorization-freshness, and blockchain-consistency
+checking.
+
+Hence, Fig.~\ref{fig:exp4} illustrates a deliberate
+security--performance trade-off: although the proposed framework is
+not the fastest verifier, the additional latency enables each returned
+ciphertext to be independently validated against both its authenticated
+searchable-index state and the latest authorization state. This
+fine-grained verification is particularly important in cross-domain
+IoMT retrieval, where an individually tampered or stale result should
+be identified and rejected without accepting an authorization-
+inconsistent response.
 \subsubsection*{\textbf{Experiment 5: Dynamic Keyword Update}}
 \label{exp:update}
 
-This experiment evaluates dynamic update latency as the number of
-updated keyword--record pairs increases from $10^2$ to $10^5$.
-The proposed framework is compared with Scheme~\cite{ref30}
-(Peony++) and Scheme~\cite{ref35}, since these baselines explicitly
-support dynamic searchable-index updates. Schemes~\cite{ref41} and
-\cite{ref54} are excluded because they do not provide a corresponding
-keyword-update operation in the computation-cost comparison.
+This experiment evaluates dynamic searchable-index update latency as
+the number of modified keyword--record pairs increases from $10^2$ to
+$10^5$. The proposed framework is compared with Scheme~\cite{ref30}
+(Peony++) and Scheme~\cite{ref35}, since both explicitly support
+dynamic searchable-index updates. Schemes~\cite{ref41} and
+\cite{ref54} are excluded because a corresponding keyword-update
+operation is not defined in the computation-cost comparison. The
+searchable-index size is kept fixed so that the experiment primarily
+captures the processing overhead caused by an increasing number of
+modified keyword--record pairs.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig6.pdf}
+    \includegraphics[width=\columnwidth]{images/fig5.png}
     \caption{Dynamic update latency versus number of updated
     keyword--record pairs.}
     \label{fig:exp5}
@@ -2154,40 +2222,88 @@ keyword-update operation in the computation-cost comparison.
 
 Fig.~\ref{fig:exp5} shows that update latency increases with the
 number of modified keyword--record pairs for all evaluated schemes.
-Scheme~\cite{ref30} exhibits approximately linear update behavior,
-consistent with its $O(k)$ update complexity, while
-Scheme~\cite{ref35} incurs hash-dependent processing for
-dynamic updates. The proposed framework performs localized token
-recomputation for the affected keywords together with incremental
-Merkle-tree maintenance, yielding
-$O(k)T_H+O(\log n)T_{\rm MT}$ cost without reconstructing the complete
-searchable index. Consequently, it maintains scalable authenticated
-updates as the update batch size increases.
+Scheme~\cite{ref30} exhibits approximately linear growth, consistent
+with its $O(k)$ update complexity. Scheme~\cite{ref35} additionally
+performs per-keyword hash/PRF processing and puncturable-PRF
+operations, resulting in
+$O(t)(T_H+T_{\rm PRF})+T_{\rm Punc}$ update cost.
 
-\subsubsection*{\textbf{Experiment 6: Authorization Synchronization}}
+The proposed framework follows a localized authenticated-update
+procedure with cost
+$O(k)T_H+O(\log n)T_{\rm MT}$. For the $k$ affected keywords, only
+the corresponding policy-bound keyword tokens and searchable-index
+entries are updated, producing the linear $O(k)T_H$ component.
+Rather than reconstructing the complete authenticated index, the
+framework then updates only the Merkle authentication paths affected
+by the modified entries. This introduces a logarithmic
+$O(\log n)T_{\rm MT}$ integrity-maintenance component with respect to
+the searchable-index size $n$.
+
+Accordingly, the dominant latency growth under an increasing update
+batch is determined by processing the modified keyword--record pairs,
+whereas authenticated-index maintenance remains localized to the
+affected Merkle paths. This design preserves the integrity commitment
+of the updated searchable index without requiring global index
+reconstruction. The benefit becomes increasingly important for large
+IoMT repositories, where rebuilding the complete authenticated index
+after each keyword or policy modification would introduce substantial
+update overhead. Hence, the results demonstrate that the proposed
+framework supports scalable dynamic updates while retaining
+authenticated and policy-bound searchable-index state.
+\subsubsection*{\textbf{Experiment 6: IAS Synchronization Ablation}}
+\label{exp:ias}
+
+This experiment evaluates the effectiveness of Incremental
+Authorization Synchronization (IAS) as the number of authorization
+updates increases. Three synchronization strategies are evaluated:
+(i) full-state synchronization, which reconstructs and propagates the
+affected authorization/index state; (ii) incremental synchronization
+without selective propagation, which updates only modified state but
+propagates the update to all Fog Search Nodes (FSNs); and
+(iii) the proposed IAS mechanism, which combines incremental state
+maintenance with selective propagation only to FSNs maintaining the
+affected searchable-index shards. This ablation isolates the benefits
+of the two principal IAS design components.
+
 \begin{figure}[!t]
     \centering
     \includegraphics[width=\columnwidth]
     {images/fig7_authorization_sync_ablation.pdf}
-    \caption{Authorization-synchronization latency under increasing
-    authorization updates.}
+    \caption{IAS ablation under increasing authorization updates.}
     \label{fig:exp6}
 \end{figure}
 
-Fig.~\ref{fig:exp6} shows that the proposed IAS mechanism achieves the
-lowest synchronization overhead as the number of authorization updates
-increases. Full-state synchronization exhibits the highest latency
-because each change requires substantially more state reconstruction
-and propagation. Removing selective synchronization reduces local
-reconstruction overhead but still incurs unnecessary communication and
-state processing at unaffected Fog Search Nodes. In contrast, the
-proposed IAS updates only the affected authorization commitments,
-searchable-index entries, and Merkle paths, and forwards the resulting
-delta only to relevant Fog Search Nodes. This behavior is consistent
-with the analytical synchronization cost
-$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$ and demonstrates that both
-incremental state maintenance and selective propagation contribute to
-the scalability of authorization synchronization.
+Fig.~\ref{fig:exp6} shows that synchronization latency increases with
+the number of authorization updates for all three configurations, but
+the proposed IAS mechanism exhibits the lowest growth. Full-state
+synchronization incurs the highest latency because each update requires
+substantially more state reconstruction and propagation. Introducing
+incremental state maintenance reduces this overhead by processing only
+the modified authorization commitments, searchable-index entries, and
+affected Merkle paths. However, without selective propagation, the
+resulting updates are still transmitted to and processed by FSNs whose
+local shards are unaffected.
+
+The complete IAS mechanism further reduces synchronization latency by
+forwarding each delta only to FSNs maintaining the affected
+searchable-index shards. Thus, its performance gain results from two
+complementary mechanisms: incremental maintenance reduces the amount
+of state recomputed for each authorization change, while selective
+propagation reduces unnecessary communication and state processing
+across unaffected FSNs. This behavior is consistent with the
+analytical synchronization cost
+$O(\delta)T_H+O(\log d)T_{\rm MT}$, where $\delta$ represents the
+modified authorization state and the authenticated synchronization
+structure is updated without reconstructing the complete distributed
+index state.
+
+The increasing performance gap between full-state synchronization and
+IAS as the update workload grows demonstrates that the benefit is not
+limited to a constant implementation overhead. Rather, IAS reduces the
+amount of authorization and authenticated-index state processed and
+propagated for each update, making dynamic authorization changes more
+scalable in distributed cross-domain IoMT environments.
+
 
 \subsubsection*{\textbf{Experiment 7: Search Throughput under Increasing Workload}}
 \label{exp:throughput}
@@ -2208,7 +2324,7 @@ number of FSNs and per-query workload are kept fixed.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig8.pdf}
+    \includegraphics[width=\columnwidth]{images/fig_exp7_throughput.png}
     \caption{Search throughput under increasing concurrent workloads.}
     \label{fig:exp7}
 \end{figure}
@@ -2251,7 +2367,7 @@ shard and the request must be redirected to another eligible FSN.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig9.pdf}
+    \includegraphics[width=\columnwidth]{images/fig_exp8_balance.png}
     \caption{Load-balancing effectiveness under increasing concurrent
     workloads: (a) utilization standard deviation, (b) maximum node
     utilization, and (c) cross-node forwards.}

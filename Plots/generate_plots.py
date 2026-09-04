@@ -102,9 +102,32 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     ExperimentSpec(5, "exp5_keyword_update", "fig_exp5_update.pdf",
                    "Updated (keyword, document) pairs $k$", "Update latency (ms)",
                    log_x=True, log_y=True),
+    # TWO PANELS, because Exp. 6's ablation makes two DIFFERENT claims and
+    # only one of them is visible in latency.
+    #
+    # `full_rebuild` is 1.40-1.44x `ias` at every delta, so panel (a) carries
+    # the INCREMENTAL half. `broadcast` is NOT distinguishable from `ias` in
+    # latency -- the campaign measured +2%, a local rerun measured -4.5%, i.e.
+    # noise in both directions -- because every FSN is an object in ONE
+    # interpreter, so delivering to four of them costs essentially nothing and
+    # the per-update cost is all sender-side (authorization evolution, index
+    # evolution, Merkle path update, message build). A latency-only figure
+    # would leave the SELECTIVE half of the claim with no evidence at all,
+    # which is exactly what README S5's "selective propagation is the claim"
+    # asks the experiment to show.
+    #
+    # Panel (b) is FSNs touched: 1 (ias) / 4 (broadcast) / 37 (full_rebuild),
+    # zero variance, already recorded as secondary_2 by every run -- so this
+    # needs no re-run. Section V must state that the selective saving is in
+    # DELIVERY VOLUME, not in sender-side latency, and why: an in-process
+    # harness models no network.
     ExperimentSpec(6, "exp6_authorization_sync", "fig_exp6_sync.pdf",
                    "Authorization updates $\\delta$", "Synchronization latency (ms)",
-                   log_x=True, log_y=True),
+                   log_x=True, log_y=True,
+                   panels=(
+                       PanelSpec(0, "Synchronization latency (ms)", "a"),
+                       PanelSpec(2, "FSNs touched per update", "b"),
+                   )),
     ExperimentSpec(7, "exp7_search_throughput", "fig_exp7_throughput.pdf",
                    "Concurrent queries", "Throughput (queries/s)"),
     # Exp. 9 is the Exp. 4 companion: Exp. 4 asks what verification COSTS,
