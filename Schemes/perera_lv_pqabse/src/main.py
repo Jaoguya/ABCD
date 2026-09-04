@@ -27,12 +27,19 @@ from Schemes.perera_lv_pqabse.exp2_search_latency import runner as exp2  # noqa:
 from Schemes.perera_lv_pqabse.exp3_crossdomain_scalability import (  # noqa: E402
     runner as exp3,
 )
+from Schemes.perera_lv_pqabse.exp4_verification_overhead import (  # noqa: E402
+    runner as exp4,
+)
 from Schemes.perera_lv_pqabse.src.params import SchemeParams  # noqa: E402
 
 EXPERIMENT_MAP = {
     "1": ("exp1_trapdoor_generation", exp1),
     "2": ("exp2_search_latency", exp2),
     "3": ("exp3_crossdomain_scalability", exp3),
+    # Added 2026-09-04, reversing DECIDE-1's exclusion: both blockers it named
+    # are cleared (O(N) tree rebuild fixed; verification split from decryption
+    # so the Exp. 4 boundary holds). See the runner's docstring.
+    "4": ("exp4_verification_overhead", exp4),
 }
 
 

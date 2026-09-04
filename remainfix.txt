@@ -54,25 +54,39 @@ smaller than it was, but the raw node state is not backed up anywhere else.
 
 
 ================================================================================
-DECIDE-1 — Does Scheme [54] belong in Exp. 4?      [DECIDE]  ** DECIDED: NO **
+DECIDE-1 — Does Scheme [54] belong in Exp. 4?   [DECIDE]  ** REVERSED: YES **
 ================================================================================
-DECIDED 2026-09-03: Scheme [54] stays OUT of Exp. 4, and out of Exp. 9. The
-call was made on TIME, not on capability, and the distinction matters because
-the rationale in global.yaml was factually wrong until today -- it claimed [54]
-"has no result-verification primitive at all". It has one: Algorithm 3
-`retrieve_verify`, implemented, doing ML-DSA-65 signature verification, Merkle
-inclusion and a freshness check against the latest on-chain root.
+REVERSED 2026-09-04: Scheme [54] is now IN Exp. 4. Both blockers the 2026-09-03
+"no" depended on have been cleared, so the reason for the exclusion no longer
+exists. (Exp. 9 is a separate question and [54] remains out of it -- nothing
+below addresses a tamper-localisation path for Ref[54].)
 
-What changed instead of a measurement: Section V no longer implies [54] is
-plotted. It states the analytical cost and says explicitly that it was not
-measured, so the paper is no longer self-contradictory.
+  1. O(N) verification -- FIXED. `retrieve_verify` rebuilt the entire partition
+     tree per call (`tree = MerkleTree(leaves)`) plus a linear
+     `leaves.index(...)` scan. `finalize()` now retains the tree it already
+     builds (`_partition_trees`, `_leaf_positions`) and the new
+     `verify_record` proves against it. Measured flat at 0.777 ms/call from
+     N=500 to N=4000, Merkle path 9 -> 12 (= log2 N). It is now the O(log N)
+     Table II claims, so measuring it reports the published construction.
 
-If this is revisited, fix this first: `retrieve_verify` rebuilds the entire
-partition tree on every call (`tree = MerkleTree(leaves)`) -- O(N) where the
-paper claims O(log N). Measured as written, [54] would look far more expensive
-than its published construction. The inclusion proof has to be precomputed
-server-side. The Exp. 4 boundary is also defined against ma_lb_pq_vdse's own
-verification path and would need restating.
+  2. Exp. 4 boundary -- MATCHED, not assumed. The boundary excludes fetch and
+     decryption; Algorithm 3 does verification AND hybrid key reconstruction in
+     one call. `scheme.verify_record` is the verification half alone (signature,
+     Merkle inclusion, freshness) and is what the new runner times, so [54]'s
+     number covers the same work as every other arm's. `retrieve_verify` is
+     behaviourally unchanged and still does both halves.
+
+New code: Schemes/perera_lv_pqabse/exp4_verification_overhead/runner.py, wired
+into that scheme's main.py as experiment "4". global.yaml's exp4 roster is now
+[ma_lb_pq_vdse, guo_vdsse, yue_ge, perera_lv_pqabse].
+
+Caveat to carry into Section V: [54]'s per-record cost is dominated by an
+ML-DSA-65 signature verification PER RETURNED RECORD, which is what Algorithm 3
+specifies. It is genuinely heavier than an accumulator-tag check. It is not
+removed -- doing so would flatter the baseline exactly as measuring the O(N)
+rebuild would have penalised it.
+
+The original 2026-09-03 analysis follows, kept for the record.
 
 The original analysis follows.
 

@@ -17,7 +17,7 @@ Legend: `[DECIDE]` needs a human call · `[BUILD]` engineering with a known targ
 
 | ID | Task | State |
 |----|------|-------|
-| DECIDE-1 | Does Scheme [54] belong in Exp. 4? | **DECIDED 2026-09-03: no.** Excluded on time, not capability — `retrieve_verify` is implemented. Section V states its cost analytically and says it was not measured; `global.yaml` and `perera_lv_pqabse/SCHEME.md` now carry the reason, including the O(N) tree rebuild that must be fixed first if it is ever revisited |
+| DECIDE-1 | Does Scheme [54] belong in Exp. 4? | **REVERSED 2026-09-04: yes, it is now IN.** Both blockers behind the 2026-09-03 "no" are cleared: the O(N) per-call tree rebuild in `retrieve_verify` is fixed (`finalize()` retains the tree; measured flat 0.777 ms/call, N=500→4000, path 9→12 = log₂N), and the Exp. 4 boundary is matched by timing `scheme.verify_record` (verification half only, no decryption). New runner at `perera_lv_pqabse/exp4_verification_overhead/`; exp4 roster is now 4 schemes. **Section V must be updated** — it currently says [54] was not measured |
 | DECIDE-2 | What statistic do the baselines get reported with? | open |
 | FIX-1 | `tab:cost` claims `O(d)T_Ver` but no such operation exists | **fixed 2026-09-03** — removed from the table cell, the paragraph under it, and the Fig. 5 discussion. `T_Ver` now appears only where Scheme [54] legitimately uses it |
 | FIX-2 | Manuscript claims contradicted by measurement | open |

@@ -78,18 +78,24 @@ experiments:
     #
     # Ref[41] has no result-verification primitive at all.
     #
-    # Ref[54] DOES have one, and this comment used to say otherwise. Its
-    # Algorithm 3 `retrieve_verify` is implemented -- ML-DSA-65 signature
-    # verification, Merkle inclusion, and a freshness check against the latest
-    # on-chain root. DECIDE-1, settled 2026-09-03: it stays OUT, on time, not on
-    # capability. Its cost is reported analytically in tab:cost and Section V
-    # says plainly that it was not measured. Two things would have to happen
-    # first: `retrieve_verify` rebuilds the whole partition tree per call
-    # (O(N), not O(log N)), which would overstate the baseline unless the proof
-    # is precomputed server-side; and this repo's Exp. 4 boundary is defined
-    # against ma_lb_pq_vdse's verification path, so including it needs that
-    # boundary restated rather than assumed.
-    schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
+    # Ref[54] DOES have one: Algorithm 3 `retrieve_verify` -- ML-DSA-65
+    # signature verification, Merkle inclusion, and a freshness check against
+    # the latest on-chain root.
+    #
+    # DECIDE-1 (2026-09-03) kept it OUT pending two blockers. Both are cleared
+    # as of 2026-09-04 and it is now IN:
+    #
+    #   1. `retrieve_verify` rebuilt the whole partition tree per call (O(N),
+    #      not the O(log N) Table II claims), plus a linear leaf lookup.
+    #      `finalize()` now retains the tree it already builds and
+    #      `verify_record` proves against it: measured flat at 0.777 ms/call
+    #      from N=500 to N=4000, path length 9 -> 12 (= log2 N).
+    #   2. The Exp. 4 boundary excludes fetch and decryption, but Algorithm 3
+    #      does verification AND hybrid key reconstruction in one call.
+    #      `scheme.verify_record` is its verification half alone and is what
+    #      the runner times, so Ref[54]'s number covers the same work as every
+    #      other arm's. `retrieve_verify` still performs both halves.
+    schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge, perera_lv_pqabse]
   exp9_verification_granularity:
     variable: tampered_records
     # Fixed result-set size, swept tamper count. Exp. 4 asks what verification

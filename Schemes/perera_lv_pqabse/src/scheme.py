@@ -179,6 +179,17 @@ class FogNode:
     root_signature: bytes = b""
     ciphertexts: Dict[int, EdgeCiphertext] = field(default_factory=dict)
     _partition_leaves: Dict[str, List[bytes]] = field(default_factory=dict)
+    #: Built ONCE by `finalize()`, then reused by every verification.
+    #:
+    #: `retrieve_verify` used to do `MerkleTree(leaves)` per call, rebuilding
+    #: the whole partition tree to produce one inclusion proof -- O(N) work for
+    #: an operation the paper's Table II claims is O(log N) -- plus a linear
+    #: `leaves.index(digest)` scan to locate the leaf. `MerkleTree.prove()` is
+    #: already O(log N) on a BUILT tree, so the cost was entirely the rebuild.
+    #: Both are Phase 3 (indexing) work, not Phase 5 (retrieval) work, so they
+    #: belong here, where `finalize()` already pays for exactly one build.
+    _partition_trees: Dict[str, "merkle.MerkleTree"] = field(default_factory=dict)
+    _leaf_positions: Dict[str, Dict[bytes, int]] = field(default_factory=dict)
     rejected: int = 0
 
     # -- ingest (untimed setup) ---------------------------------------------
@@ -208,10 +219,22 @@ class FogNode:
         return True
 
     def finalize(self) -> bytes:
-        """Per-partition Merkle roots, aggregated and signed — end of Phase 3."""
-        self.partition_roots = {
-            part: merkle.MerkleTree(leaves).root
+        """Per-partition Merkle roots, aggregated and signed — end of Phase 3.
+
+        The trees themselves are RETAINED (see `_partition_trees`), not
+        discarded and rebuilt per verification. This is the same single build
+        that was always paid here; only the tree object now outlives it.
+        """
+        self._partition_trees = {
+            part: merkle.MerkleTree(leaves)
             for part, leaves in sorted(self._partition_leaves.items())
+        }
+        self._leaf_positions = {
+            part: {digest: i for i, digest in enumerate(leaves)}
+            for part, leaves in sorted(self._partition_leaves.items())
+        }
+        self.partition_roots = {
+            part: tree.root for part, tree in self._partition_trees.items()
         }
         if not self.partition_roots:
             self.global_root = sha3_256(b"empty-index")
@@ -332,10 +355,33 @@ class RetrieveOutcome:
         )
 
 
-def retrieve_verify(keys: SystemKeys, node: FogNode, rid: int,
-                    key_abe: abe.AttributeKey, epoch: str,
-                    latest_root: bytes) -> RetrieveOutcome:
-    """Algorithm 3 — hybrid key reconstruction, then all three checks.
+@dataclass
+class VerifyOutcome:
+    """The three checks of Algorithm 3, without the retrieval half."""
+
+    signature_ok: bool
+    inclusion_ok: bool
+    fresh: bool
+    proof: Optional[merkle.MerkleProof] = None
+
+    @property
+    def accepted(self) -> bool:
+        return self.signature_ok and self.inclusion_ok and self.fresh
+
+
+def verify_record(keys: SystemKeys, node: FogNode, rid: int, epoch: str,
+                  latest_root: bytes) -> VerifyOutcome:
+    """Algorithm 3's VERIFICATION half — the three checks, no decryption.
+
+    Split out of :func:`retrieve_verify` so Exp. 4 can time this repo's Exp. 4
+    boundary as it is defined for every other scheme: "verification is
+    client-side: Merkle proof check ... IPFS fetch and decryption are
+    EXCLUDED". Algorithm 3 as published does both halves in one call, so
+    timing `retrieve_verify` whole would charge Ref[54] for an ABE decrypt, a
+    KEM decapsulation and an AES-GCM open that no other arm's number contains.
+
+    The inclusion proof comes from the tree `finalize()` already built, so this
+    is O(log N) in the partition size, which is what Table II claims.
 
     The freshness check (``root_T == root*_T``) is what makes a stale index
     snapshot detectable; without it a server could serve an old, correct-looking
@@ -348,14 +394,35 @@ def retrieve_verify(keys: SystemKeys, node: FogNode, rid: int,
         keys.edge_verifying_key, ct.prov_digest, ct.signature
     )
 
-    leaves = node._partition_leaves.get(epoch, [])
+    position = node._leaf_positions.get(epoch, {}).get(ct.prov_digest)
+    tree = node._partition_trees.get(epoch)
     inclusion_ok = False
-    if ct.prov_digest in leaves:
-        tree = merkle.MerkleTree(leaves)
-        proof = tree.prove(leaves.index(ct.prov_digest))
-        inclusion_ok = merkle.MerkleTree.verify(proof, node.partition_roots[epoch])
+    proof = None
+    if position is not None and tree is not None:
+        proof = tree.prove(position)
+        inclusion_ok = merkle.MerkleTree.verify(
+            proof, node.partition_roots[epoch]
+        )
 
-    fresh = node.global_root == latest_root
+    return VerifyOutcome(
+        signature_ok=signature_ok, inclusion_ok=inclusion_ok,
+        fresh=node.global_root == latest_root, proof=proof,
+    )
+
+
+def retrieve_verify(keys: SystemKeys, node: FogNode, rid: int,
+                    key_abe: abe.AttributeKey, epoch: str,
+                    latest_root: bytes) -> RetrieveOutcome:
+    """Algorithm 3 in full — the three checks, then hybrid key reconstruction.
+
+    Unchanged in behaviour; the checks now come from :func:`verify_record` so
+    the two halves can be measured separately without either being reimplemented.
+    """
+    ct = node.ciphertexts[rid]
+    checks = verify_record(keys, node, rid, epoch, latest_root)
+    signature_ok = checks.signature_ok
+    inclusion_ok = checks.inclusion_ok
+    fresh = checks.fresh
 
     plaintext = None
     if keys.master is not None and ct.ct_abe is not None:
