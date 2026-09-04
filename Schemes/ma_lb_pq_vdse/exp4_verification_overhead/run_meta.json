@@ -67,8 +67,8 @@
     "pin_configured": false,
     "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
   },
-  "finished_utc": "2026-09-04T09:58:04.770681+00:00",
-  "git_commit": "2422b5885d9636cb02516debd818938a1b82ab83",
+  "finished_utc": "2026-09-04T12:06:03.597249+00:00",
+  "git_commit": "7ed34e3e2e411829d0db95bd6f8f825b7a76217c",
   "instance_type": "unknown",
   "libraries": {
     "bitarray": "3.10.1",
@@ -78,16 +78,14 @@
     "pandas": "3.0.5",
     "scipy": "1.17.1"
   },
-  "not_reportable_because": [
-    "the ledger is an in-process hash chain, not the Hyperledger Fabric v2.5 deployment README \u00a71 specifies; Exp. 4's chain-consistency cost is therefore understated (see chain/ledger.py::InProcessLedger)"
-  ],
+  "not_reportable_because": [],
   "notes": [],
   "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
   "python_version": "3.11.15",
-  "reportable": false,
+  "reportable": true,
   "runs": 10,
   "scheme": "ma_lb_pq_vdse",
-  "started_utc": "2026-09-04T09:58:02.797992+00:00",
+  "started_utc": "2026-09-04T12:03:14.964354+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": null,
     "NUMEXPR_NUM_THREADS": null,
