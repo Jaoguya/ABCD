@@ -181,6 +181,23 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
 # exp4 hid the 0.06-28 ms spread the same way. `_check_log_y_criterion` warns
 # if new data ever pushes a linear figure past the threshold, so the rule stays
 # enforced rather than becoming a comment about what was once true.
+#: Reportable repetition count, read from the campaign config rather than
+#: hardcoded here. `Experiment Configuration/global.yaml` is the single source of
+#: truth (README §7); a literal in this file is how the n_runs warning kept
+#: citing 30 after the campaign moved to 10. yaml is not imported at module
+#: scope because this script must run in a bare matplotlib environment, so the
+#: value is parsed with a regex and falls back to the documented default.
+def _required_repetitions(default: int = 10) -> int:
+    config = (Path(__file__).resolve().parents[1]
+              / "Experiment Configuration" / "global.yaml")
+    try:
+        match = re.search(r"^\s*repetitions:\s*(\d+)",
+                          config.read_text(encoding="utf-8"), re.MULTILINE)
+    except OSError:
+        return default
+    return int(match.group(1)) if match else default
+
+
 LOG_Y_DECADES = 2.0
 
 
@@ -671,11 +688,18 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
             warnings.append(
                 f"exp{spec.number}: {series.scheme} has no readable run_meta.json"
             )
-        short = [n for n in series.n_runs if n < 30]
+        # Read from the config, not a literal. This said `< 30` and cited
+        # "README §9 requires 30" until 2026-09-04 -- eight months after the
+        # campaign moved to 10 -- so it fired on EVERY series of EVERY figure
+        # at the correct count. A warning that is always wrong is worse than
+        # none: it trains the reader to scroll past the ones that are right.
+        required = _required_repetitions()
+        short = [n for n in series.n_runs if n < required]
         if short:
             warnings.append(
-                f"exp{spec.number}: {series.scheme} has points with n_runs<30 "
-                f"(min {min(short)}) — README §9 requires 30 for reportable data"
+                f"exp{spec.number}: {series.scheme} has points with "
+                f"n_runs<{required} (min {min(short)}) — README §9 requires "
+                f"{required} for reportable data"
             )
         warnings.extend(series.problems)
 

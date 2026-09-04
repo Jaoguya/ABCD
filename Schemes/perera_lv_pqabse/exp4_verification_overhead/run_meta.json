@@ -1,5 +1,5 @@
 {
-  "scheme": "guo_vdsse",
+  "scheme": "perera_lv_pqabse",
   "experiment": "exp4",
   "git_commit": "3efef2cbce6cdb5dd05057f90be37276c533e7d9",
   "python_version": "3.11.15",
@@ -12,7 +12,18 @@
     "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
     "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
   },
-  "utc_start_time": "2026-09-04T08:46:41+00:00",
+  "pq_backends": {
+    "ml_kem_768": {
+      "cryptography": true,
+      "liboqs": true,
+      "kyber_py": false
+    },
+    "ml_dsa_65": {
+      "cryptography": true,
+      "liboqs": true
+    }
+  },
+  "utc_start_time": "2026-09-04T08:48:34+00:00",
   "environment": {
     "python_version": "3.11.15",
     "python_implementation": "CPython",
