@@ -67,6 +67,22 @@ class PanelSpec:
     #: narrow-ranging; set it only where the panel's own values are positive
     #: and span enough to flatten on a linear axis.
     log_y: bool = False
+    #: Draw this panel from a DIFFERENT experiment folder. Exp. 4 needs it: the
+    #: figure's two panels answer "what does verification cost" and "what does
+    #: it buy", and the second is measured by a separate sweep over tampered
+    #: records. When any panel sets this, the panels no longer share an x-axis
+    #: -- they are different variables (`r` against `t`) and overlaying them
+    #: would be a category error.
+    folder: Optional[str] = None
+    #: Per-panel x label and x scale, used only when `folder` is set.
+    xlabel: Optional[str] = None
+    log_x: bool = False
+    #: Divide the metric by the x value before plotting. Section V reports
+    #: Exp. 4's latency as T_avg = T_verify / r, the per-returned-ciphertext
+    #: cost, so the panel must show that rather than the total the CSV holds.
+    #: Derived here rather than in the runner so `results.csv` keeps the raw
+    #: measurement and the figure states the transform in one place.
+    per_x: bool = False
 
 
 @dataclass(frozen=True)
@@ -101,9 +117,29 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     ExperimentSpec(3, "exp3_crossdomain_scalability", "fig_exp3_crossdomain.pdf",
                    "Domains $d$", "Cross-domain search latency (ms)",
                    log_y=True),
+    # TWO PANELS. Exp. 4 asks what verification COSTS and what it BUYS, and the
+    # second question is a different sweep: `r` returned ciphertexts against `t`
+    # tampered ones. Merged 2026-09-05 -- panel (b) was a standalone Exp. 9
+    # figure, but Section V makes one claim out of the pair (a moderate
+    # per-result cost bought with per-result localization), so splitting them
+    # across two figures asked the reader to join them up.
+    #
+    # Panel (a) is T_avg = T_verify / r, which is what Section V reports.
+    # Panel (b) is records discarded, NOT records retained: retention is 0 for
+    # both baselines and a log axis cannot draw a zero, so the complement is
+    # what stays plottable. It carries the same fact -- discarding exactly `t`
+    # is localizing exactly `t` and retaining the rest.
     ExperimentSpec(4, "exp4_verification_overhead", "fig_exp4_verify.pdf",
                    "Returned results $r$", "Verification latency (ms)",
-                   log_y=True),   # 2.66 decades — see LOG_Y_DECADES
+                   log_y=True,   # 2.66 decades — see LOG_Y_DECADES
+                   panels=(
+                       PanelSpec(0, "Verification latency\nper result (ms)", "a",
+                                 per_x=True, log_x=True),
+                       PanelSpec(0, "Records discarded", "b",
+                                 folder="exp9_verification_granularity",
+                                 xlabel="Tampered records $t$",
+                                 log_x=True, log_y=True),
+                   )),
     ExperimentSpec(5, "exp5_keyword_update", "fig_exp5_update.pdf",
                    "Updated (keyword, document) pairs $k$", "Update latency (ms)",
                    log_x=True, log_y=True),
@@ -150,10 +186,6 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # Exp. 9 what it BUYS. Log-log because the gap is the story -- ours tracks
     # t exactly while the accumulator schemes sit flat at the full result-set
     # size, so at t=1 the two are ~4 orders apart and at t=1000 ~1.
-    ExperimentSpec(9, "exp9_verification_granularity",
-                   "fig_exp9_granularity.pdf",
-                   "Tampered records $t$", "Records discarded",
-                   log_x=True, log_y=True),
     ExperimentSpec(8, "exp8_load_balance", "fig_exp8_balance.pdf",
                    "Concurrent queries", "FSN utilization std. dev.",
                    panels=(
@@ -482,6 +514,29 @@ def collect_ablation(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     return found
 
 
+def collect_folder(input_root: Path, folder: str) -> List[Series]:
+    """Every scheme's results for one experiment FOLDER, by name.
+
+    ``collect`` dispatches on the experiment number (ablations, variant probes);
+    this is the plain read a cross-folder panel needs. Kept separate so adding a
+    panel from another experiment cannot accidentally re-route Exp. 6/7/8's
+    ablation handling.
+    """
+    found: List[Series] = []
+    if not input_root.is_dir():
+        return found
+    number = folder.split("_", 1)[0].replace("exp", "")
+    for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
+        for exp_dir in sorted(scheme_dir.glob(f"exp{number}_*")):
+            if not exp_dir.is_dir() or "__" in exp_dir.name:
+                continue
+            series = read_results(exp_dir / "results.csv", scheme_dir.name)
+            if series is not None:
+                found.append(series)
+                break
+    return found
+
+
 def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     """Find every scheme's results for one experiment.
 
@@ -577,44 +632,96 @@ def _check_log_y_criterion(spec: ExperimentSpec, series_list: Sequence[Series],
 
 
 def _panel_values(
-    series: Series, metric: int,
+    series: Series, metric: int, per_x: bool = False,
 ) -> Tuple[List[float], List[float]]:
-    """(values, ci95s) for one metric: 0 is primary, 1+ index the secondaries."""
-    if metric == 0:
-        return series.y, series.yerr
-    return series.extra.get(metric, ([], []))
+    """(values, ci95s) for one metric: 0 is primary, 1+ index the secondaries.
+
+    ``per_x`` divides both the value and its interval by the x value, turning a
+    total into a per-unit rate. The interval scales with the value because it is
+    a half-width in the same units, so T_avg's interval is the total's over r.
+    """
+    values, errs = (
+        (series.y, series.yerr) if metric == 0
+        else series.extra.get(metric, ([], []))
+    )
+    if not per_x:
+        return values, errs
+    scaled_v, scaled_e = [], []
+    for i, v in enumerate(values):
+        x = series.x[i] if i < len(series.x) else 0
+        if not x:
+            # A zero x cannot yield a per-unit rate; drop the point rather than
+            # divide by zero and plot an inf.
+            continue
+        scaled_v.append(v / x)
+        scaled_e.append((errs[i] / x) if i < len(errs) else 0.0)
+    return scaled_v, scaled_e
 
 
 def render(spec: ExperimentSpec, series_list: Sequence[Series],
-           out_path: Path, dpi: Optional[int] = None) -> Tuple[bool, List[str]]:
-    """Draw one figure. Returns (written, warnings)."""
+           out_path: Path, dpi: Optional[int] = None,
+           input_root: Optional[Path] = None) -> Tuple[bool, List[str]]:
+    """Draw one figure. Returns (written, warnings).
+
+    ``input_root`` is needed only when a panel names its own ``folder``; without
+    it such a panel is skipped with a warning rather than drawn empty.
+    """
     warnings: List[str] = []
     if not series_list:
         return False, [f"exp{spec.number}: no results.csv found for any scheme"]
     _check_log_y_criterion(spec, series_list, warnings)
 
     if spec.panels:
+        # A panel drawn from another experiment sweeps a DIFFERENT variable, so
+        # the panels cannot share an x-axis: Exp. 4's (a) is `r` returned
+        # ciphertexts and (b) is `t` tampered ones. Sharing would silently
+        # relabel one of them.
+        cross = any(panel.folder for panel in spec.panels)
         # Stacked, not side by side: three panels across an IEEE single column
         # would be 1.16in each, too narrow for an axis label. Height is per
         # panel; width is whatever the column (and --scale) already set.
         w, h = plt.rcParams["figure.figsize"]
         fig, axes = plt.subplots(
-            len(spec.panels), 1, sharex=True,
+            len(spec.panels), 1, sharex=not cross,
             figsize=(w, h * 0.78 * len(spec.panels)),
         )
         for i, (ax, panel) in enumerate(zip(axes, spec.panels)):
+            panel_series = series_list
+            if panel.folder:
+                if input_root is None:
+                    warnings.append(
+                        f"exp{spec.number}: panel ({panel.tag}) reads "
+                        f"{panel.folder!r} but no input root was given; skipped"
+                    )
+                    continue
+                panel_series = collect_folder(input_root, panel.folder)
+                if not panel_series:
+                    warnings.append(
+                        f"exp{spec.number}: panel ({panel.tag}) found no "
+                        f"results under {panel.folder!r}; the figure is "
+                        f"incomplete"
+                    )
+                    continue
             _draw_panel(
-                ax, spec, series_list, warnings,
+                ax, spec, panel_series, warnings,
                 metric=panel.metric, ylabel=panel.ylabel,
-                # Legend once, on the top panel; warnings once, or each series
-                # would report itself three times.
-                add_legend=(i == 0), collect_warnings=(i == 0),
-                # Only the bottom panel carries the shared x label.
-                add_xlabel=(i == len(spec.panels) - 1),
+                # Legend once, on the top panel -- EXCEPT for a cross-folder
+                # panel, which has its own scheme set. Exp. 4 panel (b) omits
+                # Scheme [54] (no granularity arm), so borrowing panel (a)'s
+                # four-entry legend would claim a curve that is not drawn.
+                add_legend=(i == 0 or bool(panel.folder)),
+                # Warnings once, or each series would report itself per panel.
+                collect_warnings=(i == 0),
+                # Every panel labels its own x when they are different
+                # variables; otherwise only the bottom one does.
+                add_xlabel=(cross or i == len(spec.panels) - 1),
                 # log_y is declared for the PRIMARY metric; a secondary is a
                 # different quantity and may not be positive or wide-ranging, so
                 # it opts in per panel.
                 allow_log_y=(panel.metric == 0) or panel.log_y,
+                per_x=panel.per_x,
+                xlabel=panel.xlabel,
+                force_log_x=panel.log_x,
             )
             ax.set_title(f"({panel.tag})", loc="left", fontsize=8, pad=2)
         fig.align_ylabels(axes)
@@ -634,7 +741,9 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
 def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 warnings: List[str], *, metric: int, ylabel: str,
                 add_legend: bool, collect_warnings: bool,
-                add_xlabel: bool, allow_log_y: bool) -> None:
+                add_xlabel: bool, allow_log_y: bool,
+                per_x: bool = False, xlabel: Optional[str] = None,
+                force_log_x: bool = False) -> None:
     """Draw every series' `metric` onto one axes."""
     # The furthest point any scheme reached, so a shorter series can be marked.
     _all_x = [v for s in series_list for v in s.x]
@@ -660,7 +769,7 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
         # CAPTION in section V has to state which points are extrapolated --
         # a hollow marker shows a reader that something differs, not what.
         computed = [i for i, n in enumerate(series.n_runs) if n == 0]
-        yvals, yerrs = _panel_values(series, metric)
+        yvals, yerrs = _panel_values(series, metric, per_x)
         if not yvals:
             # A scheme that records no such secondary simply has no curve on
             # this panel; the others still draw.
@@ -704,9 +813,11 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
         warnings.extend(series.problems)
 
     if add_xlabel:
-        ax.set_xlabel(spec.xlabel)
+        # A cross-folder panel sweeps its own variable, so it labels its own
+        # axis; everything else inherits the figure's.
+        ax.set_xlabel(xlabel or spec.xlabel)
     ax.set_ylabel(ylabel)
-    if spec.log_x:
+    if spec.log_x or force_log_x:
         # Same guard as log_y below, for the same reason: a log axis silently
         # drops non-positive values, so a variable_value of 0 would vanish from
         # the figure without any indication it had been read.
@@ -900,7 +1011,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             target_dir = output_root / fmt if multi else output_root
             target_dir.mkdir(parents=True, exist_ok=True)
             ok, warns = render(spec, found, target_dir / name,
-                               dpi=args.png_dpi if fmt == "png" else None)
+                               dpi=args.png_dpi if fmt == "png" else None,
+                               input_root=input_root)
             # Warnings describe the DATA, not the format, so collect them once
             # rather than repeating every reportability warning per format.
             if not rendered_any:

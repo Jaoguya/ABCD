@@ -1948,17 +1948,19 @@ supports cross-domain authorization synchronization.
 
 The proposed framework separates cross-domain authorization from
 candidate-level encrypted search. Trapdoor generation costs
-$O(q)T_P$, while authorization resolution requires only $O(dT_H)$
+$O(q)T_H$, while authorization resolution requires only $O(dT_H)$
 before search is restricted to $n_{\mathrm{eff}}$ authorized
 candidates. Keyword updates and verification cost
 $O(k)T_H+O(\log n)T_{\mathrm{MT}}$ and
-$O(r)T_{\mathrm{MT}}+O(d)T_{\mathrm{Ver}}$, respectively.
+$O(r)T_{\mathrm{MT}}+O(r)T_{H}$, respectively.
 Furthermore, authorization synchronization requires only
-$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Thus, despite retaining
-pairing cost for trapdoor generation, the proposed framework shifts
-the dominant online workload toward authorization pruning, hashing,
-filtering, and logarithmic Merkle-tree operations, providing an
-efficient trade-off for dynamic cross-domain retrieval.
+$O(\delta)T_H+O(\log d)T_{\mathrm{MT}}$. Trapdoor generation is
+therefore free of bilinear pairings: a search token is $q$ keyed
+token derivations and a nonce, with no per-domain component, which is
+why one trapdoor serves all $d$ participating domains. The proposed
+framework thus keeps the dominant online workload on authorization
+pruning, hashing, filtering, and logarithmic Merkle-tree operations,
+providing an efficient trade-off for dynamic cross-domain retrieval.
 \subsection{Performance Evaluation}
 
 \subsubsection{Experimental Setup}
@@ -1985,7 +1987,7 @@ dataset~\cite{refSynthea}. Encrypted searchable indexes containing
 $10^4$--$10^6$ EHRs were generated from the dataset and uniformly
 distributed across four administrative healthcare domains. Unless
 otherwise specified, each query contains five keywords. Each
-experiment was repeated 30 times, and the reported results represent
+experiment was repeated 10 times, and the reported results represent
 the mean with 95\% confidence intervals.
 
 The proposed framework was compared with four representative
@@ -2151,44 +2153,70 @@ preserving otherwise valid results.
 For latency comparison, the average verification time per returned
 ciphertext is reported as
 $T_{\rm avg}=T_{\rm verify}/r$. For verification effectiveness, we
-measure tampered-result localization rate and valid-result retention.
+inject $t$ invalid results into the returned set and measure how many
+results the Data User must discard, which determines both how many
+invalid results were localized and how many valid ones were retained.
 The proposed framework is compared with Scheme~\cite{ref30},
 Scheme~\cite{ref35}, and Scheme~\cite{ref54}, which provide explicit
 result-verification mechanisms.
 
 \begin{figure}[!t]
     \centering
-    \includegraphics[width=\columnwidth]{images/fig_exp4_verify.png}
+    \includegraphics[width=\columnwidth]{images/fig_exp4_verify.pdf}
     \caption{Fine-grained verification effectiveness:
-    (a) average verification latency per returned ciphertext and
-    (b) invalid-result localization and valid-result retention.}
+    (a) average verification latency per returned ciphertext, and
+    (b) records the Data User must discard when $t$ of the returned
+    ciphertexts are invalid. Panel~(b) covers the schemes whose
+    verification evidence is aggregated over the result set; see the
+    text for Scheme~\cite{ref54}.}
     \label{fig:exp4}
 \end{figure}
 
-Fig.~\ref{fig:exp4}(a) shows that the proposed framework incurs a
-moderate per-result verification cost because each returned ciphertext
-is independently authenticated. For every result, the Data User
-verifies its Merkle authentication path, policy commitment,
-authorization version, and blockchain-consistent metadata. The
-dominant cryptographic cost is therefore
-$O(r)T_{\rm MT}+O(r)T_H$.
+Fig.~\ref{fig:exp4}(a) shows that the proposed framework incurs the
+highest per-result verification cost of the four compared schemes,
+because each returned ciphertext is independently authenticated. For
+every result, the Data User verifies its Merkle authentication path,
+policy commitment, authorization version, and blockchain-consistent
+metadata, none of which is amortized across the response. The dominant
+cryptographic cost is therefore $O(r)T_{\rm MT}+O(r)T_H$, and the
+per-result cost is accordingly flat in $r$.
 
 More importantly, Fig.~\ref{fig:exp4}(b) demonstrates the additional
 verification granularity provided by the proposed framework. Because
 each ciphertext carries an independent verification bundle, an invalid,
 stale, or authorization-inconsistent result can be directly localized
-and rejected while the remaining valid ciphertexts are retained.
-In contrast, Schemes~\cite{ref30} and~\cite{ref35} primarily verify
-the correctness or completeness of the returned result set using
-aggregated verification evidence and therefore do not directly provide
-the same per-result localization capability.
+and rejected while the remaining valid ciphertexts are retained: with
+$t$ invalid results in the set, exactly $t$ are discarded and the
+remaining $r-t$ stay usable.
 
-These results show that the proposed framework trades a moderate
+In contrast, Schemes~\cite{ref30} and~\cite{ref35} verify the
+correctness and completeness of the returned result set using
+verification evidence aggregated over that set. Scheme~\cite{ref35}
+compares two XOR-accumulated tags computed over every returned
+identifier, and Scheme~\cite{ref30} compares a single multiset digest;
+in both, a subset of the response does not balance against the
+published evidence, so a detected fault invalidates the whole response
+and no individual result can be named. This is a property of the
+published constructions rather than of our implementations of them,
+and neither scheme claims per-result identification.
+
+Scheme~\cite{ref54} is omitted from Fig.~\ref{fig:exp4}(b). Its
+verification is per record rather than aggregated -- a Merkle inclusion
+proof and a signature verification for each returned record -- so the
+all-or-nothing behaviour measured here does not describe it, and we
+did not measure its localization. The comparison in Fig.~\ref{fig:exp4}(b)
+is therefore against aggregate-evidence verification specifically, not a
+claim of uniqueness.
+
+These results show that the proposed framework trades a higher
 per-result verification cost for finer-grained fault localization and
-valid-result preservation. This property is particularly useful in
-cross-domain IoMT retrieval, where rejecting only the affected
-ciphertext is preferable to treating the complete search response as
-invalid.
+valid-result preservation. The cost is not marginal: per returned
+ciphertext the proposed framework is the most expensive of the four
+compared schemes, and Fig.~\ref{fig:exp4}(a) reports it on a
+logarithmic axis for that reason. The trade is nonetheless the one
+cross-domain IoMT retrieval calls for, where rejecting only the
+affected ciphertext is preferable to discarding an entire search
+response over a single invalid result.
 
 
 \subsubsection*{\textbf{Experiment 5: Dynamic Keyword Update}}

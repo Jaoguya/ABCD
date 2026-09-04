@@ -1716,6 +1716,13 @@ class Exp9VerificationGranularity:
     **Not swept at t = 0.** The figure is log-log and the untampered case is
     Exp. 4. ``test_exp9_granularity.py`` pins the t=0 behaviour instead, which is
     where a false-positive rejection would show up.
+
+    **The unit is a RECORD, not an index entry.** One bundle per returned
+    ciphertext, the same rule Exp. 4 adopted in ``d1cdf9c``. Both are panels of
+    the same figure, so a mismatch here would put panel (a) in records and panel
+    (b) in entries under one caption. ``build_response`` emits one bundle per
+    entry, so taking all of them is the easy mistake and is what this arm did
+    until 2026-09-05.
     """
 
     config: scheme_config.Configuration
@@ -1765,44 +1772,39 @@ class Exp9VerificationGranularity:
             raise ValueError(
                 f"cannot tamper {tampered} of {wanted} returned records"
             )
-        per_record = self.source.keywords_per_record
-        # `per_record` is the CORPUS-WIDE mean |W_i|; a `record_count`-sized
-        # prefix draw is not guaranteed to match it -- CorpusRecordSource.records
-        # streams from the start of the corpus, and measured on the pinned host
-        # this arm's first 625-record draw yielded 17,435 bundles (27.9 kw/record
-        # actual) against the 31.7 mean, failing every sweep point identically
-        # ("built 17435 bundles but exp9 pins 20000"). Grow the draw against the
-        # ACTUAL yield instead of trusting the corpus-wide estimate with no
-        # margin.
-        record_count = max(1, -(-wanted // per_record))
-        deployment = None
+        # ONE bundle per returned ciphertext, exactly as Exp. 4 builds it.
+        #
+        # This used to size the draw as `ceil(wanted / keywords_per_record)` and
+        # then `extend` every bundle of every record, because `build_response`
+        # emits one bundle per INDEX ENTRY. At the frozen corpus's |W_i| ~= 32
+        # that made the pinned 20,000 into ~632 records carrying 20,000 entries,
+        # so this arm's denominator counted entries while both baselines counted
+        # records -- guo picks a keyword matching ~19,975 DOCUMENTS, yue_ge
+        # returns 20,000 result ids. Panel (b) then compared one tampered entry
+        # against a 20,000-RECORD result set, and `records_discarded` did not
+        # measure records at all.
+        #
+        # That is defect d1cdf9c, which had already forced an Exp. 4 re-run:
+        # "r counted index entries, not returned records". Exp. 9 kept it. Both
+        # panels of fig:exp4 now sweep the same unit, which is the whole reason
+        # they can share an axis.
+        deployment = build_deployment(
+            config=self.config, source=self.source, records=wanted
+        )
         bundles: List[proof_mod.VerificationBundle] = []
-        for _ in range(6):
-            deployment = build_deployment(
-                config=self.config, source=self.source, records=record_count
+        for record in deployment.records:
+            responses = proof_mod.build_response(
+                record["commitment"], record["entries"]
             )
-            bundles = []
-            for record in deployment.records:
-                bundles.extend(
-                    proof_mod.build_response(record["commitment"], record["entries"])
-                )
-                if len(bundles) >= wanted:
-                    break
+            if responses:
+                bundles.append(responses[0])
             if len(bundles) >= wanted:
                 break
-            # Short by this much: rescale the draw against what was ACTUALLY
-            # achieved (+20% margin) and re-stream from the start rather than
-            # incrementing blindly -- `source.records()` is deterministic, so a
-            # bigger count is a strict superset of the previous draw.
-            achieved_ratio = len(bundles) / record_count
-            record_count = max(
-                record_count + 1, int((wanted / max(achieved_ratio, 1e-9)) * 1.2)
-            )
         if len(bundles) < wanted:
             raise RuntimeError(
-                f"built {len(bundles)} bundles from {record_count} records but "
-                f"exp9 pins {wanted}; the deployment is too small even after "
-                f"growing the draw to {record_count} records"
+                f"built {len(bundles)} bundles from {len(deployment.records)} "
+                f"records but exp9 pins {wanted}; the source yielded fewer "
+                f"records than requested"
             )
         bundles = bundles[:wanted]
 

@@ -46,6 +46,56 @@ def _experiment(returned: int = TEST_RETURNED):
     )
 
 
+def test_one_bundle_per_record_not_one_per_index_entry():
+    """The unit is a RECORD. Regression guard for the d1cdf9c class of defect.
+
+    ``build_response`` emits one bundle per INDEX ENTRY, so the easy way to
+    assemble ``returned_results`` bundles is to ``extend`` over records until the
+    count is reached -- which is what this arm did until 2026-09-05. At the
+    frozen corpus's |W_i| ~= 32 that made the pinned 20,000 into ~632 records
+    carrying 20,000 entries, while both baselines returned ~20,000 RECORDS: guo
+    picks a keyword matching ~19,975 documents, yue_ge returns 20,000 result ids.
+
+    Exp. 4 had already been re-run once for exactly this ("r counted index
+    entries, not returned records"), and the two are now panels of one figure,
+    so a mismatch would put panel (a) in records and panel (b) in entries under
+    a single caption.
+
+    One record yields one CID, so distinct CIDs is the sharp form of the check:
+    it fails under the old code even if the bundle COUNT happens to be right.
+    """
+    prepared = _experiment().prepare(0)
+    bundles = prepared["bundles"]
+    assert len(bundles) == TEST_RETURNED
+    assert len({b.cid for b in bundles}) == len(bundles), (
+        "bundles share a CID, so they are index entries of the same record "
+        "rather than distinct returned records"
+    )
+
+
+def test_the_denominator_is_the_record_count_the_deployment_built():
+    """No silent top-up from a second record's entries."""
+    experiment = _experiment()
+    prepared = experiment.prepare(0)
+    assert len(prepared["deployment"].records) >= TEST_RETURNED
+
+
+def test_exp4_and_exp9_agree_on_what_one_returned_result_is():
+    """Both panels of fig:exp4 must sweep the same unit.
+
+    Compared through the built bundles rather than by reading the source, so a
+    future refactor of either ``prepare`` cannot drift them apart while still
+    looking similar.
+    """
+    r = 40
+    exp4 = exp_mod.Exp4Verification(config=CONFIG, source=SOURCE)
+    exp4_bundles = exp4.prepare(r)["bundles"]
+    exp9_bundles = _experiment(returned=r).prepare(0)["bundles"]
+    assert len(exp4_bundles) == len(exp9_bundles) == r
+    assert len({b.cid for b in exp4_bundles}) == r
+    assert len({b.cid for b in exp9_bundles}) == r
+
+
 def test_registered_as_experiment_nine():
     built = exp_mod.build_experiment(9, CONFIG, SOURCE)
     assert isinstance(built, exp_mod.Exp9VerificationGranularity)
