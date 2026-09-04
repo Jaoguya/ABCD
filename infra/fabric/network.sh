@@ -59,7 +59,10 @@ tools_net() {
 
 cmd_up() {
   echo "==> 1/6 crypto material (cryptogen)"
-  rm -rf crypto-config
+  # Root-owned on the host: cryptogen runs as root inside the container and
+  # writes through the bind mount, so a plain rm gets "Permission denied" on
+  # every key it made. Re-running `up` has to be able to start clean.
+  sudo rm -rf crypto-config channel-artifacts
   tools cryptogen generate --config=/work/crypto-config.yaml --output=/work/crypto-config >/dev/null
   # cryptogen writes as root inside the container; the compose mounts are :ro
   # but still need to be readable by the fabric user in the peer/orderer images.
@@ -136,7 +139,7 @@ cmd_down() {
   $DOCKER compose -f docker-compose.yaml down -v 2>/dev/null || true
   # Chaincode containers are started by the peer, not by compose.
   $DOCKER ps -aq --filter "name=dev-abcd-peer" | xargs -r $DOCKER rm -f >/dev/null 2>&1 || true
-  rm -rf crypto-config channel-artifacts
+  sudo rm -rf crypto-config channel-artifacts
   echo "network down; crypto material and channel artifacts removed"
 }
 
