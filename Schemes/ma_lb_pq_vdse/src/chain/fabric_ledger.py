@@ -113,6 +113,7 @@ class FabricLedger(Ledger):
         msp_id: str = "Org1MSP",
         tls_root_cert: Optional[str] = None,
         timeout: float = 30.0,
+        run_tag: Optional[str] = None,
     ) -> None:
         (self._grpc, self._common, self._identities,
          self._cc, self._proposal, self._peer_grpc) = _load_protos()
@@ -130,8 +131,22 @@ class FabricLedger(Ledger):
         tls_ca = Path(tls_root_cert) if tls_root_cert else (
             crypto / "peers" / "peer0.org1.abcd.local" / "tls" / "ca.crt"
         )
+        # Fabric is PERSISTENT, unlike the dict it replaces. Every sweep point
+        # calls prepare() and re-anchors the same record ids, so without
+        # isolation the second point dies on ImmutabilityError against keys the
+        # first one committed -- correct behaviour from the chaincode, and fatal
+        # to a sweep. Each ledger instance therefore writes under its own
+        # namespace prefix. Immutability still holds where it means something,
+        # within a run, and cross-run collisions become impossible instead of
+        # requiring the channel to be torn down between points.
+        self.run_tag = run_tag or os.environ.get(
+            "ABCD_RUN_TAG", base64.b16encode(os.urandom(6)).decode().lower()
+        )
         self._identity, self._key = self._load_identity(msp)
         self._stub = self._connect(tls_ca)
+
+    def _ns(self, namespace: str) -> str:
+        return f"{self.run_tag}:{namespace}"
 
     # -- identity and transport ---------------------------------------------
     def _load_identity(self, msp: Path):
@@ -271,7 +286,7 @@ class FabricLedger(Ledger):
             previous_hash=previous,
         )
         self._call("Append", [
-            namespace, key,
+            self._ns(namespace), key,
             base64.b64encode(payload).decode(),
             base64.b64encode(domain).decode(),
             str(timestamp_ns),
@@ -285,10 +300,10 @@ class FabricLedger(Ledger):
         )
 
     def get(self, namespace: str, key: str) -> LedgerEntry:
-        return _decode_entry(json.loads(self._call("Get", [namespace, key])))
+        return _decode_entry(json.loads(self._call("Get", [self._ns(namespace), key])))
 
     def keys(self, namespace: str, *, prefix: str = "") -> List[str]:
-        return sorted(json.loads(self._call("Keys", [namespace, prefix])))
+        return sorted(json.loads(self._call("Keys", [self._ns(namespace), prefix])))
 
     def chain_head(self) -> bytes:
         head = json.loads(self._call("MetaJSON", []))["head"]

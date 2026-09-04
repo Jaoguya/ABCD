@@ -31,6 +31,7 @@ from Schemes.ma_lb_pq_vdse.src import config as scheme_config  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import experiments as experiments_mod  # noqa: E402
 from infra import sweep  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import provenance, runner  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.chain import select as chain_select  # noqa: E402
 
 SCHEME_NAME = "ma_lb_pq_vdse"
 
@@ -252,6 +253,9 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             group_faithful=group_faithful,
             fsn_processes=fsn_processes,
             token_scheme_keyed=True,
+            # Must describe the object the experiment CALLED, not a
+            # wish: read from the same switch build_deployment uses.
+            ledger_faithful=chain_select.ledger_is_faithful(),
             runs=runs,
             warmups=warmups,
             # Which scheduler produced these numbers. Exp. 7-8 is a four-way

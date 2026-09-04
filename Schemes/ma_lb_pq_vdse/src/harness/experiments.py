@@ -51,6 +51,7 @@ from ..authority import authority as authority_mod  # noqa: E402
 from ..authority import initializer as init_mod  # noqa: E402
 from ..chain import ipfs as ipfs_mod  # noqa: E402
 from ..chain import ledger as ledger_mod  # noqa: E402
+from ..chain import select as chain_select  # noqa: E402
 from ..chain import outsourcing as out_mod  # noqa: E402
 from ..fsn import fsn as fsn_mod  # noqa: E402
 from ..fsn import pool as fsn_pool  # noqa: E402
@@ -360,7 +361,8 @@ def build_deployment(
     scheme = tokens_mod.TokenScheme.from_config(
         config, search_key or hashes.sha256(b"harness", domain=b"harness/search-key")
     )
-    ledger = ledger_mod.InProcessLedger()
+    # ABCD_LEDGER decides; see chain/select.py. Default is unchanged.
+    ledger = chain_select.make_ledger()
     aim = aim_mod.AuthorizationIndexManager()
     store = ipfs_mod.InProcessContentStore()
     register = out_mod.MetadataRegister()
