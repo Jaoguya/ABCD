@@ -58,10 +58,23 @@ class PanelSpec:
 
     ``metric`` indexes the results.csv columns: 0 is ``primary_mean``, 1 is the
     first secondary, 2 the second. ``tag`` is the (a)/(b)/(c) label.
+
+    ``derive`` makes the panel plot the PRODUCT of two recorded metrics instead
+    of one column, as ``(a, b)`` metric indices; ``metric`` is then ignored.
+    Exp. 6 needs it: neither IAS message size nor FSNs touched is the quantity
+    the selective-propagation claim is about -- the delivered payload is their
+    product, and it is derived here rather than added to the runner so no
+    experiment has to be re-run to report it.
     """
     metric: int
     ylabel: str
     tag: str
+    derive: Optional[Tuple[int, int]] = None
+    #: Opt a SECONDARY panel into a log y-axis. Off by default because a
+    #: secondary is a different quantity from the primary and may be zero or
+    #: narrow-ranging; set it only where the panel's own values are positive
+    #: and span enough to flatten on a linear axis.
+    log_y: bool = False
 
 
 @dataclass(frozen=True)
@@ -116,17 +129,26 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # which is exactly what README S5's "selective propagation is the claim"
     # asks the experiment to show.
     #
-    # Panel (b) is FSNs touched: 1 (ias) / 4 (broadcast) / 37 (full_rebuild),
-    # zero variance, already recorded as secondary_2 by every run -- so this
-    # needs no re-run. Section V must state that the selective saving is in
-    # DELIVERY VOLUME, not in sender-side latency, and why: an in-process
-    # harness models no network.
+    # Panel (b) is the DELIVERED PAYLOAD -- IAS message size x FSNs touched,
+    # derived from secondary_1 and secondary_2, which every run already
+    # records, so no re-run was needed. Bytes rather than a node count because
+    # the quantity the selective claim is about is network load, and "4 nodes"
+    # only becomes a cost once it is multiplied by what each node is sent:
+    # 0.204 KB (ias) / 0.816 KB (broadcast) / 7.55 KB (full_rebuild).
+    #
+    # Section V must state that the selective saving is in DELIVERY VOLUME, not
+    # in sender-side latency, and why: an in-process harness models no network.
     ExperimentSpec(6, "exp6_authorization_sync", "fig_exp6_sync.pdf",
                    "Authorization updates $\\delta$", "Synchronization latency (ms)",
                    log_x=True, log_y=True,
                    panels=(
                        PanelSpec(0, "Synchronization latency (ms)", "a"),
-                       PanelSpec(2, "FSNs touched per update", "b"),
+                       # Log, or the 4x that IS the selective claim (0.204 vs
+                       # 0.816 KB) is squashed against the axis by
+                       # full_rebuild's 7.55 KB. On log the three sit evenly
+                       # apart and both gaps read at a glance.
+                       PanelSpec(1, "IAS payload delivered (KB)", "b",
+                                 derive=(1, 2), log_y=True),
                    )),
     ExperimentSpec(7, "exp7_search_throughput", "fig_exp7_throughput.pdf",
                    "Concurrent queries", "Throughput (queries/s)"),
@@ -543,8 +565,29 @@ def _check_log_y_criterion(spec: ExperimentSpec, series_list: Sequence[Series],
         )
 
 
-def _panel_values(series: Series, metric: int) -> Tuple[List[float], List[float]]:
-    """(values, ci95s) for one metric: 0 is primary, 1+ index the secondaries."""
+def _panel_values(
+    series: Series, metric: int,
+    derive: Optional[Tuple[int, int]] = None,
+) -> Tuple[List[float], List[float]]:
+    """(values, ci95s) for one metric: 0 is primary, 1+ index the secondaries.
+
+    With ``derive=(a, b)`` the panel is the elementwise PRODUCT of metrics a and
+    b, with the error propagated as sqrt((b*sa)^2 + (a*sb)^2). A point is
+    dropped unless BOTH factors have a value there, so a partially-recorded
+    secondary cannot silently contribute a half-computed product.
+    """
+    if derive is not None:
+        a_vals, a_errs = _panel_values(series, derive[0])
+        b_vals, b_errs = _panel_values(series, derive[1])
+        if not a_vals or not b_vals:
+            return [], []
+        n = min(len(a_vals), len(b_vals))
+        values = [a_vals[i] * b_vals[i] for i in range(n)]
+        errs = [
+            math.sqrt((b_vals[i] * a_errs[i]) ** 2 + (a_vals[i] * b_errs[i]) ** 2)
+            for i in range(n)
+        ]
+        return values, errs
     if metric == 0:
         return series.y, series.yerr
     return series.extra.get(metric, ([], []))
@@ -571,14 +614,17 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
             _draw_panel(
                 ax, spec, series_list, warnings,
                 metric=panel.metric, ylabel=panel.ylabel,
+                derive=panel.derive,
                 # Legend once, on the top panel; warnings once, or each series
                 # would report itself three times.
                 add_legend=(i == 0), collect_warnings=(i == 0),
                 # Only the bottom panel carries the shared x label.
                 add_xlabel=(i == len(spec.panels) - 1),
                 # log_y is declared for the PRIMARY metric; a secondary is a
-                # different quantity and may not be positive or wide-ranging.
-                allow_log_y=(panel.metric == 0),
+                # different quantity and may not be positive or wide-ranging, so
+                # it opts in per panel.
+                allow_log_y=(panel.metric == 0 and panel.derive is None)
+                             or panel.log_y,
             )
             ax.set_title(f"({panel.tag})", loc="left", fontsize=8, pad=2)
         fig.align_ylabels(axes)
@@ -598,7 +644,8 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
 def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 warnings: List[str], *, metric: int, ylabel: str,
                 add_legend: bool, collect_warnings: bool,
-                add_xlabel: bool, allow_log_y: bool) -> None:
+                add_xlabel: bool, allow_log_y: bool,
+                derive: Optional[Tuple[int, int]] = None) -> None:
     """Draw every series' `metric` onto one axes."""
     # The furthest point any scheme reached, so a shorter series can be marked.
     _all_x = [v for s in series_list for v in s.x]
@@ -624,7 +671,7 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
         # CAPTION in section V has to state which points are extrapolated --
         # a hollow marker shows a reader that something differs, not what.
         computed = [i for i, n in enumerate(series.n_runs) if n == 0]
-        yvals, yerrs = _panel_values(series, metric)
+        yvals, yerrs = _panel_values(series, metric, derive)
         if not yvals:
             # A scheme that records no such secondary simply has no curve on
             # this panel; the others still draw.
