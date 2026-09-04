@@ -1827,7 +1827,21 @@ class Exp9VerificationGranularity:
 
     def measure(self, prepared: Any) -> Sample:
         d = prepared["deployment"]
-        checker = vledger_mod.chain_checker(d.ledger, check_chain_integrity=False)
+        # BATCHED, for the same reason Exp. 4 batched it in `e252cc9`:
+        # `lookup_anchor` sorts the entire version-identifier namespace on every
+        # call, so a per-record checker makes Step 3 O(r^2). That was invisible
+        # here while this arm built ~632 records' worth of index entries and
+        # measured 20,000 bundles against a 632-anchor namespace; correcting the
+        # unit to one bundle per RECORD put 20,000 anchors in the namespace and
+        # the quadratic term surfaced -- 192 us/record at r=2,000 against
+        # 1,561 us/record at r=20,000, an 8x per-record regression across a
+        # 10x size increase. Both panels of fig:exp4 now use the same Step 3
+        # path, which is also what makes their latencies comparable.
+        checker = vledger_mod.batched_chain_checker(
+            d.ledger,
+            [b.cid for b in prepared["bundles"]],
+            check_chain_integrity=False,
+        )
         started = time.perf_counter_ns()
         batch = proof_mod.verify_response(
             prepared["bundles"],

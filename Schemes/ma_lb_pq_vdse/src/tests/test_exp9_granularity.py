@@ -73,6 +73,31 @@ def test_one_bundle_per_record_not_one_per_index_entry():
     )
 
 
+def test_step3_is_batched_like_exp4s():
+    """Both panels of fig:exp4 must use the same Step 3 path.
+
+    `lookup_anchor` sorts the whole version-identifier namespace per call, so a
+    per-record checker makes Step 3 O(r^2) -- fixed for Exp. 4 in `e252cc9` and
+    not for Exp. 9. It stayed invisible while this arm measured 20,000 bundles
+    against a ~632-anchor namespace; correcting the unit to one bundle per record
+    put 20,000 anchors in that namespace and the quadratic term surfaced, at
+    192 us/record for r=2,000 against 1,561 us/record for r=20,000. Batching
+    restored linearity and took r=20,000 from 31.2 s to 0.95 s.
+
+    Panel (a) and panel (b) latencies are only comparable if both pay the same
+    Step 3, which is the reason this is pinned rather than left to review.
+    """
+    import inspect
+
+    src = inspect.getsource(exp_mod.Exp9VerificationGranularity.measure)
+    assert "batched_chain_checker" in src, (
+        "Exp. 9 must batch the anchor fetch; the per-record checker is O(r^2) "
+        "at this arm's result-set size"
+    )
+    exp4_src = inspect.getsource(exp_mod.Exp4Verification.measure)
+    assert "batched_chain_checker" in exp4_src
+
+
 def test_the_denominator_is_the_record_count_the_deployment_built():
     """No silent top-up from a second record's entries."""
     experiment = _experiment()
