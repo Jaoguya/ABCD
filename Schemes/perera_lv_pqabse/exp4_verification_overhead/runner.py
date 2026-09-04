@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
 from Dataset.corpus import Record
+from Common.timing import measure_ns_quiesced
 
 from ..src import scheme
 from ..src.harness import (
@@ -153,7 +154,8 @@ def run(
                     scheme.verify_record(keys, node, rid, epoch, root)
                 )
 
-        elapsed_ms, _ = measure_ns(verify_batch)
+        # GC-quiesced: see Common/timing.py. Exp. 4 only, not measure_ns itself.
+        elapsed_ms, _ = measure_ns_quiesced(verify_batch)
 
         # A rejected record here is a failure of the harness, not a result:
         # nothing is tampered in Exp. 4, so every proof must check out or the

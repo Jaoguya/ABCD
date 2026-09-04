@@ -29,6 +29,7 @@ from pathlib import Path
 from typing import Optional, Any, Dict, List
 
 from Common.crypto.rng import DeterministicRNG
+from Common.timing import measure_ns_quiesced
 from Dataset.corpus import Record
 
 from .harness import (
@@ -153,7 +154,11 @@ def run(
         s = states_for_r[r]
 
         # Measure ONLY verify() — Alg. 4
-        elapsed_ms, accept = measure_ns(
+        # Collector paused across the region (Common/timing.py): a gen-2 pause
+        # landing inside one run of an Exp. 4 point is ~17 ms against a
+        # single-digit-ms measurement. Exp. 4's four call sites use this; the
+        # shared measure_ns does NOT, so Exp. 1/2/3/5 are unaffected.
+        elapsed_ms, accept = measure_ns_quiesced(
             lambda: scheme.verify(s, kw, sr)
         )
 

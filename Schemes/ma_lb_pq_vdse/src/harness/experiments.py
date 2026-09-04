@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from Common.crypto import hashes  # noqa: E402
 from Common.crypto.rng import DeterministicRNG  # noqa: E402
+from Common.timing import gc_quiesced  # noqa: E402
 
 from .. import config as scheme_config  # noqa: E402
 from .. import types  # noqa: E402
@@ -925,17 +926,24 @@ class Exp4Verification:
     def measure(self, prepared: Any) -> Sample:
         d = prepared["deployment"]
         checker = vledger_mod.chain_checker(d.ledger, check_chain_integrity=False)
-        started = time.perf_counter_ns()
-        batch = proof_mod.verify_response(
-            prepared["bundles"],
-            auth_root=prepared["auth_root"],
-            # Phase VIII Step 2's VID_i = VID_U compares two different counters;
-            # see SCHEME.md. Skipped so the measurement is of the cryptographic
-            # work rather than of a check that rejects every record.
-            require_version_match=False,
-            chain_check=checker,
-        )
-        elapsed = time.perf_counter_ns() - started
+        # Collector paused across the timed region -- see Common/timing.py. This
+        # measurement is byte-identical every run (the bundles are an immutable
+        # fixture built in prepare), so a gen-2 pause landing in one of the ten
+        # was pure interpreter schedule: it put run 4 at r=1000 at 45.4 ms
+        # against 15.13-15.51 ms for the other nine, on two separate days.
+        with gc_quiesced():
+            started = time.perf_counter_ns()
+            batch = proof_mod.verify_response(
+                prepared["bundles"],
+                auth_root=prepared["auth_root"],
+                # Phase VIII Step 2's VID_i = VID_U compares two different
+                # counters; see SCHEME.md. Skipped so the measurement is of the
+                # cryptographic work rather than of a check that rejects every
+                # record.
+                require_version_match=False,
+                chain_check=checker,
+            )
+            elapsed = time.perf_counter_ns() - started
         if batch.accepted_count != batch.record_count:
             raise RuntimeError(
                 f"{len(batch.rejected)} of {batch.record_count} bundles failed "

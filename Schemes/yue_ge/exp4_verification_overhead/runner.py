@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Optional, Any, Dict, Sequence
 
 from Dataset.corpus import Record
+from Common.timing import measure_ns_quiesced
 
 from ..src import peony_plus
 from ..src.digest import DIGEST_BYTES
@@ -176,7 +177,8 @@ def run(
                 ctx["result_ids"], ctx["batch_ids"],
             )
 
-        elapsed_ms, outcome = measure_ns(do_verify)
+        # GC-quiesced: see Common/timing.py. Exp. 4 only, not measure_ns itself.
+        elapsed_ms, outcome = measure_ns_quiesced(do_verify)
 
         # The proof the verifier consumes: the combined digest plus the
         # per-batch prooflist entries it XORs together. Constant in r — that is
