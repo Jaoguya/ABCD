@@ -1,0 +1,39 @@
+# cryptogen input — the MSP material the compose file needs and never had.
+#
+# infra/fabric/docker-compose.yaml sets ORDERER_GENERAL_LOCALMSPDIR and
+# CORE_PEER_MSPCONFIGPATH but nothing ever populated them, so neither container
+# could start: Fabric refuses to boot without signcerts and a keystore. That is
+# why "docker compose up -d" had never actually been run against this file.
+#
+# Generated at bring-up by infra/fabric/network.sh, NOT checked in. The compose
+# file's own note gives the reason: checked-in MSP keys would be both a security
+# problem and an unreviewable binary blob. Regenerating means the network is
+# reproducible from this file alone.
+#
+# Single org, single peer, solo orderer — the scope infra/fabric/README.md
+# already fixes. Enough to measure ordering latency and an endorsement
+# round-trip, and explicitly not a production topology.
+
+OrdererOrgs:
+  - Name: Orderer
+    Domain: abcd.local
+    EnableNodeOUs: true
+    Specs:
+      - Hostname: orderer
+        SANS:
+          - orderer
+          - localhost
+          - 127.0.0.1
+
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.abcd.local
+    EnableNodeOUs: true
+    Template:
+      Count: 1
+      SANS:
+        - peer
+        - localhost
+        - 127.0.0.1
+    Users:
+      Count: 1
