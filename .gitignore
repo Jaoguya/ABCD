@@ -79,3 +79,9 @@ Thumbs.db
 # Plots/output/*.pdf                                       -> committed figures
 infra/fabric/ipfs-data/
 harvest-*/
+infra/fabric/pyproto/
+infra/fabric/crypto-config/
+infra/fabric/channel-artifacts/
+infra/fabric/ipfs-data/
+infra/fabric/chaincode/vendor/
+infra/fabric/chaincode/go.sum

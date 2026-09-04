@@ -98,7 +98,10 @@ cmd_up() {
   echo "==> 5/6 packaging and installing chaincode"
   deploy_chaincode
 
-  echo "==> 6/6 ready"
+  echo "==> 6/6 python bindings"
+  gen_pyproto
+
+  echo "==> ready"
   cmd_status
 }
 
@@ -135,6 +138,32 @@ deploy_chaincode() {
     --channelID "$CHANNEL" --name "$CC_NAME" --version "$CC_VERSION" \
     --sequence 1 >/dev/null
   echo "    committed $CC_NAME v$CC_VERSION on $CHANNEL"
+}
+
+# Compile the Fabric protobufs the adapter imports. There is no maintained
+# Python SDK for v2.5 -- fabric-sdk-py's last release does not build on 3.11
+# (pysha3) and predates the Gateway -- so chain/fabric_ledger.py talks to the
+# peer's Endorser service directly and needs these bindings. Generated here
+# rather than checked in: 56 files of generated code is not reviewable, and the
+# protos must match the Fabric version this directory actually runs.
+gen_pyproto() {
+  local out="$HERE/pyproto"
+  if [ -f "$out/peer/peer_pb2_grpc.py" ]; then
+    echo "    bindings present"; return 0
+  fi
+  local py="${ABCD_PY:-$HOME/.venv-malbpq/bin/python}"
+  "$py" -c "import grpc_tools" 2>/dev/null || "$py" -m pip install -q grpcio grpcio-tools
+  rm -rf "$out" /tmp/fabric-protos
+  git clone -q --depth 1 -b main https://github.com/hyperledger/fabric-protos.git /tmp/fabric-protos
+  mkdir -p "$out"
+  ( cd /tmp/fabric-protos && "$py" -m grpc_tools.protoc -I. \
+      --python_out="$out" --grpc_python_out="$out" \
+      $(find common msp peer gateway -name "*.proto") )
+  # protoc emits implicit-namespace packages; the adapter imports `common.x`
+  # and `peer.y`, which resolve without __init__.py on 3.3+, but an explicit
+  # marker keeps them importable if anything ever prepends a path.
+  find "$out" -type d -exec touch {}/__init__.py \;
+  echo "    $(find "$out" -name '*_pb2*.py' | wc -l | tr -d ' ') modules -> infra/fabric/pyproto"
 }
 
 cmd_down() {
