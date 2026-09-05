@@ -158,6 +158,45 @@ max/median 1.13.
 
 ---
 
+## 3.2 Reproducibility: the same code, re-run, is 2-5% slower
+
+Exp. 4 was re-run on 2026-09-05 at `4ebbcb6` to check §3.1. `Exp4Verification`
+is untouched between the two commits -- `d558d63` and `4ebbcb6` edit only
+`Exp9VerificationGranularity` -- so this measures IDENTICAL code on the same
+instance, and any difference is environmental.
+
+| r | `7994188` | `4ebbcb6` | delta | within the two CIs? |
+|---|---|---|---|---|
+| 10 | 18.186 ±0.222 | 18.722 ±0.137 | +2.9% | **no** |
+| 50 | 85.320 ±2.621 | 87.134 ±1.111 | +2.1% | yes |
+| 100 | 163.538 ±0.598 | 171.793 ±1.410 | +5.0% | **no** |
+| 500 | 816.055 ±5.546 | 843.164 ±2.297 | +3.3% | **no** |
+| 1000 | 1632.627 ±11.062 | 1675.341 ±9.564 | +2.6% | **no** |
+
+**The offset is systematic, not noise: every point moved the same direction.**
+At r=1000 the two runs differ by 42.7 ms while their intervals are ±11.1 and
+±9.6, so they do not overlap.
+
+**What this means for the error bars.** Within-run spread at r=1000 is ~0.7% of
+the mean; between-run spread is ~2.6%. The published ±95% CI therefore describes
+repetition noise INSIDE one process against one Fabric deployment. It does not
+describe what a reader would get re-running the experiment, which is the thing a
+reproducibility claim is about. Both runs are individually clean -- 10/10 `ok`,
+mean/median 1.000-1.005, worst max/median 1.05.
+
+**Most likely cause, NOT verified:** the network is torn down and rebuilt
+between runs (`network.sh down` then `up` regenerates crypto material, restarts
+the containers and starts LevelDB cold), so the second run met a different,
+freshly-built ledger. That is real deployment variance rather than measurement
+error, but it has not been isolated -- doing so needs several runs against ONE
+bring-up, compared against several across separate bring-ups.
+
+**Nothing downstream moves.** Still 4th of four, still ~7.4x Scheme [54]
+(1675.3 against 220.7), still linear at ~1.68 ms/record, chain still ~99%. Every
+manuscript edit in section 5 stands.
+
+---
+
 ## 4. Why it is O(r), and whether it has to be
 
 `commit_record(entries=…)` builds `Root_i` over **one record's** index entries,
