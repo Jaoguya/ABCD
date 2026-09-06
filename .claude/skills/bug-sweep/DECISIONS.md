@@ -393,3 +393,35 @@ extrapolated points, its markers are already drawn hollow, and
 `MANUSCRIPT_FIXES.txt` item 1 carries the caption text that says so.
 
 **Blocked:** nothing. Three boxes were started for this and are stopped again.
+
+---
+
+## 2026-09-07 — PSA Exp. 8 still does not separate, and now I know why
+
+**Not a scheduler result. A harness modelling limit.** After the conjunctive
+and per-policy-grouping fixes, PSA requests match (950 hits / 40 requests) and
+the nodes saturate (max_util 0.83-0.91, up from 0.77). The four arms still sit
+at 0.04-0.12 std dev with no ordering, where Option D separates ~9x.
+
+**The mechanism:** a request is dispatched to ONE node. Under PSA the query is
+one group per authorized policy, and the shard evaluates only the groups whose
+domain it serves -- a request with |P_U|=8 spanning four domains does 2 of its
+8 groups on the chosen node and drops the rest. So per-request work varies with
+how well the user's policies match that node's domain, which flattens
+utilization regardless of which scheduler chose the node. Routing is identical
+between constructions ({FSN1:36, FSN2:12, FSN3:8, FSN4:4} in both), so the
+scheduler is not what differs.
+
+Option D has one token with no policy, so the chosen node always does the same
+work and `no_lb` pins as it should.
+
+**The real fix is cross-node forwarding** -- a multi-domain PSA request should
+reach every node holding an authorized shard, which is the communication
+README §5 already records as unmeasurable at d = m = 4. That is a change to
+what Exp. 7-8 model, not a bug fix.
+
+**RESOLVED: cite Option D's Exp. 8 for the load-balancing claim** (which §V
+already does) and report psa_exp8 as measuring the construction's per-request
+cost, not scheduler quality. `MANUSCRIPT_FIXES.txt` item 6 already tells §V to
+separate the two constructions' results; this is why it matters for Exp. 8
+specifically.
