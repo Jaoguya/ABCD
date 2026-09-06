@@ -235,14 +235,32 @@ def test_exp6_rejects_an_unknown_arm(config):
 # ===========================================================================
 # Registry
 # ===========================================================================
-def test_build_refuses_an_experiment_with_no_psa_form(config):
-    with pytest.raises(KeyError, match="no policy-state-aware experiment"):
+def test_corpus_backed_experiments_refuse_to_run_without_a_source(config):
+    """Exp. 2 reads the corpus, so it cannot be built from config alone.
+
+    Silently falling back to an invented world is exactly the defect the
+    corpus seam exists to close -- it would produce a plausible curve from
+    data the paper never claims.
+    """
+    with pytest.raises(ValueError, match="needs a record source"):
         psa.build(2, config)
+
+
+def test_build_refuses_an_experiment_with_no_psa_form(config):
+    # 7 and 8 are the ones still without a psa form. This said `2` until the
+    # corpus seam landed and Exp. 2 gained one -- a test that quietly stops
+    # testing the thing it names is worse than no test.
+    with pytest.raises(KeyError, match="no policy-state-aware experiment"):
+        psa.build(7, config)
 
 
 @pytest.mark.parametrize("number", sorted(psa.PSA_EXPERIMENTS))
 def test_every_registered_experiment_runs(number, config):
-    experiment = psa.build(number, config)
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as option_d_mod
+
+    experiment = psa.build(
+        number, config, source=option_d_mod.SyntheticRecordSource()
+    )
     sample = _run(experiment, experiment.values[0])
     assert sample.primary >= 0.0
     assert set(sample.secondaries) == {m.name for m in experiment.secondaries}

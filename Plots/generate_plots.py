@@ -280,6 +280,20 @@ PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                        # constant factor rather than converging anywhere.
                        PanelSpec(1, "Tokens issued $|T_Q|$", "b", log_y=True),
                    )),
+    # The online search path under the policy-bound token. Same boundary and
+    # the same x as `fig_exp2_search.pdf`, so the two are comparable at the
+    # same N. Panel (b) is the structural cost D1 imposes: entries per DISTINCT
+    # token, which is a SHARING ratio -- Option D's H(w) shares one posting
+    # list across every record carrying the keyword, PSA shares only within a
+    # (policy, domain, PV).
+    ExperimentSpec(2, "psa_exp2_search_latency", "fig_psa_exp2_search.pdf",
+                   "Index size $N$ (records)", "Search latency (ms)",
+                   log_x=True, log_y=True, prefix="psa_",
+                   panels=(
+                       PanelSpec(0, "Search latency (ms)", "a", log_x=True),
+                       PanelSpec(4, "Entries per distinct token", "b",
+                                 log_x=True),
+                   )),
     # D9. Panel (b) is the whole claim: Option D issues ONE trapdoor at every
     # d, this construction issues q per authorized policy. Both curves live in
     # the same results.csv (`tokens_issued` and `option_d_tokens_issued`), so

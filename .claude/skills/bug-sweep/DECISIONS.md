@@ -161,3 +161,25 @@ consistency, which §5 puts inside Exp. 4's boundary — so it is a lower bound,
 not the experiment §V describes.
 
 **Blocked:** nothing else; Exp. 1, 3, 5 and 6 are unaffected.
+
+---
+
+## 2026-09-06 — a timing assertion in the Option D Exp. 6 unit tests is flaky
+
+**Found:** `test_exp6_propagation_ablation.py::test_full_rebuild_costs_more_than_the_incremental_path`
+failed once in a full-suite run and passed three times in isolation and on the
+next full run. It compares wall-clock latency between two arms inside a unit
+test, so it loses a race whenever the suite is under load.
+
+**Costs:** no measured number — it is a test, not an experiment. The cost is a
+red suite that is not a real regression, which is how a real one gets ignored.
+
+**Options:**
+- **A (would take)** — assert on the mechanism instead of the clock: the arm
+  does more WORK (authorities re-committed, nodes touched), which is already
+  recorded and is deterministic. Same claim, no race.
+- **B** — keep the timing assertion and give it a wide margin. Cheaper, but a
+  margin wide enough to never flake is wide enough to never catch anything.
+
+**Blocked:** nothing. Not touched this session because it is Option D's test
+and the session's changes are on the psa side.

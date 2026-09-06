@@ -58,6 +58,7 @@ FOLDERS = {
 #: exists to prevent.
 PSA_FOLDERS = {
     1: "psa_exp1_token_generation",
+    2: "psa_exp2_search_latency",
     3: "psa_exp3_crossdomain_tokens",
     4: "psa_exp4_verification_overhead",
     5: "psa_exp5_retokenization",
@@ -349,7 +350,9 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
     for number in numbers:
       for variant in _variants_for(number):
         if psa:
-            experiment = psa_mod.build(number, config, variant=variant or "")
+            experiment = psa_mod.build(
+                number, config, variant=variant or "", source=source
+            )
         else:
             experiment = experiments_mod.build_experiment(
                 number, config, source, variant=variant
@@ -363,12 +366,23 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         # `reportable: true`. psa_experiments.py's docstring asserts the
         # opposite ("reportability() refuses it"), and that assertion was only
         # ever true by accident of the corpus being missing.
-        psa_corpus = "psa_in_process"
+        # A corpus-backed PSA experiment reads the SAME records Option D reads,
+        # so it inherits the corpus provenance and can be reportable. One that
+        # builds its world with `build_world()` cannot, and says so.
+        psa_corpus = (
+            source.corpus_type
+            if getattr(experiment, "CORPUS_BACKED", False)
+            else "psa_in_process"
+        )
         metadata = provenance.build_metadata(
             config,
             experiment=experiment.name,
             corpus_type=psa_corpus if psa else source.corpus_type,
-            corpus_sha256=None if psa else source.corpus_sha256,
+            corpus_sha256=(
+                source.corpus_sha256
+                if not psa or getattr(experiment, "CORPUS_BACKED", False)
+                else None
+            ),
             group_faithful=group_faithful,
             fsn_processes=fsn_processes,
             token_scheme_keyed=True,

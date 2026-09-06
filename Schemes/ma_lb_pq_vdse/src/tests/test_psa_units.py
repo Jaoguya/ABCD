@@ -412,3 +412,122 @@ def test_psa_exp4_rejects_an_unanchored_commitment(config):
     checker = psa_mod._psa_batched_chain_checker({}, prepared["cids"])
     result = psa_verify_mod.verify_bundle(prepared["bundles"][0], chain_check=checker)
     assert not result.accepted and result.failed_step == "chain"
+
+
+# ===========================================================================
+# The corpus seam — PSA must read the records Option D reads
+# ===========================================================================
+def _source():
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as option_d_mod
+
+    return option_d_mod.SyntheticRecordSource()
+
+
+def test_psa_deployment_reads_the_same_source_as_option_d(config):
+    """The whole point of the seam.
+
+    Before this, every PSA number came from `build_world()` — invented
+    policies, CIDs and keywords — so no PSA figure could ever be reportable,
+    and `|W_i|` was a hardcoded 6 against the corpus's ~32. Both Exp. 4 and
+    Exp. 5 divide by that.
+    """
+    source = _source()
+    theirs = option_d.build_deployment(config=config, source=source, records=120)
+    ours = psa_mod.psa_build_deployment(config=config, source=source, records=120)
+    assert len(ours.records) == len(theirs.records)
+    # Same records, so the same policies and domains -- derived from the
+    # source, never stipulated.
+    assert {r["policy"] for r in ours.records} == {
+        r["record"].policy_id for r in theirs.records
+    }
+    assert {r["domain"] for r in ours.records} == {
+        r["record"].domain for r in theirs.records
+    }
+
+
+def test_psa_deployment_carries_the_sources_provenance(config):
+    """A corpus-backed run may be reportable; an invented one may not."""
+    ours = psa_mod.psa_build_deployment(
+        config=config, source=_source(), records=20
+    )
+    assert ours.corpus_type == _source().corpus_type
+
+
+def test_psa_governance_is_derived_from_real_policy_ids(config):
+    """`extract` emits `<domain>/polN`, which PolicyGovernance parses."""
+    ours = psa_mod.psa_build_deployment(
+        config=config, source=_source(), records=60
+    )
+    assert ours.world.policies, "no policies were discovered from the source"
+    for policy in ours.world.policies:
+        governing = ours.world.governance.governing(policy)
+        assert len(governing) == 2, governing
+        # The policy's own domain authority must be among them.
+        owner = ours.world.authorities[policy.split("/", 1)[0]]
+        assert owner in governing
+
+
+def test_psa_shards_are_real_indexes_not_dicts(config):
+    """Exp. 2 measures bitmap + Bloom + traversal; a dict measures none of it."""
+    ours = psa_mod.psa_build_deployment(
+        config=config, source=_source(), records=80
+    )
+    total = 0
+    for _node_id, served, index in ours.nodes:
+        assert hasattr(index, "authorized_bitmap"), "not a DynamicSearchIndex"
+        total += index.entry_count
+    assert total == ours.entry_count > 0
+
+
+# ===========================================================================
+# Exp. 2 — what D1's token binding costs the search path
+# ===========================================================================
+def test_psa_exp2_issues_q_times_pu_tokens(config):
+    """Option D issues q; this issues one per (keyword, authorized policy)."""
+    experiment = psa.build(2, config, source=_source())
+    sample = experiment.measure(experiment.prepare(10000))
+    q = config.defaults.keywords_per_query
+    issued = sample.secondaries["tokens_issued"]
+    assert issued > q, f"{issued} tokens for q={q}; the |P_U| factor is missing"
+    assert issued % q == 0
+
+
+def test_psa_exp2_shares_fewer_posting_lists_than_option_d(config):
+    """The measured cost of D1 on index structure.
+
+    Option D's `H(w)` shares one posting list across every record carrying the
+    keyword. The PSA token binds (policy, domain, PV), so sharing only happens
+    within one of those — the ratio must be strictly lower.
+    """
+    source = _source()
+    experiment = psa.build(2, config, source=source)
+    n = 50000
+    ours = experiment.measure(experiment.prepare(n)).secondaries["entries_per_token"]
+
+    theirs = option_d.build_deployment(
+        config=config, source=source, records=max(1, n // source.keywords_per_record)
+    )
+    entries = sum(node.index.entry_count for node in theirs.nodes)
+    tokens = sum(node.index.token_count for node in theirs.nodes)
+    assert ours < entries / max(tokens, 1), (
+        f"PSA shares {ours:.2f} entries per token against Option D's "
+        f"{entries / max(tokens, 1):.2f}; D1's binding must reduce sharing"
+    )
+
+
+def test_psa_exp2_survives_the_multiprocess_replay_boundary(config):
+    """Exp. 7-8 fork one worker per FSN, so the index must pickle.
+
+    Asserted here rather than in Exp. 7-8 because it is a property of the
+    ENTRY type, and finding it out during a concurrency run would cost a
+    campaign slot rather than a millisecond.
+    """
+    import pickle
+
+    ours = psa_mod.psa_build_deployment(
+        config=config, source=_source(), records=40
+    )
+    index = ours.nodes[0][2]
+    assert pickle.loads(pickle.dumps(index)).entry_count == index.entry_count
+    entry = ours.records[0]["entries"][0]
+    assert pickle.loads(pickle.dumps(entry)) == entry
