@@ -531,3 +531,72 @@ def test_psa_exp2_survives_the_multiprocess_replay_boundary(config):
     assert pickle.loads(pickle.dumps(index)).entry_count == index.entry_count
     entry = ours.records[0]["entries"][0]
     assert pickle.loads(pickle.dumps(entry)) == entry
+
+
+# ===========================================================================
+# Exp. 7-8 — the scheduler ablation under the policy-bound token
+# ===========================================================================
+def test_psa_scheduler_ablation_only_overrides_prepare(config):
+    """The measured path stays Option D's.
+
+    Scheduler, replay, FSN pool and utilization sampling are
+    construction-independent, and a second copy of them would drift from the
+    first. If this list ever grows, a measured path has been forked.
+    """
+    overridden = {
+        name for name in vars(psa_mod.PsaSchedulerAblation)
+        if not name.startswith("__")
+    }
+    assert overridden == {"prepare"}, overridden
+
+
+def test_psa_exp7_shards_hold_psa_entries_and_tokens_scale_with_pu(config):
+    """The two things that make it a PSA measurement rather than a rerun."""
+    from Schemes.ma_lb_pq_vdse.src.psa import records as psa_records_mod
+
+    experiment = psa_mod.PsaExp7Throughput(
+        config=config, source=_source(), variant="aass"
+    )
+    prepared = experiment.prepare(60)
+    deployment, requests = prepared["deployment"], prepared["requests"]
+    assert requests, "the trace is empty; every request was rejected"
+
+    for node in deployment.nodes:
+        assert node.index.entry_count > 0
+    sample_entry = deployment.records[0]["psa_entries"][0]
+    assert isinstance(sample_entry, psa_records_mod.PolicyStateIndexEntry)
+
+    # One token per (keyword, authorized policy). Option D issues one per
+    # keyword, so |P_U| > 1 must mean strictly more tokens.
+    trapdoor, decision = requests[0]
+    assert len(trapdoor.tokens) == len(decision.authorized_shards)
+    assert len(trapdoor.tokens) > 1
+
+
+def test_psa_exp7_uses_the_same_keyword_count_as_option_d(config):
+    """Otherwise the comparison measures two workloads, not two constructions.
+
+    A draft took q=5 here while Option D's trace takes one keyword, and the
+    resulting "PSA is 1.38x faster" was entirely that mismatch.
+    """
+    source = _source()
+    ours = psa_mod.PsaExp7Throughput(config=config, source=source, variant="aass")
+    theirs = option_d.Exp7Throughput(config=config, source=source, variant="aass")
+    mine = ours.prepare(40)["requests"]
+    yours = theirs.prepare(40)["requests"]
+    assert mine and yours
+    # Option D: q tokens. PSA: q * |P_U|. Same q means the ratio is exactly
+    # the authorized-policy count.
+    ratio = len(mine[0][0].tokens) / len(yours[0][0].tokens)
+    assert ratio == len(mine[0][1].authorized_shards)
+
+
+def test_psa_exp8_shares_the_ablation_and_its_metrics(config):
+    """Exp. 8 must keep Option D's metric names, or the figures diverge."""
+    ours = psa_mod.PsaExp8LoadBalance(config=config, source=_source())
+    theirs = option_d.Exp8LoadBalance(config=config, source=_source())
+    assert ours.primary.name == theirs.primary.name
+    assert [m.name for m in ours.secondaries] == [
+        m.name for m in theirs.secondaries
+    ]
+    assert ours.variable == theirs.variable

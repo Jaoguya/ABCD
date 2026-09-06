@@ -19,6 +19,7 @@ import pytest  # noqa: E402
 
 from Schemes.ma_lb_pq_vdse.src import config as scheme_config  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import psa_experiments as psa  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src import main as main_mod  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -247,11 +248,18 @@ def test_corpus_backed_experiments_refuse_to_run_without_a_source(config):
 
 
 def test_build_refuses_an_experiment_with_no_psa_form(config):
-    # 7 and 8 are the ones still without a psa form. This said `2` until the
-    # corpus seam landed and Exp. 2 gained one -- a test that quietly stops
-    # testing the thing it names is worse than no test.
+    # Experiment 9 (tamper granularity) is the only one left without a psa
+    # form. This said `2`, then `7`, and each time the number it named GAINED a
+    # psa form and the test stopped testing anything -- so it now asserts
+    # against the registry rather than a literal, and fails loudly if 9 is ever
+    # covered too.
+    uncovered = sorted(set(main_mod.FOLDERS) - set(psa.PSA_EXPERIMENTS))
+    assert uncovered, (
+        "every experiment now has a psa form; this test needs a new subject "
+        "or deleting, not a different number"
+    )
     with pytest.raises(KeyError, match="no policy-state-aware experiment"):
-        psa.build(7, config)
+        psa.build(uncovered[0], config)
 
 
 @pytest.mark.parametrize("number", sorted(psa.PSA_EXPERIMENTS))

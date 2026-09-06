@@ -183,3 +183,40 @@ red suite that is not a real regression, which is how a real one gets ignored.
 
 **Blocked:** nothing. Not touched this session because it is Option D's test
 and the session's changes are on the psa side.
+
+---
+
+## 2026-09-06 — Option D's Exp. 7-8 workload uses ONE keyword, not §V's five
+
+**Found:** `experiments.py:1616`, `SchedulerAblation.prepare`:
+
+    token = token_mod.generate_search_token(
+        deployment.scheme, profile, [record["record"].keywords[0]]
+    )
+
+One keyword per query, with no comment saying why. README §6 fixes
+`q = 5`, sourced to §V ("each query contains five keywords"), and every other
+experiment honours it. So Exp. 7's throughput and Exp. 8's utilization spread
+were both measured on a `q=1` workload and reported against a paper that says
+5.
+
+Same class as the 2026-09-03 Exp. 2 defect (`keywords[0]` of the first record):
+the number is real, the workload is not the published one.
+
+**Costs:** `exp7_search_throughput__*` and `exp8_load_balance__*` — 4 variants
+each, all banked, all in §V. Throughput at `q=5` will be LOWER: each request
+does five posting-list lookups instead of one. Whether the AASS-vs-baseline
+ORDERING survives is the open question, and it is the ordering the paper's
+claim rests on.
+
+**Options:**
+- **A (would take)** — use `keywords[:q]` with `q` from `config.defaults`, and
+  re-run Exp. 7-8 for all four variants under both constructions. Makes the
+  workload the one §V describes.
+- **B** — keep `q=1` and state it in §V as a deliberate single-keyword
+  workload. Honest, but it contradicts §V's own sentence and README §6, and
+  weakens Exp. 7 as evidence for a multi-keyword scheme.
+
+**Blocked:** nothing today. The PSA arm deliberately uses the SAME one keyword
+so that its comparison against Option D isolates the construction; if this is
+fixed, both arms change together and stay comparable.

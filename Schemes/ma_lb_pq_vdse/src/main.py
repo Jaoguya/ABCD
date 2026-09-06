@@ -63,6 +63,8 @@ PSA_FOLDERS = {
     4: "psa_exp4_verification_overhead",
     5: "psa_exp5_retokenization",
     6: "psa_exp6_affected_ratio",
+    7: "psa_exp7_search_throughput",
+    8: "psa_exp8_load_balance",
 }
 
 

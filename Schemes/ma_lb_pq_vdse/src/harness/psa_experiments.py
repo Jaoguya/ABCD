@@ -55,6 +55,9 @@ from Common.crypto import hashes, merkle  # noqa: E402
 from Common.timing import gc_quiesced  # noqa: E402
 
 from ..index import dsi as dsi_mod  # noqa: E402
+from ..aim import verification as authz_mod  # noqa: E402
+from ..user import token as token_mod  # noqa: E402
+from . import experiments as experiments_mod  # noqa: E402
 
 from .. import config as scheme_config  # noqa: E402
 from ..psa import commit as psa_commit  # noqa: E402
@@ -1146,6 +1149,171 @@ class PsaExp4Verification:
         )
 
 
+# ===========================================================================
+# Exp. 7-8 — the scheduler ablation under the policy-bound token
+# ===========================================================================
+@dataclass(frozen=True)
+class _PsaTrapdoor:
+    """What the replay reads off a trapdoor: ``.tokens`` and ``.vid_u``.
+
+    The forked replay in ``SchedulerAblation._replay_multiprocess`` touches a
+    trapdoor through exactly those two attributes, so the PSA arm supplies
+    them and the replay, the scheduler and the FSN pool are left untouched.
+    Nothing about the measured path is re-implemented here.
+    """
+
+    tokens: Tuple[bytes, ...]
+    vid_u: int
+
+
+class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
+    """Exp. 7-8 with PSA entries in the shards and PSA tokens in the trace.
+
+    **Only ``prepare`` is overridden.** The scheduler, the replay, the FSN pool
+    and the utilization sampling are Option D's, unchanged -- they are
+    construction-independent, and re-implementing them would mean two copies of
+    the measured path drifting apart. Three things had to be true for that to
+    work, and each was checked before this class was written:
+
+    * ``FogSearchNode`` holds a ``PolicyStateIndexEntry`` without modification,
+      because ``DynamicSearchIndex`` keys on token/cid/policy_id and stores the
+      entry opaquely.
+    * ``C_j^sync`` still resolves. ``PolicyVersionState`` carries a per-authority
+      INTEGER version; only the ``PV`` digest is unordered, so
+      ``vid_for_domains`` and AASS's five-term cost vector are unaffected.
+    * Entries and a loaded index both pickle, so the fork boundary is safe.
+      Pinned by ``test_psa_exp2_survives_the_multiprocess_replay_boundary``.
+
+    **What it should show.** A request under ``T = H(w ‖ PID ‖ PV ‖ Dom)``
+    carries ``q·|P_U|`` tokens where Option D's carries ``q``, so each unit of
+    work is heavier and throughput must fall. That is the cost of D1 on the
+    online path, and Exp. 8 shows whether it also changes how the load spreads.
+    """
+
+    def prepare(self, value: Any) -> Any:
+        concurrency = int(value)
+        record_count = max(
+            1, int(self.config.defaults.index_size) // self.source.keywords_per_record
+        )
+        # Option D's deployment supplies the INFRASTRUCTURE -- authorities, AIM,
+        # ledger, FSN set, and the record population `_population` reads. Only
+        # the indexed entries and the trace's tokens are swapped below.
+        deployment = experiments_mod.build_deployment(
+            config=self.config, source=self.source, records=record_count
+        )
+
+        authorities = _authorities(deployment.domains)
+        roster = sorted(authorities.values())
+        world = _World(
+            domains=tuple(deployment.domains),
+            authorities=authorities,
+            governance=psa_gov.PolicyGovernance.from_domains(authorities),
+            versions={a: 1 for a in roster},
+            commitments={a: bytes([i + 1]) * 32 for i, a in enumerate(roster)},
+            policies=tuple(sorted({
+                r["record"].policy_id for r in deployment.records
+            })),
+        )
+        scheme = _keyed_scheme()
+
+        # REPLACE the shard contents. The nodes keep their identity, domains,
+        # queues and authorization state -- what changes is the construction
+        # whose entries they serve.
+        for node in deployment.nodes:
+            node.index = dsi_mod.DynamicSearchIndex.from_config(
+                sorted(node.domains), self.config
+            )
+        for entry in deployment.records:
+            record = entry["record"]
+            pv = world.pv(record.policy_id)
+            psa_entries = [
+                psa_records.PolicyStateIndexEntry(
+                    token=scheme.index_token(
+                        kw, policy_id=record.policy_id, pv=pv, domain=record.domain
+                    ),
+                    cid=entry["cid"], policy_id=record.policy_id, pv=pv,
+                )
+                for kw in record.keywords
+            ]
+            entry["psa_entries"] = psa_entries
+            for node in deployment.nodes:
+                if node.serves_domain(record.domain):
+                    node.index.insert_record(psa_entries, domain=record.domain)
+
+        population = self._population(deployment)
+        by_domain: Dict[str, List[Any]] = {d: [] for d in deployment.domains}
+        for entry in deployment.records:
+            by_domain[entry["record"].domain].append(entry)
+
+        requests = []
+        for index in range(concurrency):
+            profile, authority_ids, attributes, resolver, subset = (
+                population[index % len(population)]
+            )
+            domain = subset[index % len(subset)]
+            pool_for_domain = by_domain[domain]
+            if not pool_for_domain:
+                continue
+            record = pool_for_domain[index % len(pool_for_domain)]
+            option_d_token = token_mod.generate_search_token(
+                deployment.scheme, profile, [record["record"].keywords[0]]
+            )
+            decision = authz_mod.verify_search_request(
+                deployment.aim, option_d_token, profile,
+                authority_ids=authority_ids, attributes=attributes,
+                resolver=resolver,
+            )
+            if not decision.accepted:
+                continue
+            # q * |P_U|: one token per (keyword, authorized policy). |P_U| is
+            # the authorized shard set the AIM just resolved, so the count is
+            # the user's real authorization scope rather than a chosen number.
+            scopes = [
+                psa_tokens.PolicyScopedQuery(
+                    policy_id=policy, domain=dom, pv=world.pv(policy)
+                )
+                for dom, policy in decision.authorized_shards
+            ]
+            # THE SAME KEYWORD SET Option D's trace uses -- one keyword --
+            # so the only difference between the two arms is the construction.
+            # An earlier draft took q=5 here, which made the PSA request carry
+            # 5x the keywords AND |P_U|x the policies, and the resulting
+            # "PSA is 1.38x faster" was an artefact of comparing two different
+            # workloads. Option D's trace using ONE keyword against §V's
+            # published q=5 is itself a defect, recorded in DECISIONS.md; it is
+            # not this arm's to fix unilaterally, because it moves banked
+            # Exp. 7-8 numbers.
+            keywords = [record["record"].keywords[0]]
+            psa_query = psa_tokens.generate_query_tokens(scheme, keywords, scopes)
+            requests.append((
+                _PsaTrapdoor(tokens=psa_query, vid_u=option_d_token.vid_u),
+                decision,
+            ))
+        requests = tuple(requests)
+        self._ramp(deployment, requests, concurrency)
+        return dict(
+            deployment=deployment, requests=requests, concurrency=concurrency
+        )
+
+
+@dataclass
+class PsaExp7Throughput(PsaSchedulerAblation, experiments_mod.Exp7Throughput):
+    """Exp. 7 under the PSA construction."""
+
+    name: str = "psa_exp7_search_throughput"
+    number: int = 7
+    CORPUS_BACKED: ClassVar[bool] = True
+
+
+@dataclass
+class PsaExp8LoadBalance(PsaSchedulerAblation, experiments_mod.Exp8LoadBalance):
+    """Exp. 8 under the PSA construction."""
+
+    name: str = "psa_exp8_load_balance"
+    number: int = 8
+    CORPUS_BACKED: ClassVar[bool] = True
+
+
 #: Registry, mirroring ``experiments.py``'s numbering so a PSA run and an
 #: Option D run of the same experiment number are directly comparable.
 PSA_EXPERIMENTS = {
@@ -1155,6 +1323,8 @@ PSA_EXPERIMENTS = {
     4: PsaExp4Verification,
     5: PsaExp5ReTokenization,
     6: PsaExp6AffectedRatio,
+    7: PsaExp7Throughput,
+    8: PsaExp8LoadBalance,
 }
 
 

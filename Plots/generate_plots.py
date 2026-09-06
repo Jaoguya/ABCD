@@ -345,6 +345,21 @@ PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     #
     # Linear x: the ratio sweep is 0.1-1.0, a single decade with a zero-ish
     # lower end, so a log axis would stretch the first gap and squash the rest.
+    # Exp. 7-8 keep Option D's arms, metrics and axes -- they ablate the
+    # SCHEDULER, which is construction-independent. What differs is that each
+    # request carries |P_U| tokens instead of one, so the same four curves are
+    # drawn over a heavier unit of work.
+    ExperimentSpec(7, "psa_exp7_search_throughput", "fig_psa_exp7_throughput.pdf",
+                   "Concurrent queries", "Throughput (queries/s)",
+                   prefix="psa_"),
+    ExperimentSpec(8, "psa_exp8_load_balance", "fig_psa_exp8_balance.pdf",
+                   "Concurrent queries", "FSN utilization std. dev.",
+                   prefix="psa_",
+                   panels=(
+                       PanelSpec(0, "Utilization std. dev.", "a"),
+                       PanelSpec(1, "Max node utilization", "b"),
+                       PanelSpec(2, "Cross-node forwards", "c"),
+                   )),
     ExperimentSpec(6, "psa_exp6_affected_ratio", "fig_psa_exp6_sync.pdf",
                    "Affected-policy ratio", "Synchronization latency (ms)",
                    prefix="psa_", variants=PSA_EXP6_VARIANTS,
