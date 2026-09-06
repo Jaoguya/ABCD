@@ -67,8 +67,8 @@
     "pin_configured": false,
     "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
   },
-  "finished_utc": "2026-09-06T14:45:31.984441+00:00",
-  "git_commit": "37aa787cf42209860f68b93af75dcbac4f96a415-dirty",
+  "finished_utc": "2026-09-06T16:35:55.353441+00:00",
+  "git_commit": "9519a02ea8f55e8a844a1d40ddd66fca7d4831d0-dirty",
   "instance_type": "unknown",
   "libraries": {
     "bitarray": "3.10.1",
@@ -89,7 +89,7 @@
   "reportable": true,
   "runs": 10,
   "scheme": "ma_lb_pq_vdse",
-  "started_utc": "2026-09-06T14:40:19.983172+00:00",
+  "started_utc": "2026-09-06T16:30:46.280098+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": null,
     "NUMEXPR_NUM_THREADS": null,

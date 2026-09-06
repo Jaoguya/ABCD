@@ -705,3 +705,53 @@ def test_a_single_keyword_query_is_unchanged_by_the_fix(config):
     # One entry per matching record, and each IS the entry that matched.
     assert len(hits) == len({h.cid for h in hits})
     assert all(h.token == token for h in hits)
+
+
+def test_psa_exp7_requests_actually_match_records(config):
+    """Zero hits would mean Exp. 7-8 time an empty search.
+
+    A PSA query is a disjunction ACROSS policies of a conjunction OVER
+    keywords. Handing the flat q*|P_U| set to one conjunctive lookup asks a
+    record to satisfy tokens bound to several policies, which no record can:
+    that returned 0 hits over every request until the trace carried its
+    per-policy grouping.
+    """
+    from Schemes.ma_lb_pq_vdse.src.fsn import search as search_mod
+
+    experiment = psa_mod.PsaExp7Throughput(
+        config=config, source=_source(), variant="aass"
+    )
+    prepared = experiment.prepare(20)
+    deployment, requests = prepared["deployment"], prepared["requests"]
+    trapdoor, decision = requests[0]
+    assert trapdoor.groups, "the trace carries no per-policy grouping"
+
+    node = [
+        n for n in deployment.nodes
+        if n.serves_domain(decision.authorized_shards[0][0])
+    ][0]
+    grouped = search_mod.execute_search(
+        node, trapdoor.tokens, decision.authorized_shards,
+        groups=trapdoor.groups,
+    )
+    flat = search_mod.execute_search(
+        node, trapdoor.tokens, decision.authorized_shards
+    )
+    assert grouped.hits, "a grouped PSA query matched nothing"
+    assert not flat.hits, (
+        "the flat form matched something; if that becomes possible the "
+        "grouping may no longer be load-bearing and this test is stale"
+    )
+
+
+def test_option_d_dispatch_passes_no_groups(config):
+    """Option D's H(w) token carries no policy, so there is nothing to group.
+
+    The grouped branch must stay opt-in: if Option D ever started passing
+    groups it would silently change the banked Exp. 7-8 measurement.
+    """
+    experiment = option_d.Exp7Throughput(
+        config=config, source=_source(), variant="aass"
+    )
+    trapdoor, _ = experiment.prepare(20)["requests"][0]
+    assert not getattr(trapdoor, "groups", None)

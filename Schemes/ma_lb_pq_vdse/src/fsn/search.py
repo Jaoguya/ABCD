@@ -143,6 +143,7 @@ def execute_search(
     conjunctive: bool = True,
     use_bloom: bool = True,
     record_service: bool = True,
+    groups: Optional[Sequence[Tuple[Sequence[bytes], Sequence[Tuple[str, str]]]]] = None,
 ) -> SearchResponse:
     """Phase VI Step 4 on one node: filter by authorization, then match ``T_Q``.
 
@@ -167,9 +168,51 @@ def execute_search(
         )
 
     started = time.perf_counter_ns()
-    entries, statistics = node.index.lookup(
-        tokens, scoped, conjunctive=conjunctive, use_bloom=use_bloom
-    )
+    if groups:
+        # PER-POLICY QUERY. Under a policy-bound token the query is a
+        # disjunction ACROSS policies of a conjunction OVER keywords: a record
+        # matches if it carries all q keywords under ANY authorized policy.
+        # Handing the flat q*|P_U| set to one conjunctive lookup asks a single
+        # record to satisfy tokens bound to several different policies, which
+        # no record can -- it returns nothing, whatever the data.
+        #
+        # Option D passes no groups and takes the branch below unchanged: its
+        # token is H(w) and carries no policy, so there is nothing to group by.
+        seen: set = set()
+        merged: list = []
+        total_traversed = 0
+        total_rejections = 0
+        candidates = 0
+        shard_entries = 0
+        for group_tokens, group_scope in groups:
+            group_scoped = _authorized_for_node(node, group_scope)
+            if not group_scoped or not group_tokens:
+                continue
+            found, stats = node.index.lookup(
+                group_tokens, group_scoped,
+                conjunctive=conjunctive, use_bloom=use_bloom,
+            )
+            total_traversed += stats.entries_traversed
+            total_rejections += stats.bloom_rejections
+            candidates = max(candidates, stats.authorized_candidates)
+            shard_entries = stats.shard_entries
+            for entry in found:
+                key = (entry.token, entry.cid)
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(entry)
+        entries = tuple(merged)
+        statistics = SearchStatistics(
+            n_eff=len(entries),
+            entries_traversed=total_traversed,
+            authorized_candidates=candidates,
+            shard_entries=shard_entries,
+            bloom_rejections=total_rejections,
+        )
+    else:
+        entries, statistics = node.index.lookup(
+            tokens, scoped, conjunctive=conjunctive, use_bloom=use_bloom
+        )
     elapsed = time.perf_counter_ns() - started
 
     if record_service:

@@ -1205,7 +1205,7 @@ class PsaExp4Verification:
 # ===========================================================================
 @dataclass(frozen=True)
 class _PsaTrapdoor:
-    """What the replay reads off a trapdoor: ``.tokens`` and ``.vid_u``.
+    """What the replay reads off a trapdoor: ``.tokens``, ``.vid_u``, ``.groups``.
 
     The forked replay in ``SchedulerAblation._replay_multiprocess`` touches a
     trapdoor through exactly those two attributes, so the PSA arm supplies
@@ -1215,6 +1215,13 @@ class _PsaTrapdoor:
 
     tokens: Tuple[bytes, ...]
     vid_u: int
+    #: ``[(tokens_for_one_policy, [(domain, policy)])]``. The query is a
+    #: disjunction ACROSS policies of a conjunction OVER keywords, so the shard
+    #: must evaluate one group per authorized policy and union the results.
+    #: Without it the flat ``q*|P_U|`` set asks one record to satisfy tokens
+    #: bound to several policies, which no record can, and every request
+    #: returns nothing.
+    groups: Tuple = ()
 
 
 class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
@@ -1333,8 +1340,17 @@ class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
                 : self.config.defaults.keywords_per_query
             ]
             psa_query = psa_tokens.generate_query_tokens(scheme, keywords, scopes)
+            grouped = tuple(
+                (
+                    psa_tokens.generate_query_tokens(scheme, keywords, [scope]),
+                    ((scope.domain, scope.policy_id),),
+                )
+                for scope in scopes
+            )
             requests.append((
-                _PsaTrapdoor(tokens=psa_query, vid_u=option_d_token.vid_u),
+                _PsaTrapdoor(
+                    tokens=psa_query, vid_u=option_d_token.vid_u, groups=grouped
+                ),
                 decision,
             ))
         requests = tuple(requests)

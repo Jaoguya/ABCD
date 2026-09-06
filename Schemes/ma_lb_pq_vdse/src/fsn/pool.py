@@ -80,12 +80,14 @@ def _worker(node: "fsn_mod.FogSearchNode",
         item = inbox.get()
         if item is None:  # shutdown sentinel
             return
-        request_id, tokens, authorized = item
+        request_id, tokens, authorized, groups = item
         started = time.perf_counter_ns()
         ok, error = True, ""
         traversed, hits = 0, 0
         try:
-            response = search_mod.execute_search(node, tokens, authorized)
+            response = search_mod.execute_search(
+                node, tokens, authorized, groups=groups
+            )
             traversed = response.statistics.entries_traversed
             hits = len(response.hits)
         except search_mod.SearchRejected as exc:
@@ -151,10 +153,13 @@ class FogSearchNodePool:
 
     def dispatch(self, request_id: int, node_id: str,
                  tokens: Sequence[bytes],
-                 authorized: Sequence[Tuple[str, str]]) -> None:
+                 authorized: Sequence[Tuple[str, str]],
+                 groups=None) -> None:
         if not self._started:
             raise RuntimeError("pool used outside its context manager")
-        self._inboxes[node_id].put((request_id, list(tokens), list(authorized)))
+        self._inboxes[node_id].put(
+            (request_id, list(tokens), list(authorized), groups)
+        )
 
     def drain(self) -> List[NodeOutcome]:
         """Take the completions available right now, without blocking.

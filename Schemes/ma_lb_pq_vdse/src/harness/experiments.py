@@ -1387,6 +1387,9 @@ class SchedulerAblation:
                 pool.dispatch(
                     dispatched, selection.node.node_id,
                     token.tokens, decision.authorized_shards,
+                    # Empty for Option D, whose H(w) token carries no policy
+                    # and so has nothing to group by.
+                    groups=getattr(token, "groups", None) or None,
                 )
                 dispatched += 1
                 # Retire what has finished, so depth falls as well as rises.
