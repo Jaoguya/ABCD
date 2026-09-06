@@ -314,3 +314,54 @@ insufficient alone (9.08 ms against [30]'s 9.139, a tie).
 **Why this matters:** I recommended BUILD-2b as the single highest-impact open
 item, on the board's word. Had that recommendation been acted on it would have
 been a day spent re-implementing something already in `main`.
+
+---
+
+## 2026-09-06 — a conjunctive query over >1 keyword can NEVER match
+
+**Found:** `index/dsi.py::lookup` intersects **ordinals**:
+
+    matched = hits if matched is None else (matched & hits if conjunctive else ...)
+
+An ordinal is one index ENTRY, and an entry carries exactly ONE token. Two
+distinct keywords therefore never share an ordinal, so a conjunctive query over
+two or more keywords returns the empty set by construction. Measured directly:
+a single-keyword lookup on a record's own shard returns 8 hits; the same
+record's 5 keywords conjunctively return 0, traversing 26 entries to do it.
+
+The docstring says "``conjunctive=True`` implements the q-keyword conjunctive
+query of §V; the corpus's ``min_keywords_per_record: 5`` exists so that such a
+query can match at all" -- so per-RECORD intersection is what was intended. The
+implementation intersects per entry. §V's central search claim is a
+`q`-keyword conjunctive query, and the index cannot answer one.
+
+**Blast radius, measured not assumed:**
+
+* `psa_exp2_search_latency` -- **n_eff = 0.000000 at every sweep point.** I
+  banked this today and called it "the first reportable PSA number". It times
+  a search that matches nothing. Superseded.
+* `exp7_*`/`exp8_*` at q=5, both constructions, banked today -- every request
+  returns 0 hits. Traversal is real (PSA 13.2 entries/req, Option D 25.3) so
+  the throughput figures are not empty, but they price a workload where nothing
+  matches, and that is not the workload §V describes.
+* **`exp2_search_latency` is NOT affected** -- it rotates ONE keyword per run
+  (the 2026-09-03 fix), so it never takes the conjunctive path. Banked n_eff
+  runs 9.5 -> 220.1, non-zero and meaningful.
+* Exp. 1, 3, 4, 5, 6 do not search. Unaffected.
+
+**This also explains PSA Exp. 8.** With no hits, per-request work is dominated
+by token lookup, which is uniform -- so no node saturates and the four arms
+cannot separate. PSA traverses HALF what Option D does (13.2 against 25.3)
+despite carrying twice the tokens, because policy-state-bound tokens are more
+selective, which is why its `no_lb` failed to pin. Not a scheduler defect at
+all.
+
+**RESOLVED: fix the index to intersect per RECORD (by CID), not per entry.**
+That is what the docstring says it does and what §V describes, it makes
+`min_keywords_per_record: 5` meaningful, and it is the only version in which a
+multi-keyword query can return anything. Then re-run Exp. 2 (psa), Exp. 7 and
+Exp. 8 under both constructions.
+
+The alternative -- keep per-entry semantics and call every §V query
+single-keyword -- would mean the paper's q=5 conjunctive claim has never been
+measured by anything, which is worse than a re-run.

@@ -56,6 +56,15 @@ class NodeOutcome:
     ok: bool
     service_ns: int
     error: str = ""
+    #: Index entries the shard actually walked for this request, and hits
+    #: returned. Carried back so a concurrency run can say WHY a node was busy,
+    #: not just how long. Added 2026-09-06 to diagnose PSA Exp. 8, whose four
+    #: arms did not separate while Option D's separated ~9x: without this the
+    #: only way to tell "the scheduler is broken" from "every request does no
+    #: work" is to guess. Defaulted, so nothing that constructs a NodeOutcome
+    #: without them breaks.
+    entries_traversed: int = 0
+    hits: int = 0
 
 
 def _worker(node: "fsn_mod.FogSearchNode",
@@ -74,14 +83,19 @@ def _worker(node: "fsn_mod.FogSearchNode",
         request_id, tokens, authorized = item
         started = time.perf_counter_ns()
         ok, error = True, ""
+        traversed, hits = 0, 0
         try:
-            search_mod.execute_search(node, tokens, authorized)
+            response = search_mod.execute_search(node, tokens, authorized)
+            traversed = response.statistics.entries_traversed
+            hits = len(response.hits)
         except search_mod.SearchRejected as exc:
             ok, error = False, f"rejected: {exc}"
         except Exception as exc:  # noqa: BLE001 - reported, not swallowed
             ok, error = False, f"{type(exc).__name__}: {exc}"
         service_ns = time.perf_counter_ns() - started
-        outbox.put((request_id, node.node_id, ok, service_ns, error))
+        outbox.put(
+            (request_id, node.node_id, ok, service_ns, error, traversed, hits)
+        )
 
 
 class FogSearchNodePool:
@@ -155,11 +169,13 @@ class FogSearchNodePool:
         results: List[NodeOutcome] = []
         while True:
             try:
-                _rid, node_id, ok, service_ns, error = self._outbox.get_nowait()
+                (_rid, node_id, ok, service_ns, error,
+                 traversed, hits) = self._outbox.get_nowait()
             except queue_mod.Empty:
                 return results
             results.append(
                 NodeOutcome(node_id=node_id, ok=ok,
+                            entries_traversed=traversed, hits=hits,
                             service_ns=service_ns, error=error)
             )
 
@@ -181,11 +197,13 @@ class FogSearchNodePool:
                     f"{timeout}s elapsed; reporting the partial set would "
                     f"overstate throughput"
                 )
-            _rid, node_id, ok, service_ns, error = self._outbox.get(
+            (_rid, node_id, ok, service_ns, error,
+             traversed, hits) = self._outbox.get(
                 timeout=remaining
             )
             results.append(
                 NodeOutcome(node_id=node_id, ok=ok,
+                            entries_traversed=traversed, hits=hits,
                             service_ns=service_ns, error=error)
             )
         return results

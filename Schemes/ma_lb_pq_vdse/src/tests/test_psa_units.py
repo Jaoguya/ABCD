@@ -630,3 +630,78 @@ def test_both_exp7_traces_use_the_published_q(config):
         f"Option D's trace carries {len(yours[0][0].tokens)} tokens for q={q}"
     )
     assert len(mine[0][0].tokens) == q * len(mine[0][1].authorized_shards)
+
+
+# ===========================================================================
+# The conjunctive query — §V's q-keyword search must be answerable at all
+# ===========================================================================
+def test_a_multi_keyword_conjunctive_query_can_match(config):
+    """It could not, before 2026-09-06, for ANY data.
+
+    `dsi.lookup` intersected ORDINALS. An ordinal is one index entry and an
+    entry carries exactly one token, so two distinct keywords never shared one
+    and a q-keyword conjunctive query returned the empty set by construction.
+    §V's central search claim is exactly such a query.
+    """
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as od
+
+    experiment = od.Exp7Throughput(
+        config=config, source=_source(), variant="aass"
+    )
+    deployment = experiment.prepare(20)["deployment"]
+    record = deployment.records[0]["record"]
+    node = [n for n in deployment.nodes if n.serves_domain(record.domain)][0]
+    scoped = [(record.domain, record.policy_id)]
+
+    tokens = [deployment.scheme.query_token(k) for k in record.keywords[:5]]
+    hits, stats = node.index.lookup(tokens, scoped)
+    assert hits, "a 5-keyword conjunctive query matched nothing"
+    assert stats.entries_traversed > 0
+
+
+def test_conjunctive_is_per_record_not_per_entry(config):
+    """Every returned entry belongs to a record satisfying EVERY token."""
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as od
+
+    experiment = od.Exp7Throughput(
+        config=config, source=_source(), variant="aass"
+    )
+    deployment = experiment.prepare(20)["deployment"]
+    record = deployment.records[0]["record"]
+    node = [n for n in deployment.nodes if n.serves_domain(record.domain)][0]
+    scoped = [(record.domain, record.policy_id)]
+
+    keywords = list(dict.fromkeys(record.keywords))[:3]
+    tokens = [deployment.scheme.query_token(k) for k in keywords]
+    hits, _ = node.index.lookup(tokens, scoped)
+    assert hits
+    wanted = set(tokens)
+    for cid in {h.cid for h in hits}:
+        held = {
+            node.index.entry(o).token
+            for o in node.index.ordinals_for_cid(cid)
+        }
+        assert wanted <= held, f"{cid} does not carry every queried token"
+
+
+def test_a_single_keyword_query_is_unchanged_by_the_fix(config):
+    """Exp. 2 rotates ONE keyword per run, so its banked curve must not move.
+
+    At q=1 per-record and per-entry intersection coincide, and the returned
+    set must stay the matching entries -- not every entry of a matching
+    record, which would inflate n_eff by |W_i| and silently move Exp. 2.
+    """
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as od
+
+    experiment = od.Exp7Throughput(
+        config=config, source=_source(), variant="aass"
+    )
+    deployment = experiment.prepare(20)["deployment"]
+    record = deployment.records[0]["record"]
+    node = [n for n in deployment.nodes if n.serves_domain(record.domain)][0]
+    token = deployment.scheme.query_token(record.keywords[0])
+    hits, _ = node.index.lookup([token], [(record.domain, record.policy_id)])
+    assert hits
+    # One entry per matching record, and each IS the entry that matched.
+    assert len(hits) == len({h.cid for h in hits})
+    assert all(h.token == token for h in hits)

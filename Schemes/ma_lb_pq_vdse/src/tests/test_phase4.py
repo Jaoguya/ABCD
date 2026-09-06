@@ -459,15 +459,35 @@ def test_dsi_filters_before_matching():
 
 
 def test_dsi_conjunctive_query_requires_every_keyword():
-    """§V's q-keyword conjunctive query."""
+    """§V's q-keyword conjunctive query — matched PER RECORD.
+
+    This test used to assert ``found == ()`` with the comment "no single entry
+    carries three different tokens", which codified the defect as intended
+    behaviour: an ordinal is one entry and an entry holds one token, so
+    intersecting ordinals made a q-keyword query unanswerable for ANY data,
+    while the docstring claimed it implemented §V's central search. The
+    assertion and the docstring contradicted each other and the assertion won
+    for months.
+
+    A record satisfies the query when it carries every queried token; the
+    entries returned are the ones that matched.
+    """
     shard, extracted = indexed_shard(records=2, keywords=6)
     record = extracted[0]
     authorized = [(record.domain, record.policy_id)]
     present = [token_for(k) for k in record.keywords[:3]]
     found, _ = shard.lookup(present, authorized, conjunctive=True)
-    assert found == ()   # no single entry carries three different tokens
+    assert found, "a 3-keyword conjunctive query over one record's own keywords"
+    # One record satisfies it, so every returned entry shares that record's
+    # CID. (`ExtractedRecord` has no cid -- it is assigned at outsourcing --
+    # so the entries are what carry it.)
+    assert len({e.cid for e in found}) == 1
 
-    # Disjunctive over the same tokens does match.
+    # A token the record does NOT carry makes the conjunction fail.
+    missing = present + [token_for("keyword-this-record-does-not-have")]
+    assert shard.lookup(missing, authorized, conjunctive=True)[0] == ()
+
+    # Disjunctive over the same tokens still matches entrywise.
     found, _ = shard.lookup(present, authorized, conjunctive=False)
     assert len(found) == 3
 

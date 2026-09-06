@@ -341,7 +341,24 @@ class DynamicSearchIndex:
         bloom_rejections = 0
         filter_ = self._bloom_filter() if use_bloom else None
 
-        matched: Optional[Set[int]] = None
+        # CONJUNCTIVE IS PER RECORD, NOT PER ENTRY.
+        #
+        # An ordinal is one index ENTRY and an entry carries exactly ONE token
+        # (`I_ij = (T_ij, CID_i, PID_i, ...)`), so intersecting ordinals across
+        # two distinct keywords is always empty -- a q-keyword conjunctive
+        # query could never match anything, whatever the data. Measured on
+        # 2026-09-06: one keyword returned 8 hits on a record's own shard, and
+        # that record's own 5 keywords returned 0 after traversing 26 entries.
+        #
+        # §V's search is a q-keyword conjunctive query over RECORDS, and this
+        # docstring already said `min_keywords_per_record: 5` exists "so that
+        # such a query can match at all" -- which is only true of a per-record
+        # reading. So the intersection is over CIDs, and the returned entries
+        # are those of the surviving records. Disjunctive is unchanged: it was
+        # already a union and a union of entries is well defined.
+        matched_cids: Optional[Set[str]] = None
+        union_ordinals: Set[int] = set()
+        matched_ordinals: Set[int] = set()
         for token in tokens:
             if filter_ is not None and token not in filter_:
                 bloom_rejections += 1
@@ -359,13 +376,34 @@ class DynamicSearchIndex:
             postings = self._postings.get(token, [])
             traversed += len(postings)
             hits = {o for o in postings if o in authorized_ordinals}
-            matched = hits if matched is None else (
-                matched & hits if conjunctive else matched | hits
-            )
-            if conjunctive and not matched:
-                break
+            if conjunctive:
+                cids = {
+                    self._entries[o].cid for o in hits
+                    if self._entries[o] is not None
+                }
+                matched_cids = cids if matched_cids is None else (matched_cids & cids)
+                matched_ordinals |= hits
+                if not matched_cids:
+                    break
+            else:
+                union_ordinals |= hits
 
-        ordinals = sorted(matched or set())
+        if conjunctive:
+            # The entries that ANSWERED the query, restricted to records that
+            # satisfied every token. Not every entry of a surviving record:
+            # that would return |W_i| entries per match and inflate `n_eff`
+            # ~6x, silently moving Exp. 2's banked curve, which queries ONE
+            # keyword and is not otherwise affected by this fix. At q=1 this
+            # is byte-identical to the old per-entry behaviour, which is the
+            # property that makes the fix safe for Exp. 2.
+            survivors = matched_cids or set()
+            ordinals = sorted(
+                o for o in matched_ordinals
+                if self._entries[o] is not None
+                and self._entries[o].cid in survivors
+            )
+        else:
+            ordinals = sorted(union_ordinals)
         entries = tuple(
             self._entries[o] for o in ordinals if self._entries[o] is not None
         )
