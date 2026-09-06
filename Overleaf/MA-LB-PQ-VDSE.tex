@@ -2190,13 +2190,20 @@ authorization synchronization, and authorization-aware load
 balancing under increasing workloads.
 
 Measurements of the policy-state-aware construction are reported
-separately from the cross-scheme comparisons. Those of encrypted search,
-throughput, and load balancing are obtained on the same corpus and host
-as the comparisons above; those of trapdoor generation, cross-domain
+separately from the cross-scheme comparisons. Those of encrypted search
+and throughput are obtained on the same corpus and host as the
+comparisons above; those of trapdoor generation, cross-domain
 scalability, verification, dynamic update, and authorization
 synchronization are obtained on in-process fixtures that exercise the
 construction rather than the corpus, and are therefore not directly
-comparable with the cross-scheme results.
+comparable with the cross-scheme results. The load-balancing results
+reported in Experiment~\ref{exp:balance} are those of the cross-scheme
+evaluation: under a policy-bound token each request is evaluated only
+against the query groups whose domain the selected node serves, so
+per-request work varies with the match between a user's authorized
+policies and that node's domain rather than with the scheduling rule,
+and the construction's own load-balancing figures characterise that
+per-request cost rather than scheduler quality.
 
 
 \subsubsection*{\textbf{Experiment 1: Policy-State-Aware Token Generation}}

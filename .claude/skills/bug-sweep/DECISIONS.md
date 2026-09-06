@@ -425,3 +425,36 @@ already does) and report psa_exp8 as measuring the construction's per-request
 cost, not scheduler quality. `MANUSCRIPT_FIXES.txt` item 6 already tells §V to
 separate the two constructions' results; this is why it matters for Exp. 8
 specifically.
+
+---
+
+## 2026-09-07 — psa Exp. 8 is not cited for the load-balancing claim
+
+**RESOLVED: author accepted the recommendation.** §V's setup paragraph now
+says the load-balancing results of Experiment 8 are the CROSS-SCHEME ones, and
+states why the construction's own figures do not carry that claim: under a
+policy-bound token a request is evaluated only against the query groups whose
+domain the selected node serves, so per-request work varies with the match
+between a user's authorized policies and that node's domain rather than with
+the scheduling rule.
+
+psa_exp8's data stays banked and stays in the repository -- it characterises
+the construction's per-request cost, which is a real quantity. It simply is not
+evidence about schedulers, and the paper no longer implies that it is.
+
+---
+
+## 2026-09-07 — three superseded n=30 directories removed (FIX-4)
+
+**RESOLVED: removed.** `exp7_search_throughput`, `exp8_load_balance` (both
+unsuffixed, n=30, from 55aa3c8) and `exp6_authorization_sync__no_lb` (n=30,
+`reportable=false`, a scheduler variant that Exp. 6 does not have) are gone.
+
+Checked before deleting, not after: `generate_plots.py` reads only the
+`__variant` directories for Exps. 6, 7 and 8, and all 8 figures still render
+with the same series after removal. The data is git-tracked, so the removal is
+reversible from history -- which is what makes this a cleanup rather than a
+destructive act.
+
+TASKS.md carried this as FIX-4, "two stale merged directories". There were
+three.
