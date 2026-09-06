@@ -514,6 +514,13 @@ class Series:
     #: metric index (1-based) -> (values, ci95s), for multi-panel figures.
     extra: Dict[int, Tuple[List[float], List[float]]] = field(default_factory=dict)
     n_runs: List[int] = field(default_factory=list)
+    #: Per point, the results.csv `measurement_type` column when present:
+    #: "measured" or "projected". infra/extrapolate_points.py writes it, and it
+    #: is the ONLY reliable signal that a point was computed -- it writes
+    #: n_runs=1, not 0, so the n_runs==0 rule below never fired for it and
+    #: extrapolated points were drawn solid, indistinguishable from measured
+    #: ones, while §V's caption claimed they were hollow.
+    measurement: List[str] = field(default_factory=list)
     reportable: Optional[bool] = None
     problems: List[str] = field(default_factory=list)
 
@@ -575,6 +582,7 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
                 series.y.append(y)
                 series.yerr.append(ci)
                 series.n_runs.append(int(n))
+                series.measurement.append(row.get("measurement_type", "") or "")
                 # Secondaries, positionally. The NAMES differ per scheme
                 # (ma_lb writes `secondary_1_mean`, the baselines write the
                 # metric's real name), so the i-th `*_mean` after primary is
@@ -995,7 +1003,12 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
         # marker is now the ONLY in-figure signal, which means the FIGURE
         # CAPTION in section V has to state which points are extrapolated --
         # a hollow marker shows a reader that something differs, not what.
-        computed = [i for i, n in enumerate(series.n_runs) if n == 0]
+        computed = [
+            i for i, n in enumerate(series.n_runs)
+            if n == 0
+            or (i < len(series.measurement)
+                and series.measurement[i].strip().lower() == "projected")
+        ]
         yvals, yerrs = _panel_values(series, metric, per_x)
         if not yvals:
             # A scheme that records no such secondary simply has no curve on

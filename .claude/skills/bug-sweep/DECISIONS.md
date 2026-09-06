@@ -502,3 +502,26 @@ excludes both Experiments 7 and 8.
 **Not a defect to repair.** The fix is cross-node forwarding, which changes
 what Exps. 7-8 model. README §5 already records that communication as
 unmeasurable at d = m = 4.
+
+---
+
+## 2026-09-07 — extrapolated points were drawn SOLID, and §V claimed otherwise
+
+**RESOLVED: fixed.** `generate_plots.py` marked a point computed when
+`n_runs == 0`. `infra/extrapolate_points.py` writes `n_runs=1` with
+`measurement_type=projected`, so the rule never fired: Scheme [41]'s four
+extrapolated Exp. 2 points rendered as solid markers, visually identical to the
+measured ones.
+
+Worse, the fig:exp2 caption applied to the manuscript earlier the same day
+states they "are drawn with hollow markers". The figure did not do what the
+paper said it did.
+
+The plotter now reads the `measurement_type` column and treats `projected` as
+computed; the `n_runs == 0` rule is kept for older files that predate the
+column. Verified: hollow at N = 50k, 100k, 500k, 1M and solid at 10^4, which
+matches the results.csv exactly.
+
+**Found by looking at the rendered figure**, not by reading code -- the first
+time these plots had been generated from final data rather than into a
+scratch directory.
