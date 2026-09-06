@@ -1,0 +1,44 @@
+# MA-LB-PQ-VDSE — working rules
+
+This file loads on every turn, so it stays short. The long-form specification is
+`README.md`; the operator's guide is `SystemConfiguration.md`.
+
+## Every reply
+
+Follow `.claude/skills/report-back` **before delivering any result, figure,
+number, fix, or explanation** — not only when invoked. Lead with the answer,
+scannable bullets, numbers in tables, cut preamble and restatement. Spend extra
+lines only on a number that moved, a thing that failed, or a decision that is
+the user's.
+
+Alongside any number, always state: **reportable or not** (corpus type, host,
+`n_runs`), **what one point on the axis is**, **which construction produced it**
+(`option_d` or `psa` — they time different functions at the same experiment
+number), and **measured vs extrapolated**.
+
+## Fixing things
+
+Follow `.claude/skills/bug-sweep`'s boundary: **fix what has one right answer;
+ask about what has two.** Anything that changes a number already in a
+`results.csv`, a figure, or the manuscript is the user's call — record it in
+`.claude/skills/bug-sweep/DECISIONS.md` and keep working on the rest.
+
+## Hard rules
+
+- **Never edit `Overleaf/*.tex`.** Report file, line and the replacement text;
+  the user applies it. Same for `README.md` — edit only when asked.
+- **No branches.** Commit straight to `main`, repo and fleet nodes alike.
+- **The corpus is frozen.** Only `corpus_type: synthea` on the pinned AWS
+  `m6i.xlarge` is reportable. `~/.venv-malbpq` is the Mac dev venv; nothing run
+  there is reportable.
+- **Thingom (Ref[41]) Exp. 2 is measured only at N=10⁴.** 50k–1M are linear
+  scalings from that anchor (`n_runs=1`, blank `ci95`). Never launch a run above
+  10⁴ — one at 10⁶ costs ~11.3 h.
+- **No fabricated data**, no baseline held to a weaker standard than the
+  proposed scheme, and never gate on speed — slowness is a finding.
+- Say **Scheme30/35/41/54**, never author names. Ours is "the proposed scheme".
+
+## Tests
+
+`~/.venv-malbpq/bin/python -m pytest -q` from the repo root. A green suite is
+the floor, not the goal — every defect found so far was found with it green.
