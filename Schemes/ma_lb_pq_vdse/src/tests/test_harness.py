@@ -1046,12 +1046,22 @@ def test_cli_folders_match_the_plotting_paths():
     for number, folder in main_mod.FOLDERS.items():
         assert folder.startswith(f"exp{number}_")
         if not (scheme_root / folder).is_dir():
-            # A results directory appears when the experiment first writes to
-            # it. Exp. 9 landed 2026-09-03 and has not been run, so its
-            # directory legitimately does not exist yet; the naming assertion
-            # above is the half that must hold before then. This narrows back
-            # to nothing the moment Exp. 9 runs.
-            assert number == 9, f"{folder} is missing"
+            # An UNSUFFIXED directory is absent for two legitimate reasons, and
+            # neither is a broken path:
+            #
+            #   * the experiment has never been run (Exp. 9's original case), or
+            #   * the experiment is an ABLATION and writes only `<folder>__<arm>`
+            #     directories. Exps. 6, 7 and 8 are all ablations; their
+            #     unsuffixed directories held superseded n=30 data and were
+            #     removed on 2026-09-07 (FIX-4). generate_plots.py reads only
+            #     the __variant directories for those numbers, so the plotting
+            #     path this test guards is the suffixed one.
+            #
+            # What must still hold is that SOMETHING the plotter can find
+            # exists, so an ablation is checked against its arms.
+            arms = sorted(scheme_root.glob(f"{folder}__*"))
+            arms = [a for a in arms if a.is_dir() and "points-" not in a.name]
+            assert arms or number == 9, f"{folder} has neither a directory nor arms"
 
 
 def test_cli_writes_all_three_files_per_experiment():
