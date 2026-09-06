@@ -1,6 +1,6 @@
 """Phase VI Step 3 — Adaptive Authorization-Aware Search Scheduling.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:868`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     SC_j = L1*C_j^auth + L2*C_j^index + L3*C_j^verify + L4*C_j^sync + L5*C_j^queue
 

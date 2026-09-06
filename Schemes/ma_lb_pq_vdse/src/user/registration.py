@@ -1,13 +1,13 @@
 """Phase III Step 1 — User Registration.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:493`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     Req_U = (UID, Dom, Role, Cred)
 
 "Each participating Attribute Authority **independently** validates the submitted
 credentials according to its **local** policy."
 
-Both roles enrol through this path: `:491` — "each Data Owner (DO) and Data User
+Both roles enrol through this path: — "each Data Owner (DO) and Data User
 (DU) enrolls with one or more Attribute Authorities according to their
 organizational roles". A DO and a DU differ in the attributes they are granted,
 not in the mechanism, which is why the Data Owner's authorization profile —

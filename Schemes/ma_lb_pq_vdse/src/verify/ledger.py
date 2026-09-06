@@ -1,6 +1,6 @@
-"""Phase VIII Step 3 — Blockchain Consistency Verification.
+"""Phase VIII Step 2 — Policy-State and Blockchain Verification.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:1203`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     BC_i = ( CID_i, Commit_i, Root_i, VID_i, TS_i )
 
@@ -100,7 +100,7 @@ def lookup_anchor(
     versions = anchored_versions(ledger, cid)
     if not versions:
         raise ChainVerificationError(
-            f"no BC_i anchored for CID {cid!r}. Phase VII Step 7 anchors updates; "
+            f"no BC_i anchored for CID {cid!r}. Phase VII Step 5 anchors updates; "
             f"the initial anchor is Phase V Step 3, which is not implemented, so a "
             f"record that has never been updated has none."
         )
@@ -128,7 +128,7 @@ def verify_blockchain_consistency(
     vid: Optional[int] = None,
     check_chain_integrity: bool = True,
 ) -> StepResult:
-    """Phase VIII Step 3 for one bundle.
+    """Phase VIII Step 2 for one bundle.
 
     Compares ``Root_i`` and ``Commit_i`` against the anchor in constant time, then
     (by default) recomputes the ledger's hash chain. ``check_chain_integrity`` is a
@@ -215,7 +215,7 @@ class AnchorHistory:
     def is_monotone(self) -> bool:
         """Versions advance by one, with no gaps.
 
-        Phase VII Step 3 increments by exactly one, so a gap means an update was
+        Phase VII Step 2 increments by exactly one, so a gap means an update was
         never anchored — the history is incomplete even though every anchor in it
         is individually valid, and the hash chain cannot reveal that because
         nothing was tampered with. Only the version sequence can.
@@ -342,7 +342,7 @@ def batched_chain_checker(
                 passed=False,
                 elapsed_ns=time.perf_counter_ns() - started,
                 detail=(
-                    f"no BC_i anchored for CID {bundle.cid!r}. Phase VII Step 7 "
+                    f"no BC_i anchored for CID {bundle.cid!r}. Phase VII Step 5 "
                     f"anchors updates; the initial anchor is Phase V Step 3."
                 ),
             )

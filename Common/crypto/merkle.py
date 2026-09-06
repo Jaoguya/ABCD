@@ -9,7 +9,7 @@ counts work rather than making the caller estimate it:
 
 * Exp. 4 — proof size (KB) and Merkle path length
 * Exp. 5 — Merkle nodes recomputed per update
-* Exp. 6 — Merkle path update inside the IAS round
+* Exp. 6 — Merkle path update inside the DIAS round
 """
 
 from __future__ import annotations

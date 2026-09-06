@@ -1,5 +1,12 @@
 # MA-LB-PQ-VDSE — Phase IV Implementation Plan
 
+> **Note (2026-09-06).** Every `Overleaf/PQ-AVDSE-OJCOMS` line anchor below
+> refers to the SUPERSEDED manuscript revision this decision was taken
+> against. The live manuscript is `Overleaf/MA-LB-PQ-VDSE.tex`, whose phases
+> were renumbered; the anchors are kept unchanged so the record still says
+> what was read at the time. See `MANUSCRIPT_DIVERGENCE.md`.
+
+
 **Scope:** Phase IV — Policy-Bound Dynamic Search Index (PDSI) Construction —
 implemented under `Schemes/ma_lb_pq_vdse/src/index/`. Includes the Phase V Step 4
 shard distribution requested alongside it, marked as the separate phase it is.

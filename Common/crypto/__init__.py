@@ -16,7 +16,7 @@ filters, discrete Gaussians, pairings, ML-KEM.
 WHAT DOES NOT
 -------------
 Anything a paper CONTRIBUTES: Guo's forward index, Zhuang's attribute key
-derivation, Thingom's LSSS policy encoding, our PDSI/AASS/IAS. Those live in
+derivation, Thingom's LSSS policy encoding, our PDSI/AASS/DIAS. Those live in
 ``Schemes/<name>/src/`` and stay independent per README §14.
 
 WHICH SCHEME USES WHAT

@@ -1,6 +1,6 @@
-"""Phase III Step 2 — Rouselakis-Waters attribute key generation.
+"""Phase III Step 1 — Rouselakis-Waters attribute key generation.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:502`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     S_{U,i} subseteq A_i
     SK_{U,i} <- KeyGen(MSK_i, S_{U,i})

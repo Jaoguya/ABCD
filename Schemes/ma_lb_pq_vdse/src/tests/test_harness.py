@@ -669,7 +669,7 @@ def test_exp6_reports_message_size_and_fsns_touched():
     """"Report FSNs touched; selective propagation is the claim"."""
     experiment, sample = measure_once(6, 4)
     assert experiment.secondaries[0].unit == "KB"
-    assert sample.secondaries["ias_message_size"] > 0
+    assert sample.secondaries["dias_message_size"] > 0
     # d = m = 4, so one authority's update reaches one node.
     assert sample.secondaries["fsns_touched"] == 1.0
 

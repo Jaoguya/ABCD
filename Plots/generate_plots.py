@@ -109,7 +109,7 @@ class ExperimentSpec:
 
 EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     ExperimentSpec(1, "exp1_trapdoor_generation", "fig_exp1_trapdoor.pdf",
-                   "Queried keywords $q$", "Trapdoor generation latency (ms)",
+                   "Queried keywords $q$", "Token generation latency (ms)",
                    log_y=True),   # 4.82 decades — see LOG_Y_DECADES
     ExperimentSpec(2, "exp2_search_latency", "fig_exp2_search.pdf",
                    "Index size $N$ (records)", "Search latency (ms)",
@@ -160,7 +160,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # Panel (b) is the DELIVERED PAYLOAD: bytes leaving the AIM per update,
     # `delivered_kb` (secondary_3), MEASURED by the runner. It was derived here
     # as secondary_1 x secondary_2 until 2026-09-04, which was wrong for
-    # `full_rebuild`: only 1 of its 37 deliveries is an IAS message and the
+    # `full_rebuild`: only 1 of its 37 deliveries is a DIAS message and the
     # other 36 are AuthorizationMeta republishes at ~a third the size, so the
     # product charged it ~3x the bytes it sends. Bytes rather than a node count
     # because the quantity the selective claim is about is network load, and
@@ -177,7 +177,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                        # 0.816 KB) is squashed against the axis by
                        # full_rebuild's larger payload. On log the three sit
                        # evenly apart and both gaps read at a glance.
-                       PanelSpec(3, "IAS payload delivered (KB)", "b",
+                       PanelSpec(3, "DIAS payload delivered (KB)", "b",
                                  log_y=True),
                    )),
     ExperimentSpec(7, "exp7_search_throughput", "fig_exp7_throughput.pdf",
@@ -237,7 +237,7 @@ LOG_Y_DECADES = 2.0
 # newly added scheme still plots (with an uglier label) rather than vanishing.
 # Baselines are labelled by REFERENCE NUMBER, not author name, so a figure and
 # section V's prose name the same thing without the reader translating between
-# them. Numbers are the bibitem keys in Overleaf/PQ-AVDSE-OJCOMS.
+# them. Numbers are the bibitem keys in Overleaf/MA-LB-PQ-VDSE.tex.
 #
 # yue_ge was labelled "Ge et al. [55]" and that was WRONG. ref55 is Cao et al.,
 # "Enabling Puncturable Encrypted Search Over Lattice" (IEEE TMC 2026) -- a
@@ -284,11 +284,11 @@ ABLATION_STYLE_SLOT: Dict[str, int] = {
     "No load balancing": 3,
     # Exp. 6 uses its own vocabulary (EXP6_VARIANTS) -- none of these matched
     # the slots above, so all three fell through to the same fallback index
-    # and drew identically (same color/marker). "IAS (proposed)" gets slot 0,
+    # and drew identically (same color/marker). "DIAS (proposed)" gets slot 0,
     # the same blue circle the proposed scheme holds everywhere else.
-    "IAS (proposed)": 0,
-    "Broadcast to all FSNs": 1,
-    "Global authorization rebuild": 2,
+    "DIAS (proposed)": 0,
+    "Incremental-All": 1,
+    "Full-State Synchronization": 2,
 }
 
 
@@ -430,16 +430,27 @@ ABLATION_VARIANTS: Tuple[Tuple[str, str], ...] = (
     ("aass", "AASS (proposed)"),
 )
 
-#: Exp. 6 ablates IAS PROPAGATION, not the scheduler, so it has its own
-#: vocabulary. `ias` is the published rule; `broadcast` is the alternative
-#: :1111 rejects (deliver to every FSN); `full_rebuild` is the alternative
-#: :1045 rejects (every authority recomputes its commitment). Added 2026-09-03 --
-#: before that Exp. 6 plotted one series with no comparison, so README §5's
-#: "selective propagation is the claim" had nothing to read it against.
+#: Exp. 6 ablates DIAS PROPAGATION, not the scheduler, so it has its own
+#: vocabulary. Added 2026-09-03 -- before that Exp. 6 plotted one series with no
+#: comparison, so README §5's "selective propagation is the claim" had nothing to
+#: read it against.
+#:
+#: LEFT is the on-disk slug, RIGHT is the legend text. They differ on purpose:
+#: the manuscript's Exp. 6 names the arms DIAS / Incremental-All / Full-State
+#: Synchronization, while the slug is frozen by the directory every banked run
+#: was written into (`exp6_authorization_sync__<slug>/`). This tuple is the one
+#: place the two vocabularies meet, so the figure can carry the paper's names
+#: without any measured data being moved or relabelled.
+#:
+#:   `broadcast`    -> Incremental-All: updates only affected state, but
+#:                     delivers the delta to every FSN. Ablates SELECTIVE.
+#:   `full_rebuild` -> Full-State: every authority recomputes its commitment
+#:                     and the AIM republishes it. Ablates INCREMENTAL.
+#:   `ias`          -> DIAS: the published rule, both halves together.
 EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
-    ("broadcast", "Broadcast to all FSNs"),
-    ("full_rebuild", "Global authorization rebuild"),
-    ("ias", "IAS (proposed)"),
+    ("broadcast", "Incremental-All"),
+    ("full_rebuild", "Full-State Synchronization"),
+    ("ias", "DIAS (proposed)"),
 )
 
 

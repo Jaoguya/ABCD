@@ -34,7 +34,7 @@ from Schemes.ma_lb_pq_vdse.src.index import commit as commit_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import extract as extract_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import tokens as tokens_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.shard import propagation as prop_mod  # noqa: E402
-from Schemes.ma_lb_pq_vdse.src.sync import ias as ias_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.sync import dias as dias_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.verify import ledger as vledger_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.verify import proof as proof_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.tests import test_phase4 as p4  # noqa: E402
@@ -95,9 +95,9 @@ def committed_record(keywords: int = 6, rid: int = 0):
 
 
 def anchored_chain(commitment, cid: str, *, vid: int = 1):
-    """A ledger holding BC_i for a record, written through Phase VII Step 7."""
+    """A ledger holding BC_i for a record, written through Phase VII Step 5."""
     chain = ledger_mod.InProcessLedger()
-    message = ias_mod.IASMessage(
+    message = dias_mod.DIASMessage(
         cid=cid,
         delta_vid=1,
         authority_commitment=hashes.sha256(b"C_auth", domain=b"t"),
@@ -107,7 +107,7 @@ def anchored_chain(commitment, cid: str, *, vid: int = 1):
         authority_id="AA-dom0",
         domain="dom0",
     )
-    ias_mod.anchor_update(chain, message=message, vid=vid)
+    dias_mod.anchor_update(chain, message=message, vid=vid)
     return chain
 
 
@@ -461,9 +461,9 @@ def test_step3_anchor_lookup_finds_the_latest_version():
     _, _, commitment, bundles, cid = committed_record()
     chain = ledger_mod.InProcessLedger()
     for vid in (1, 2, 3):
-        ias_mod.anchor_update(
+        dias_mod.anchor_update(
             chain,
-            message=ias_mod.IASMessage(
+            message=dias_mod.DIASMessage(
                 cid=cid,
                 delta_vid=1,
                 authority_commitment=hashes.sha256(b"c", domain=b"t"),
@@ -501,9 +501,9 @@ def test_step3_anchor_history_detects_a_gap():
     _, _, commitment, _, cid = committed_record()
     chain = ledger_mod.InProcessLedger()
     for vid in (1, 2, 4):                       # 3 never anchored
-        ias_mod.anchor_update(
+        dias_mod.anchor_update(
             chain,
-            message=ias_mod.IASMessage(
+            message=dias_mod.DIASMessage(
                 cid=cid,
                 delta_vid=1,
                 authority_commitment=hashes.sha256(b"c", domain=b"t"),
@@ -630,7 +630,7 @@ def test_verify_response_refuses_an_empty_response():
 
 
 def test_verification_survives_a_phase_vii_update():
-    """After IAS, the re-anchored state verifies and the stale bundle does not."""
+    """After DIAS, the re-anchored state verifies and the stale bundle does not."""
     record, entries, commitment, bundles, cid = committed_record(keywords=6)
     chain = ledger_mod.InProcessLedger()
 
@@ -646,9 +646,9 @@ def test_verification_survives_a_phase_vii_update():
         vid=entries[0].vid,
         auth_root_do=AUTH_ROOT_DO,
     )
-    ias_mod.anchor_update(
+    dias_mod.anchor_update(
         chain,
-        message=ias_mod.IASMessage(
+        message=dias_mod.DIASMessage(
             cid=cid,
             delta_vid=1,
             authority_commitment=hashes.sha256(b"c", domain=b"t"),

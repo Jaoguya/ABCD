@@ -1,6 +1,6 @@
-"""Phase III Step 3 — Post-Quantum Secure Key Delivery.
+"""Phase III Step 2 — Post-Quantum Protected Attribute-Key Delivery.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:526`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     (ct_i, ss_i) <- ML-KEM.Encaps(pk_U^KEM)
     K_i          = HKDF(ss_i)
@@ -29,7 +29,7 @@ measurable cost, both recorded in ``PHASE_III_PLAN.md``):
   to a different user or across an authorization version change. The AEAD tag
   fails rather than yielding a wrong plaintext.
 
-**Observation — the manuscript's forward-secrecy claim does not hold.** `:547`
+**Observation — the manuscript's forward-secrecy claim does not hold.**
 states this mechanism "provides confidentiality, forward secrecy, and resistance
 against quantum adversaries during attribute-key distribution". Encapsulation is
 to a **static** ``pk_U^KEM``, so an adversary who records ``ct_i`` and later

@@ -1,6 +1,6 @@
 """Phase VI Step 4 — Distributed Encrypted Search on a Fog Search Node.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS`, Phase VI Step 4:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`, Phase VI Step 4:
 
     R = { (CID_i, PID_i, VID_i) | T_Q → I_i }
 
@@ -13,7 +13,7 @@ The matching relation ``T_Q → I_i`` is Option D's equality (``index/tokens.py`
 ``T_j = T_Q = H(w)``, so a token presented by a query is the token stored in the
 index, and one trapdoor serves every domain.
 
-**Filter, then match — in that order.** §V `:1892`: "authorization-aware bitmap
+**Filter, then match — in that order.** §V: "authorization-aware bitmap
 filtering removes unauthorized ciphertexts **before** encrypted matching, so the
 online search cost depends mainly on the effective authorized candidate set
 ``n_eff`` rather than the total encrypted index size". An implementation that

@@ -1,6 +1,6 @@
-"""Phase IV Step 1 — Keyword and Metadata Extraction.
+"""Phase IV Step 1 — Keyword and Policy-State Extraction.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:606`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     W_i    = {w_1, ..., w_t}
     Meta_i = (PID_i, VID_i, Dom_i, TS_i)
@@ -13,9 +13,9 @@ does not describe.
 
 **``PID_i`` is not in the corpus, and the corpus's ``pid`` is not ``PID_i``.**
 
-* The manuscript's ``PID_i`` is the **access-policy identifier** — notation table
-  `:331`, Phase IV Step 1 `:630` ("``PID_i`` denotes the access-policy
-  identifier"), Phase VI Step 4 `:971`.
+* The manuscript's ``PID_i`` is the **access-policy identifier** — notation
+  table, Phase IV Step 1 ("``PID_i`` identifies the access policy"),
+  Phase VI Step 4.
 * ``Dataset/corpus.py``'s ``Record.pid`` is a **patient pseudonym**:
   ``prepare_dataset.py:346`` sets ``pid=pseudonymize(values["PATIENT"])``.
 

@@ -45,7 +45,7 @@ from Schemes.ma_lb_pq_vdse.src.index import extract as extract_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import tokens as tokens_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.scheduler import aass as aass_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.shard import propagation as prop_mod  # noqa: E402
-from Schemes.ma_lb_pq_vdse.src.sync import ias as ias_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.sync import dias as dias_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.user import profile as profile_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.user import token as token_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.verify import ledger as vledger_mod  # noqa: E402
@@ -387,17 +387,17 @@ def test_initial_anchor_closes_the_phase_viii_gap():
 
 
 def test_initial_and_update_anchors_form_one_history():
-    """Phase V Step 3 and Phase VII Step 7 must use one namespace and key scheme."""
+    """Phase V Step 3 and Phase VII Step 5 must use one namespace and key scheme."""
     system = deployment(records_per_domain=1)
     entry = system.records[0]
     domain = entry["record"].domain
     # A Modify, because BC_i' carries the RECORD's version and a revocation
     # changes no index entry — so only an index-touching update anchors anew.
-    ias_mod.synchronize(
-        ias_mod.UpdateRequest(
-            operation=ias_mod.Operation.MODIFY,
+    dias_mod.synchronize(
+        dias_mod.UpdateRequest(
+            operation=dias_mod.Operation.MODIFY,
             cid=entry["cid"],
-            delta=ias_mod.UpdateDelta(policy_id=f"{domain}/evolved"),
+            delta=dias_mod.UpdateDelta(policy_id=f"{domain}/evolved"),
         ),
         authority=system.authorities[domain],
         nodes=system.nodes,
@@ -667,7 +667,7 @@ def test_lifecycle_outsource_search_verify():
     )
     assert result.accepted, result.failed_step
 
-    # Phase VIII Step 4 is outside Exp. 4, but the CID must resolve.
+    # Phase VIII Step 3 is outside Exp. 4, but the CID must resolve.
     assert system.store.get(target["cid"]) == target["ciphertext"]
 
 
@@ -742,11 +742,11 @@ def test_lifecycle_revocation_invalidates_a_stale_profile_and_bundle():
     ).accepted
 
     # Phase VII: revoke, which advances the authority and re-anchors.
-    receipt = ias_mod.synchronize(
-        ias_mod.UpdateRequest(
-            operation=ias_mod.Operation.REVOKE,
+    receipt = dias_mod.synchronize(
+        dias_mod.UpdateRequest(
+            operation=dias_mod.Operation.REVOKE,
             cid=target["cid"],
-            delta=ias_mod.UpdateDelta(revoked=("patient-revoked",)),
+            delta=dias_mod.UpdateDelta(revoked=("patient-revoked",)),
         ),
         authority=system.authorities[domain],
         nodes=system.nodes,
@@ -812,11 +812,11 @@ def test_lifecycle_vid_namespaces_stay_coherent():
 
     # After a revocation the node advances; a user still on the old profile is
     # one version behind, which is exactly what C_j^sync should report.
-    ias_mod.synchronize(
-        ias_mod.UpdateRequest(
-            operation=ias_mod.Operation.REVOKE,
+    dias_mod.synchronize(
+        dias_mod.UpdateRequest(
+            operation=dias_mod.Operation.REVOKE,
             cid=system.records_in(domain)[0]["cid"],
-            delta=ias_mod.UpdateDelta(revoked=("p1",)),
+            delta=dias_mod.UpdateDelta(revoked=("p1",)),
         ),
         authority=authority,
         nodes=system.nodes,

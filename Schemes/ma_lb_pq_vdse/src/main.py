@@ -29,6 +29,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from Schemes.ma_lb_pq_vdse.src import config as scheme_config  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import experiments as experiments_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.harness import psa_experiments as psa_mod  # noqa: E402
 from infra import sweep  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import provenance, runner  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.chain import select as chain_select  # noqa: E402
@@ -47,6 +48,39 @@ FOLDERS = {
     8: "exp8_load_balance",
     9: "exp9_verification_granularity",
 }
+
+#: Output folders for the ``psa`` construction — the manuscript's
+#: policy-state-aware form (MANUSCRIPT_DIVERGENCE.md D1-D9). Separate names, not
+#: a ``__psa`` suffix on the folders above, because these are not another arm of
+#: the same measurement: Exp. 1 and psa_exp1 time different functions, and
+#: psa_exp6 sweeps a different variable entirely. Sharing a directory family
+#: would invite exactly the averaging-across-incomparables the suffix convention
+#: exists to prevent.
+PSA_FOLDERS = {
+    1: "psa_exp1_token_generation",
+    3: "psa_exp3_crossdomain_tokens",
+    5: "psa_exp5_retokenization",
+    6: "psa_exp6_affected_ratio",
+}
+
+
+def _run_notes(number: int, variant: str, *, construction: str) -> List[str]:
+    """What run_meta.json must record to keep a directory identifiable.
+
+    The construction is recorded on EVERY run, including the default, because
+    "no note" is what every banked Option D run already says and a reader
+    cannot tell absence-of-note from not-yet-forked. Stating it always makes the
+    two eras distinguishable without rewriting any existing run_meta.
+    """
+    notes = [f"construction={construction}"]
+    if variant and number in (6, 7, 8):
+        notes.append(f"scheduler_variant={variant}")
+    if construction == "psa":
+        notes.append(
+            "policy-state-aware construction (MANUSCRIPT_DIVERGENCE.md D1-D9); "
+            "measures token/commitment cost, NOT end-to-end search"
+        )
+    return notes
 
 
 def parse_experiments(value: str) -> List[int]:
@@ -98,12 +132,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="one tiny sweep point and few runs, to exercise the pipeline",
     )
     parser.add_argument(
+        "--construction", default="option_d",
+        choices=("option_d", "psa"),
+        help=(
+            "which construction to measure. 'option_d' (default) is the "
+            "implemented scheme: T = H(w), the banked results. 'psa' is the "
+            "current manuscript's policy-state-aware form, "
+            "T = H(w || PID || PV || Dom) -- see MANUSCRIPT_DIVERGENCE.md "
+            "D1-D9. The two write to different directories and are NOT arms of "
+            "one measurement; psa covers experiments "
+            + ", ".join(str(n) for n in sorted(PSA_FOLDERS))
+            + " only."
+        ),
+    )
+    parser.add_argument(
         "--variant", default=None,
         help=(
             "ablation variant, or 'all' to run each in turn. Exp. 7-8 take the "
             "SCHEDULER variants (no_lb, round_robin, least_loaded, aass; "
-            "default aass). Exp. 6 takes the IAS PROPAGATION variants (ias, "
-            "broadcast, full_rebuild; default ias). Ignored for Exp. 1-5. The "
+            "default aass). Exp. 6 takes the DIAS PROPAGATION variants (ias, "
+            "broadcast, full_rebuild; default ias) -- Section V calls these "
+            "DIAS, Incremental-All and Full-State Synchronization respectively; "
+            "the slugs are kept because they name the results directories. "
+            "Ignored for Exp. 1-5. The "
             "two vocabularies are not interchangeable: a scheduler decides "
             "which FSN serves a QUERY and has no effect on how an authorization "
             "change propagates."
@@ -200,7 +251,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
 
         Exp. 6 and Exp. 7-8 have DIFFERENT variant vocabularies. Exp. 7-8 ablate
         the SCHEDULER (no_lb / round_robin / least_loaded / aass); Exp. 6 ablates
-        IAS PROPAGATION (ias / broadcast / full_rebuild). They were previously
+        DIAS PROPAGATION (ias / broadcast / full_rebuild). They were previously
         conflated: passing a scheduler variant to Exp. 6 ran the same measurement
         under a different directory name, because the scheduler decides which FSN
         serves a QUERY and plays no part in propagating an authorization change.
@@ -208,8 +259,21 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         produced -- within 3% of the main run at every point.
         """
         if number == 6:
+            if args.construction == "psa":
+                if args.variant in (None, ""):
+                    return [psa_mod.VARIANT_DIAS]
+                if args.variant.lower() == "all":
+                    return list(psa_mod.PSA_EXP6_VARIANTS)
+                picked = [v.strip() for v in args.variant.split(",") if v.strip()]
+                bad = [v for v in picked if v not in psa_mod.PSA_EXP6_VARIANTS]
+                if bad:
+                    raise SystemExit(
+                        f"unknown PSA Exp. 6 variant(s) {bad}; valid: "
+                        f"{', '.join(psa_mod.PSA_EXP6_VARIANTS)}"
+                    )
+                return picked
             if args.variant in (None, ""):
-                return [experiments_mod.VARIANT_IAS]
+                return [experiments_mod.VARIANT_DIAS]
             if args.variant.lower() == "all":
                 return list(experiments_mod.EXP6_VARIANTS)
             chosen = [v.strip() for v in args.variant.split(",") if v.strip()]
@@ -221,7 +285,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                     f"unknown Exp. 6 variant(s) {unknown}; valid: "
                     f"{', '.join(experiments_mod.EXP6_VARIANTS)}, or 'all'. "
                     f"The scheduler variants ({', '.join(ALL_VARIANTS)}) belong "
-                    f"to Exp. 7-8 and have no effect on IAS propagation."
+                    f"to Exp. 7-8 and have no effect on DIAS propagation."
                 )
             return chosen
         if number not in (7, 8):
@@ -239,12 +303,28 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             )
         return chosen
 
+    psa = args.construction == "psa"
+    if psa:
+        unsupported = [n for n in numbers if n not in PSA_FOLDERS]
+        if unsupported:
+            log(
+                f"REFUSED: --construction psa covers experiments "
+                f"{sorted(PSA_FOLDERS)}; {unsupported} have no "
+                f"policy-state-aware form. D1-D9 are construction and "
+                f"experiment-design divergences, not a fork of the whole "
+                f"harness -- see harness/psa_experiments.py."
+            )
+            return 2
+
     exit_code = 0
     for number in numbers:
       for variant in _variants_for(number):
-        experiment = experiments_mod.build_experiment(
-            number, config, source, variant=variant
-        )
+        if psa:
+            experiment = psa_mod.build(number, config, variant=variant or "")
+        else:
+            experiment = experiments_mod.build_experiment(
+                number, config, source, variant=variant
+            )
         metadata = provenance.build_metadata(
             config,
             experiment=experiment.name,
@@ -261,8 +341,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             # Which scheduler produced these numbers. Exp. 7-8 is a four-way
             # ablation, so a result that does not name its variant is
             # unidentifiable the moment the directory is renamed or merged.
-            notes=([f"scheduler_variant={variant}"] if variant and number in (6, 7, 8)
-                   else None),
+            notes=_run_notes(number, variant, construction=args.construction),
         )
         if args.require_reportable and not metadata.reportable:
             log(f"REFUSED {experiment.name}: not reportable")
@@ -297,7 +376,8 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         # Variant goes in the directory name: four schedulers writing to one
         # exp7 folder would silently overwrite each other and leave a single
         # curve labelled as an ablation.
-        out_dir = sweep.shard_dir(output_root / FOLDERS[number], args.points)
+        folders = PSA_FOLDERS if psa else FOLDERS
+        out_dir = sweep.shard_dir(output_root / folders[number], args.points)
         if variant and number in (6, 7, 8):
             out_dir = out_dir.parent / f"{out_dir.name}__{variant}"
         written = runner.write_outputs(result, out_dir)

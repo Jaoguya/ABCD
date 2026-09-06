@@ -236,7 +236,7 @@ def authorization_state_commitment(
 ) -> bytes:
     """``C_i^auth = H(ID_i || Dom_i || H(A_i) || VID_i || RevRoot_i)``.
 
-    The single definition of the commitment in the codebase. Phase VII Step 3
+    The single definition of the commitment in the codebase. Phase VII Step 2
     recomputes it with an incremented ``VID`` and an updated ``RevRoot``, and must
     call this rather than reimplement the concatenation — two copies of a
     commitment rule is one copy too many.

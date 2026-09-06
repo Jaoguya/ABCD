@@ -749,7 +749,7 @@ def test_commit_verification_recomputes_from_inputs():
 
 
 def test_commit_incremental_update_matches_a_rebuild():
-    """Phase VII Step 4: MerkleUpdate, not a rebuild (README §5, Exp. 5 rule)."""
+    """Phase VII Step 3: MerkleUpdate, not a rebuild (README §5, Exp. 5 rule)."""
     record, entries, auth_root_do, commitment = committed_record(keywords=6)
     replacement = entries[2].with_policy(policy_id=record.policy_id, vid=2)
     updated, recomputed = commit_mod.update_record_commitment(

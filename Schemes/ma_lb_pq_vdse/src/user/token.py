@@ -1,6 +1,6 @@
-"""Phase VI Step 1 — Search Token Generation.
+"""Phase VI Step 1-2 — Search Request and Policy-State-Aware Token Derivation.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:829`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     Q  = {w_1, ..., w_q}
     ST = ( T_Q, AuthRoot_U, VID_U, rho )

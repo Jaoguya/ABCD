@@ -13,7 +13,7 @@ registry is built once here with the accessors later phases need:
   Phase III Step 4's ``AuthRoot_U``;
 * domain to authority, for the shard authorization of Phase VI Step 2;
 * the version table, for ``C_j^sync = |VID_U - VID_j|`` in Phase VI Step 3;
-* the affected-FSN set, for the selective propagation of Phase VII Step 6.
+* the affected-FSN set, for the selective propagation of Phase VII Step 4.
 
 **The AIM's view derives from the ledger.** :meth:`AuthorizationIndexManager
 .synchronize_from_ledger` reads ``Reg_i`` and the latest ``State_i`` and builds
@@ -23,7 +23,7 @@ the chain and nobody would notice; deriving them means the two agree by
 construction, and :meth:`verify_against_ledger` re-checks it.
 
 **Propagation always takes an explicit FSN set.** Phase II is the *initial*
-synchronization and legitimately reaches every node, but Phase VII Step 6's
+synchronization and legitimately reaches every node, but Phase VII Step 4's
 selectivity — "the AIM forwards ``IAS_i`` only to FSNs that maintain the affected
 searchable-index shards" — is the claim Exp. 6 measures. If Phase II wired a
 broadcast that later phases inherited, Exp. 6 would measure a broadcast. So
@@ -188,7 +188,7 @@ class AuthorizationIndexManager:
     ) -> Tuple[FogSearchNode, ...]:
         """The nodes maintaining shards for this authority's domain.
 
-        Phase VII Step 6 forwards only to these. With the §V default of ``d = 4``
+        Phase VII Step 4 forwards only to these. With the §V default of ``d = 4``
         domains over ``m = 4`` nodes this is one node in four, which is what makes
         the selectivity visible in Exp. 6.
         """
@@ -203,7 +203,7 @@ class AuthorizationIndexManager:
         """Push ``Meta_i`` to exactly the nodes given.
 
         The caller decides the recipient set: Phase II Step 4 passes every node
-        (initial synchronization), Phase VII Step 6 passes
+        (initial synchronization), Phase VII Step 4 passes
         :meth:`affected_fsns`. There is deliberately no method that fans out to
         all nodes on its own.
         """
@@ -224,7 +224,7 @@ class AuthorizationIndexManager:
     def propagate_selectively(
         self, authority_id: str, fsns: Sequence[FogSearchNode]
     ) -> PropagationResult:
-        """Push ``Meta_i`` only to the affected nodes — Phase VII Step 6."""
+        """Push ``Meta_i`` only to the affected nodes — Phase VII Step 4."""
         return self.propagate(authority_id, self.affected_fsns(authority_id, fsns))
 
     # -- verification -------------------------------------------------------
@@ -261,7 +261,7 @@ class AuthorizationIndexManager:
 
         Returns the stale nodes rather than raising: staleness is a normal
         operating condition the AASS scheduler is designed to route around
-        (Phase VII Step 6 — "FSNs that have not yet applied the latest IAS
+        (Phase VII Step 4 — "FSNs that have not yet applied the latest DIAS
         message are assigned a higher version-synchronization cost"), not an
         error.
         """

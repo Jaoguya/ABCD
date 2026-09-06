@@ -458,7 +458,7 @@ def test_scheduler_least_loaded_picks_the_shortest_queue():
 
 
 def test_scheduler_aass_prefers_the_fresher_node():
-    """Phase VII Step 6: "the AASS scheduler naturally prefers fresh FSNs".
+    """Phase VII Step 4: "the AASS scheduler naturally prefers fresh FSNs".
 
     Two nodes, identical in every term but their synchronized version. AASS must
     pick the one whose VID matches the user's; an authorization-oblivious variant

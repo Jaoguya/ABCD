@@ -5,14 +5,14 @@ The bundle comes from Phase VI Step 5:
     Pi_i = ( CID_i, Root_i, Commit_i, pi_i )
     Resp = { (CID_i, Pi_i) }_{i=1..|R|}
 
-Phase VIII Step 1 (`:1143`):
+Phase VIII Step 1:
 
     VerifyMerkle(Root_i, pi_i, CID_i) = 1
 
 "If the verification fails, the corresponding ciphertext is immediately
 rejected."
 
-Phase VIII Step 2 (`:1167`):
+Phase VIII Step 2:
 
     VID_i = VID_U
     Commit_i* = H( Root_i ‖ PID_i ‖ VID_i ‖ AuthRoot_U )
@@ -346,7 +346,7 @@ def verify_bundle(
     """Client-side verification of one returned ciphertext.
 
     Short-circuits: Step 1 failing means "the corresponding ciphertext is
-    immediately rejected" (`:1143`), so the later steps are not run and — more to
+    immediately rejected", so the later steps are not run and — more to
     the point for Exp. 4 — not timed. A verifier that always ran all three would
     report a per-record cost that no real client pays.
 

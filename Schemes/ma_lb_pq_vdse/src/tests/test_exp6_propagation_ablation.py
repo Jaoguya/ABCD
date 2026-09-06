@@ -1,10 +1,10 @@
-"""Exp. 6's IAS claim has two halves, and neither had a measurement behind it.
+"""Exp. 6's DIAS claim has two halves, and neither had a measurement behind it.
 
 README §5 says of Exp. 6: "Report FSNs touched; **selective propagation is the
 claim**." Every campaign before 2026-09-03 reported ``fsns_touched = 1.000`` at
 every δ and called that the evidence. It is not evidence of anything:
 ``assign_domains_to_fsns`` gives each domain to exactly ONE node and an
-``IASMessage`` carries exactly one domain, so selective delivery touches one node
+``DIASMessage`` carries exactly one domain, so selective delivery touches one node
 for any ``d`` and ``m``. The constant is a property of the design, not a
 measurement of it.
 
@@ -34,7 +34,7 @@ import pytest  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src import config as config_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import experiments as exp_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import provenance  # noqa: E402
-from Schemes.ma_lb_pq_vdse.src.sync import ias as ias_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.sync import dias as dias_mod  # noqa: E402
 
 CONFIG = config_mod.load()
 SOURCE = exp_mod.SyntheticRecordSource()
@@ -53,7 +53,7 @@ def _measure(variant: str):
 # ===========================================================================
 def test_default_variant_is_the_published_selective_rule():
     experiment = exp_mod.build_experiment(6, CONFIG, SOURCE)
-    assert experiment.variant == exp_mod.VARIANT_IAS
+    assert experiment.variant == exp_mod.VARIANT_DIAS
 
 
 def test_unknown_variant_is_refused_rather_than_silently_ignored():
@@ -72,13 +72,13 @@ def test_unknown_variant_is_refused_rather_than_silently_ignored():
 # ===========================================================================
 def test_selective_delivery_touches_exactly_one_node():
     """d = m = 4, one domain per node, so one authority's update reaches one."""
-    _, _, sample = _measure(exp_mod.VARIANT_IAS)
+    _, _, sample = _measure(exp_mod.VARIANT_DIAS)
     assert sample.secondaries["fsns_touched"] == 1.0
 
 
 def test_broadcast_touches_every_node():
     """The alternative :1111 rejects: "broadcasting the complete index state"."""
-    _, prepared, sample = _measure(exp_mod.VARIANT_BROADCAST)
+    _, prepared, sample = _measure(exp_mod.VARIANT_INCREMENTAL_ALL)
     nodes = len(prepared["deployment"].nodes)
     assert nodes > 1, "a one-node deployment cannot distinguish the variants"
     assert sample.secondaries["fsns_touched"] == float(nodes)
@@ -86,8 +86,8 @@ def test_broadcast_touches_every_node():
 
 def test_broadcast_is_the_measurable_contrast_selective_needs():
     """The point of the ablation: 1 against m, not 1 against nothing."""
-    _, prepared, selective = _measure(exp_mod.VARIANT_IAS)
-    _, _, broadcast = _measure(exp_mod.VARIANT_BROADCAST)
+    _, prepared, selective = _measure(exp_mod.VARIANT_DIAS)
+    _, _, broadcast = _measure(exp_mod.VARIANT_INCREMENTAL_ALL)
     nodes = len(prepared["deployment"].nodes)
     assert broadcast.secondaries["fsns_touched"] == (
         selective.secondaries["fsns_touched"] * nodes
@@ -96,10 +96,10 @@ def test_broadcast_is_the_measurable_contrast_selective_needs():
 
 def test_broadcast_carries_the_same_message_it_just_sends_it_further():
     """Selectivity must be the ONLY difference — not a bigger payload."""
-    _, _, selective = _measure(exp_mod.VARIANT_IAS)
-    _, _, broadcast = _measure(exp_mod.VARIANT_BROADCAST)
-    assert broadcast.secondaries["ias_message_size"] == pytest.approx(
-        selective.secondaries["ias_message_size"]
+    _, _, selective = _measure(exp_mod.VARIANT_DIAS)
+    _, _, broadcast = _measure(exp_mod.VARIANT_INCREMENTAL_ALL)
+    assert broadcast.secondaries["dias_message_size"] == pytest.approx(
+        selective.secondaries["dias_message_size"]
     )
 
 
@@ -107,35 +107,35 @@ def test_broadcast_carries_the_same_message_it_just_sends_it_further():
 # DELIVERED PAYLOAD — the figure's panel (b)
 # ===========================================================================
 def test_selective_delivers_exactly_one_copy_of_the_message():
-    _, _, sample = _measure(exp_mod.VARIANT_IAS)
+    _, _, sample = _measure(exp_mod.VARIANT_DIAS)
     assert sample.secondaries["delivered_kb"] == pytest.approx(
-        sample.secondaries["ias_message_size"]
+        sample.secondaries["dias_message_size"]
     )
 
 
 def test_broadcast_delivers_one_copy_per_node():
     """The 4x that IS the selective claim, in bytes rather than node count."""
-    _, prepared, sample = _measure(exp_mod.VARIANT_BROADCAST)
+    _, prepared, sample = _measure(exp_mod.VARIANT_INCREMENTAL_ALL)
     nodes = len(prepared["deployment"].nodes)
     assert sample.secondaries["delivered_kb"] == pytest.approx(
-        sample.secondaries["ias_message_size"] * nodes
+        sample.secondaries["dias_message_size"] * nodes
     )
 
 
 def test_full_rebuild_payload_is_not_the_message_size_times_nodes_touched():
     """The bug this metric replaced.
 
-    Panel (b) was ``ias_message_size x fsns_touched`` until 2026-09-04. That is
+    Panel (b) was ``dias_message_size x fsns_touched`` until 2026-09-04. That is
     exact for ``ias`` and ``broadcast``, which send the same message to 1 and m
     recipients, and WRONG for ``full_rebuild``: only 1 of its 1+(d-1)m deliveries
-    is an IASMessage. The rest are ``AuthorizationMeta`` republishes, and
+    is a DIASMessage. The rest are ``AuthorizationMeta`` republishes, and
     ``Meta_i = (Dom_i, VID_i, C_i^auth)`` is a fraction of a message that also
     carries the entries, the root and the commit. The product therefore charged
     the rebuild several times the bytes it actually sends.
     """
-    _, _, sample = _measure(exp_mod.VARIANT_FULL_REBUILD)
+    _, _, sample = _measure(exp_mod.VARIANT_FULL_STATE)
     product = (
-        sample.secondaries["ias_message_size"] * sample.secondaries["fsns_touched"]
+        sample.secondaries["dias_message_size"] * sample.secondaries["fsns_touched"]
     )
     assert sample.secondaries["delivered_kb"] < product, (
         "a republish is smaller than a message; if this ever holds with "
@@ -145,7 +145,7 @@ def test_full_rebuild_payload_is_not_the_message_size_times_nodes_touched():
 
 def test_full_rebuild_payload_is_one_message_plus_the_republishes():
     """Every byte accounted for, against the encodings themselves."""
-    _, prepared, sample = _measure(exp_mod.VARIANT_FULL_REBUILD)
+    _, prepared, sample = _measure(exp_mod.VARIANT_FULL_STATE)
     d = prepared["deployment"]
     domain = d.records[0]["record"].domain
     others = [a for dom, a in d.authorities.items() if dom != domain]
@@ -153,7 +153,7 @@ def test_full_rebuild_payload_is_one_message_plus_the_republishes():
         len(other.meta().encode()) / 1024.0 for other in others
     ) * len(d.nodes)
     assert sample.secondaries["delivered_kb"] == pytest.approx(
-        sample.secondaries["ias_message_size"] + republished
+        sample.secondaries["dias_message_size"] + republished
     )
 
 
@@ -177,7 +177,7 @@ def test_rebuild_sizing_stays_off_the_timed_path():
 # ===========================================================================
 def test_full_rebuild_recomputes_every_authority():
     """:1045 — "only the affected authority updates its commitment"."""
-    _, prepared, sample = _measure(exp_mod.VARIANT_FULL_REBUILD)
+    _, prepared, sample = _measure(exp_mod.VARIANT_FULL_STATE)
     d = prepared["deployment"]
     nodes = len(d.nodes)
     authorities = len(d.authorities)
@@ -189,8 +189,8 @@ def test_full_rebuild_recomputes_every_authority():
 
 def test_full_rebuild_costs_more_than_the_incremental_path():
     """An ablation that shows no effect would mean the claim is untestable."""
-    _, _, incremental = _measure(exp_mod.VARIANT_IAS)
-    _, _, rebuild = _measure(exp_mod.VARIANT_FULL_REBUILD)
+    _, _, incremental = _measure(exp_mod.VARIANT_DIAS)
+    _, _, rebuild = _measure(exp_mod.VARIANT_FULL_STATE)
     assert rebuild.primary > incremental.primary
 
 
@@ -225,10 +225,10 @@ def test_every_variant_reaches_the_same_authorization_state(variant):
 @pytest.mark.parametrize("variant", exp_mod.EXP6_VARIANTS)
 def test_every_variant_reports_every_secondary(variant):
     _, _, sample = _measure(variant)
-    assert sample.secondaries["ias_message_size"] > 0
+    assert sample.secondaries["dias_message_size"] > 0
     assert sample.secondaries["fsns_touched"] >= 1.0
     assert sample.secondaries["delivered_kb"] >= (
-        sample.secondaries["ias_message_size"]
+        sample.secondaries["dias_message_size"]
     )
     assert sample.primary > 0
 
@@ -239,13 +239,13 @@ def test_every_variant_reports_every_secondary(variant):
 def test_default_path_still_refuses_a_node_that_does_not_hold_the_shard():
     """``require_shard`` is relaxed ONLY for an injected selector.
 
-    ``apply_ias`` gained ``require_shard=False`` so ``broadcast`` can reach nodes
+    ``apply_dias`` gained ``require_shard=False`` so ``broadcast`` can reach nodes
     without the affected shard. If that leaked into the default, selective
     propagation would silently accept a misrouted message.
     """
     import inspect
 
-    src = inspect.getsource(ias_mod.synchronize)
+    src = inspect.getsource(dias_mod.synchronize)
     assert "require_shard=select_nodes is None" in src, (
         "the shard guard must stay on whenever no selector was injected"
     )
@@ -254,12 +254,12 @@ def test_default_path_still_refuses_a_node_that_does_not_hold_the_shard():
 def test_affected_nodes_is_still_the_default_selector():
     import inspect
 
-    src = inspect.getsource(ias_mod.synchronize)
+    src = inspect.getsource(dias_mod.synchronize)
     assert "select_nodes or affected_nodes" in src
 
 
 # ===========================================================================
-# Reportability — Exp. 6's boundary excludes Phase VII Step 7
+# Reportability — Exp. 6's boundary excludes Phase VII Step 5
 # ===========================================================================
 def _reasons(experiment: str):
     _, reasons = provenance.reportability(
@@ -293,7 +293,7 @@ def test_exp4_is_still_blocked_on_the_fabric_adapter():
 def test_exp6_runner_passes_no_ledger():
     """The premise the gate change rests on, pinned.
 
-    If Phase VII Step 7 is ever brought inside Exp. 6's boundary, this fails and
+    If Phase VII Step 5 is ever brought inside Exp. 6's boundary, this fails and
     ``exp6_authorization_sync`` must go back into the ledger gate.
     """
     import inspect

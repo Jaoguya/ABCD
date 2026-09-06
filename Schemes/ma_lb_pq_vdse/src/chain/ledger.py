@@ -8,7 +8,7 @@ records, and audit logs" — never the encrypted data itself.
 **Staging (decision of 2026-08-08).** Phases I-II are untimed setup (README §2),
 so they run against :class:`InProcessLedger`. Fabric implements the same
 :class:`Ledger` interface and must land before Exp. 4, which is the first
-experiment that *measures* a blockchain-consistency check (Phase VIII Step 3).
+experiment that *measures* a blockchain-consistency check (Phase VIII Step 2).
 No reportable number depends on the adapter until then. To keep that swap
 honest, the in-process adapter is a real append-only hash chain rather than a
 dictionary: ``verify_chain`` does the work Exp. 4 will time, so the consistency
@@ -58,7 +58,7 @@ NS_SYSTEM_PARAMETERS = "system_parameters"          # Phase I  Step 3: PP
 NS_AUTHORITY_REGISTRATIONS = "authority_registrations"  # Phase II Step 1: Reg_i
 NS_AUTHORIZATION_STATES = "authorization_states"    # Phase II Step 4: State_i
 NS_MERKLE_ROOTS = "merkle_roots"                    # Phase IV Step 4 / VII Step 4
-NS_VERSION_IDENTIFIERS = "version_identifiers"      # Phase VII Step 7
+NS_VERSION_IDENTIFIERS = "version_identifiers"      # Phase VII Step 5
 NS_REVOCATION_RECORDS = "revocation_records"        # Phase II Step 3 / VII Step 3
 NS_AUDIT_LOGS = "audit_logs"                        # Phase VIII Step 6
 
@@ -162,7 +162,7 @@ def _entry_hash(
 def state_key(authority_id: str, vid: int) -> str:
     """Key for State_i at version ``vid``.
 
-    Versioned rather than overwritten: Phase VII Step 3 increments the version
+    Versioned rather than overwritten: Phase VII Step 2 increments the version
     (``VID_k' = VID_k + 1``) and the chain must retain the old state, both for
     the audit property and because Phase VI's ``C_j^sync = |VID_U - VID_j|``
     needs historical versions to remain addressable.
@@ -204,7 +204,7 @@ class Ledger(ABC):
 
     @abstractmethod
     def verify_chain(self) -> bool:
-        """Recompute every link. This is the work Exp. 4 times (Phase VIII Step 3)."""
+        """Recompute every link. This is the work Exp. 4 times (Phase VIII Step 2)."""
 
     @abstractmethod
     def entry_count(self) -> int:

@@ -157,7 +157,7 @@ def _check_identifier(name: str, value: str) -> None:
 def _check_vid(value: int) -> None:
     if isinstance(value, bool) or not isinstance(value, int):
         raise TypeError(f"VID must be int, got {type(value).__name__}")
-    # Phase VII Step 3 defines VID' = VID + 1, and Phase VI's synchronisation
+    # Phase VII Step 2 defines VID' = VID + 1, and Phase VI's synchronisation
     # cost is C_j^sync = |VID_U - VID_j|; both require a monotone counter, so a
     # negative version is a bug rather than an unusual input.
     if value < 0:
@@ -690,7 +690,7 @@ class RecordMetadata(Record):
     """``Meta_i = (PID_i, VID_i, Dom_i, TS_i)`` — Phase IV Step 1.
 
     ``policy_id`` is the manuscript's ``PID_i``, the **access-policy
-    identifier** (notation table `:331`, Phase IV Step 1 `:630`). It is *not*
+    identifier** (notation table, Phase IV Step 1). It is *not*
     the corpus's ``Record.pid``, which ``prepare_dataset.py:346`` fills with a
     patient pseudonym — see ``index/extract.py`` on why conflating the two would
     silently create one policy per patient.
@@ -761,7 +761,7 @@ class IndexEntry(Record):
 # ===========================================================================
 @dataclass(frozen=True)
 class SyncPayload(Record):
-    """``Sync_i = (I_i, PID_i, VID_i, CID_i)`` — Phase V Step 4 (`:797`).
+    """``Sync_i = (I_i, PID_i, VID_i, CID_i)`` — Phase V Step 4.
 
     ``I_i`` is the *record's* entry set — note the index shift from Phase IV's
     ``I_j``, a single entry, to ``I_i``, all of one record's entries.
@@ -822,7 +822,7 @@ class SyncPayload(Record):
     def size_bytes(self) -> int:
         """On-wire size of the synchronisation message.
 
-        The Phase V counterpart of Exp. 6's IAS message size, and the figure that
+        The Phase V counterpart of Exp. 6's DIAS message size, and the figure that
         backs Step 4's "low synchronization overhead" claim.
         """
         return len(self.encode())
@@ -830,7 +830,7 @@ class SyncPayload(Record):
 
 @dataclass(frozen=True)
 class CatalogEntry(Record):
-    """``(CID_i, PID_i, VID_i)`` — one row of Phase V Step 5's catalog (`:813`).
+    """``(CID_i, PID_i, VID_i)`` — one row of Phase V Step 5's catalog.
 
     ``domain`` is carried alongside the published triple because locating a
     *shard* requires knowing which node holds it, and shards are domain-keyed —
@@ -856,11 +856,11 @@ class CatalogEntry(Record):
 
 @dataclass(frozen=True)
 class OutsourcedMetadata(Record):
-    """``Meta_i = (CID_i, PID_i, VID_i, Root_i, Commit_i)`` — Phase V Step 2 (`:767`).
+    """``Meta_i = (CID_i, PID_i, VID_i, Root_i, Commit_i)`` — Phase V Step 2.
 
     **Third distinct record the manuscript calls ``Meta_i``**, alongside
-    :class:`AuthorizationMeta` (Phase II Step 4, `:483`) and
-    :class:`RecordMetadata` (Phase IV Step 1, `:621`). One symbol, three tuples;
+    :class:`AuthorizationMeta` (Phase II Step 4) and
+    :class:`RecordMetadata` (Phase IV Step 1). One symbol, three tuples;
     they are separate types here because they carry different fields, are produced
     by different parties, and travel to different places.
 
@@ -892,9 +892,9 @@ class OutsourcedMetadata(Record):
 class BlockchainAnchor(Record):
     """``BC_i = (CID_i, Commit_i, Root_i, VID_i, TS_i)`` — the on-chain transaction.
 
-    One record for two steps that publish the same tuple: Phase V Step 3 (`:780`)
-    anchors a record's initial state, and Phase VII Step 7 (`:1127`) anchors each
-    update as ``BC_i'``. Phase VIII Step 3 (`:1203`) verifies against whichever is
+    One record for two steps that publish the same tuple: Phase V Step 3
+    anchors a record's initial state, and Phase VII Step 5 anchors each
+    update as ``BC_i'``. Phase VIII Step 2 verifies against whichever is
     current. Three phases share it, which is why it lives here rather than in any
     one of them.
 
@@ -925,7 +925,7 @@ class BlockchainAnchor(Record):
 
 @dataclass(frozen=True)
 class SearchToken(Record):
-    """``ST = (T_Q, AuthRoot_U, VID_U, rho)`` — Phase VI Step 1 (`:829`).
+    """``ST = (T_Q, AuthRoot_U, VID_U, rho)`` — Phase VI Step 1.
 
     ``T_Q`` is the keyword-token set from ``index/tokens.py``; ``rho`` is "a fresh
     random nonce preventing replay attacks", which only prevents anything if a

@@ -1,15 +1,23 @@
-"""Phase VII — Dynamic Index Evolution and Incremental Authorization Sync.
+"""Phase VII — Dependency-Aware Dynamic Evolution and Incremental Authorization Sync.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:997`, seven steps:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`, five steps:
 
-    Step 1 (:1007)  U_i = (Op, CID_i, Delta_i),  Op in {Insert, Modify, Delete, Revoke}
-    Step 2 (:1020)  localized searchable-index evolution; "Unchanged index
-                    entries are not rebuilt"
-    Step 3 (:1045)  VID_k' = VID_k + 1, RevRoot_k', C_k^auth'
-    Step 4 (:1074)  Root_i' = MerkleUpdate(Root_i, L_Delta),  Commit_i'
-    Step 5 (:1092)  IAS_i = (CID_i, dVID_i, dC_i^auth, dI_i, dRoot_i, Commit_i')
-    Step 6 (:1111)  Shard_j' = ApplyIAS(Shard_j, IAS_i), only to affected FSNs
-    Step 7 (:1127)  BC_i' = (CID_i, Commit_i', Root_i', VID_i', TS_i')
+    Step 1  U = (Op, X, TS_U),
+            Op in {Insert, Modify, Delete, PolicyUpdate, Revoke}; and the
+            dependency closure P_k^aff -> R_k^aff -> S_k^aff
+    Step 2  v_k' = v_k + 1, C_k^auth'; localized policy-state and index
+            evolution, with AA_k not in AA(PID_i) => PV_i' = PV_i
+    Step 3  Root_i' = MerkleUpdate(Root_i, dL_i), AuthState_i', Commit_i'
+    Step 4  DIAS_i = (dV_{P_i}, dI_i, Root_i', PV_i', AuthState_i', Commit_i'),
+            sent only to F_i^aff
+    Step 5  version-gated activation, then BC_i' = (CID_i', PID_i, PV_i',
+            Root_i', AuthState_i', Commit_i', TS_i')
+
+RE-ANCHORED to the eight-phase manuscript, which merged the old seven steps into
+five: old Steps 2-3 became Step 2, old Step 4 became Step 3, old Steps 5-6 became
+Step 4, and old Step 7 became Step 5. The step NUMBERS moved; the work this module
+does did not. Two record shapes in the manuscript did change, and this module
+still implements the old ones -- see ``MANUSCRIPT_DIVERGENCE.md`` D1 and D2.
 
 This is the phase Exp. 5 and Exp. 6 measure, so what it must *not* do matters as
 much as what it does. README §5: "Exp. 5 — incremental update only. A global
@@ -28,7 +36,7 @@ authority version bump).
 ``RevRoot_k`` and ``VID_k`` and therefore ``C_k^auth``, which propagates to the
 FSNs as authorization state. The record entries are untouched, because the
 authority's version and a record's version are different counters
-(``PHASE_IV_PLAN.md`` §1.4). This is what lets Exp. 6 measure the IAS mechanism
+(``PHASE_IV_PLAN.md`` §1.4). This is what lets Exp. 6 measure the DIAS mechanism
 rather than re-indexing.
 
 **Notation caveat in Step 5.** The three ``Delta`` terms are not the same kind of
@@ -72,12 +80,12 @@ from ..types import (  # noqa: E402
 )
 
 
-class IASError(RuntimeError):
+class DIASError(RuntimeError):
     """Raised when an incremental update cannot be applied."""
 
 
 class Operation(Enum):
-    """``Op in {Insert, Modify, Delete, Revoke}`` — Step 1 (`:1007`)."""
+    """``Op in {Insert, Modify, Delete, Revoke}`` — Step 1."""
 
     INSERT = "Insert"
     MODIFY = "Modify"
@@ -89,7 +97,7 @@ class Operation(Enum):
         """Whether the operation rewrites searchable-index entries.
 
         ``Revoke`` does not: it changes authorization state only. Making that
-        explicit here is what keeps Exp. 6 measuring the IAS mechanism instead of
+        explicit here is what keeps Exp. 6 measuring the DIAS mechanism instead of
         re-indexing a domain.
         """
         return self is not Operation.REVOKE
@@ -109,7 +117,7 @@ class Operation(Enum):
 @dataclass(frozen=True)
 class UpdateDelta:
     """``Delta_i`` — "the affected keywords, policy changes, metadata changes, or
-    revocation information" (`:1007`).
+    revocation information".
 
     All fields optional because one ``Delta_i`` shape serves four operations; each
     operation validates the fields it needs in :meth:`UpdateRequest.validate`.
@@ -143,17 +151,17 @@ class UpdateRequest:
     def validate(self) -> None:
         op, delta = self.operation, self.delta
         if op is Operation.INSERT and not delta.keywords_added:
-            raise IASError("Insert requires at least one added keyword")
+            raise DIASError("Insert requires at least one added keyword")
         if op is Operation.DELETE and not delta.keywords_removed:
-            raise IASError("Delete requires at least one removed keyword")
+            raise DIASError("Delete requires at least one removed keyword")
         if op is Operation.MODIFY and delta.policy_id is None:
-            raise IASError("Modify requires the new policy identifier")
+            raise DIASError("Modify requires the new policy identifier")
         if op is Operation.REVOKE and not (delta.revoked or delta.restored):
-            raise IASError(
+            raise DIASError(
                 "Revoke requires at least one revoked or restored identifier"
             )
         if op is not Operation.REVOKE and (delta.revoked or delta.restored):
-            raise IASError(
+            raise DIASError(
                 f"{op.value} carries revocation information; revocation state "
                 f"evolves through Revoke so that Exp. 6 measures one mechanism"
             )
@@ -164,7 +172,7 @@ class UpdateRequest:
 # ===========================================================================
 @dataclass(frozen=True)
 class AuthorizationEvolution:
-    """Before and after of one authority's state — Step 3 (`:1045`)."""
+    """Before and after of one authority's state — Step 3."""
 
     authority_id: str
     domain: str
@@ -202,7 +210,7 @@ def evolve_authorization_state(
 
     Only this authority changes. "Only the affected authority updates its
     commitment, while all other authorities retain their existing authorization
-    states" (`:1045`) — which is the property Exp. 6's selective propagation
+    states" — which is the property Exp. 6's selective propagation
     depends on, so there is deliberately no batch form of this function that
     could sweep the federation.
     """
@@ -295,7 +303,7 @@ def evolve_index_entries(
 
     # Step 2 writes the updated entry as I_j' = (T_j', CID_i, PID_i', VID_i') —
     # the RECORD's version is primed. It must advance for any update that changes
-    # the record's root or policy, for two reasons: Phase VIII Step 3 keys BC_i by
+    # the record's root or policy, for two reasons: Phase VIII Step 2 keys BC_i by
     # the record's version, so an unchanged version would collide with the existing
     # anchor while carrying a different root; and all of a record's entries share
     # one (PID_i, VID_i) pair, which Commit_i and Sync_i both bind.
@@ -311,25 +319,25 @@ def evolve_index_entries(
     if op is Operation.DELETE:
         doomed = set(delta.keywords_removed)
         if token_for is None:
-            raise IASError("Delete needs token_for to identify the doomed entries")
+            raise DIASError("Delete needs token_for to identify the doomed entries")
         doomed_tokens = {token_for(keyword) for keyword in doomed}
         before = len(remaining)
         remaining = [e for e in remaining if e.token not in doomed_tokens]
         removed = before - len(remaining)
         if removed != len(doomed):
-            raise IASError(
+            raise DIASError(
                 f"Delete named {len(doomed)} keywords but matched {removed} "
                 f"entries for CID {request.cid!r}"
             )
 
     if op is Operation.INSERT:
         if token_for is None:
-            raise IASError("Insert needs token_for to build the new entries")
+            raise DIASError("Insert needs token_for to build the new entries")
         template = entries[0]
         for keyword in delta.keywords_added:
             token = token_for(keyword)
             if any(e.token == token for e in remaining):
-                raise IASError(
+                raise DIASError(
                     f"keyword {keyword!r} is already indexed for CID "
                     f"{request.cid!r}"
                 )
@@ -344,7 +352,7 @@ def evolve_index_entries(
             inserted += 1
 
     if not remaining:
-        raise IASError(
+        raise DIASError(
             f"the update would leave CID {request.cid!r} with no index entries; "
             f"a record with no entries has no Merkle root (Phase IV Step 4)"
         )
@@ -445,10 +453,10 @@ def evolve_commitment(
 
 
 # ===========================================================================
-# Step 5 — the IAS message
+# Step 5 — the DIAS message
 # ===========================================================================
 @dataclass(frozen=True)
-class IASMessage(Record):
+class DIASMessage(Record):
     """``IAS_i = (CID_i, dVID_i, dC_i^auth, dI_i, dRoot_i, Commit_i')`` — Step 5.
 
     ``authority_id`` and ``domain`` are routing fields carried alongside the
@@ -497,7 +505,7 @@ class IASMessage(Record):
 
     @property
     def size_bytes(self) -> int:
-        """IAS message size — the Exp. 6 secondary metric, in bytes."""
+        """DIAS message size — the Exp. 6 secondary metric, in bytes."""
         return len(self.encode())
 
     @property
@@ -511,13 +519,13 @@ class IASMessage(Record):
         return bool(self.entries)
 
 
-def build_ias_message(
+def build_dias_message(
     *,
     cid: str,
     authorization: AuthorizationEvolution,
     index_evolution: IndexEvolution,
     commitment_evolution: CommitmentEvolution,
-) -> IASMessage:
+) -> DIASMessage:
     """Step 5: assemble ``IAS_i``.
 
     ``dI_i`` carries **only** the modified entries. For a revocation that is the
@@ -527,7 +535,7 @@ def build_ias_message(
     modified = (
         index_evolution.entries if index_evolution.entries_touched else ()
     )
-    return IASMessage(
+    return DIASMessage(
         cid=cid,
         delta_vid=authorization.delta_vid,
         authority_commitment=authorization.new_commitment,
@@ -544,7 +552,7 @@ def build_ias_message(
 # ===========================================================================
 @dataclass(frozen=True)
 class ApplyResult:
-    """What one node did with an IAS message."""
+    """What one node did with a DIAS message."""
 
     node_id: str
     entries_rewritten: int
@@ -552,9 +560,9 @@ class ApplyResult:
     new_vid: int
 
 
-def apply_ias(
+def apply_dias(
     node: FogSearchNode,
-    message: IASMessage,
+    message: DIASMessage,
     *,
     domain: Optional[str] = None,
     require_shard: bool = True,
@@ -564,12 +572,12 @@ def apply_ias(
     Two effects, and the second is the one Phase VI reads: the shard's entries are
     repolicied to the message's payload, and the node's authorization state
     advances to the new ``(VID, C^auth)``. Without the second, "FSNs that have not
-    yet applied the latest IAS message are assigned a higher
+    yet applied the latest DIAS message are assigned a higher
     version-synchronization cost" would have nothing to measure.
 
     **Observation on the published design.** ``IAS_i`` carries ``dVID_i``, a
     *difference*, so a node's new version is ``VID_j + dVID_i``. A node that
-    missed an earlier IAS message therefore **cannot** reach the authority's
+    missed an earlier DIAS message therefore **cannot** reach the authority's
     current version from this one — delta-based synchronisation requires in-order,
     gap-free delivery. :func:`synchronize` checks the postcondition and reports the
     gap rather than letting a node silently settle on a version nobody published.
@@ -578,7 +586,7 @@ def apply_ias(
     """
     domain = domain or message.domain
     if require_shard and not node.serves_domain(domain):
-        raise IASError(
+        raise DIASError(
             f"{node.node_id} serves {sorted(node.domains)} and is not an "
             f"affected node for domain {domain!r}"
         )
@@ -635,18 +643,18 @@ def apply_ias(
 
 
 def affected_nodes(
-    message: IASMessage, nodes: Sequence[FogSearchNode]
+    message: DIASMessage, nodes: Sequence[FogSearchNode]
 ) -> Tuple[FogSearchNode, ...]:
     """Nodes maintaining a shard for the affected domain — Step 6's recipients.
 
     "Rather than broadcasting the complete index state, the AIM forwards ``IAS_i``
-    **only** to FSNs that maintain the affected searchable-index shards" (`:1111`).
+    **only** to FSNs that maintain the affected searchable-index shards".
     With the §V defaults that is one node in four, and it is what Exp. 6 reports as
     FSNs touched.
     """
     targets = tuple(node for node in nodes if node.serves_domain(message.domain))
     if not targets:
-        raise IASError(
+        raise DIASError(
             f"no Fog Search Node serves domain {message.domain!r}; the update "
             f"would be applied nowhere"
         )
@@ -654,10 +662,10 @@ def affected_nodes(
 
 
 @dataclass(frozen=True)
-class IASReceipt:
+class DIASReceipt:
     """One end-to-end Phase VII cycle, with the Exp. 5 and Exp. 6 metrics."""
 
-    message: IASMessage
+    message: DIASMessage
     authorization: AuthorizationEvolution
     index_evolution: IndexEvolution
     commitment_evolution: CommitmentEvolution
@@ -719,11 +727,11 @@ def synchronize(
     ledger: Optional[Ledger] = None,
     token_for: Optional[callable] = None,
     select_nodes: Optional[callable] = None,
-) -> IASReceipt:
+) -> DIASReceipt:
     """Phase VII Steps 2-7 end to end — the path Exp. 6 times.
 
-    README §5: "IAS end-to-end: commitment recomputation → Merkle path update →
-    IAS message → selective FSN propagation **until all affected FSNs report the
+    README §5: "DIAS end-to-end: commitment recomputation → Merkle path update →
+    DIAS message → selective FSN propagation **until all affected FSNs report the
     new VID**." The final clause is a postcondition, so this verifies it rather
     than assuming delivery succeeded.
     """
@@ -752,7 +760,7 @@ def synchronize(
     )
 
     # Step 5 — the message.
-    message = build_ias_message(
+    message = build_dias_message(
         cid=request.cid,
         authorization=authorization,
         index_evolution=index_evolution,
@@ -769,31 +777,31 @@ def synchronize(
     chooser = select_nodes or affected_nodes
     targets = chooser(message, nodes)
     if not targets:
-        raise IASError(
+        raise DIASError(
             f"node selection returned no recipient for domain {message.domain!r}; "
             f"the update would be applied nowhere"
         )
     # An injected selector picks recipients by its OWN rule, so the shard guard in
-    # apply_ias would reject the very nodes it deliberately chose. Relaxed only on
+    # apply_dias would reject the very nodes it deliberately chose. Relaxed only on
     # that path; the default keeps it.
     applied = tuple(
-        apply_ias(node, message, require_shard=select_nodes is None)
+        apply_dias(node, message, require_shard=select_nodes is None)
         for node in targets
     )
 
     # The postcondition README §5 states: propagation continues "until all
     # affected FSNs report the new VID". Verified rather than assumed — a node
     # with a delivery gap cannot reach the current version from a delta alone
-    # (see apply_ias), and that must surface here rather than leaving a node on a
+    # (see apply_dias), and that must surface here rather than leaving a node on a
     # version nobody published.
     for result in applied:
         if result.new_vid != authorization.new_vid:
-            raise IASError(
+            raise DIASError(
                 f"{result.node_id} reports VID {result.new_vid} after applying "
                 f"IAS_i for {authorization.authority_id!r}, expected "
                 f"{authorization.new_vid}. IAS_i carries dVID (a difference), so "
                 f"a node that missed an earlier message cannot catch up from this "
-                f"one — it needs the intervening IAS messages in order."
+                f"one — it needs the intervening DIAS messages in order."
             )
 
     if aim is not None:
@@ -814,7 +822,7 @@ def synchronize(
         # anchored ones and there is nothing new to record on-chain. Re-anchoring
         # would be a duplicate key on an append-only ledger.
 
-    return IASReceipt(
+    return DIASReceipt(
         message=message,
         authorization=authorization,
         index_evolution=index_evolution,
@@ -848,9 +856,9 @@ def _unchanged(authority: Authority) -> AuthorizationEvolution:
 # ===========================================================================
 # Step 7 — Blockchain Anchoring
 # ===========================================================================
-# ``BC_i'`` is ``types.BlockchainAnchor``: Phase V Step 3 anchors a record's
-# initial state and Phase VII Step 7 anchors each update, both publishing the same
-# five-field tuple, and Phase VIII Step 3 verifies against whichever is current.
+# ``BC_i'`` is ``types.BlockchainAnchor``: Phase IV Step 5 anchors a record's
+# initial state and Phase VII Step 5 anchors each update, both publishing the same
+# five-field tuple, and Phase VIII Step 2 verifies against whichever is current.
 # Three phases share it, so it lives in types.py rather than here.
 UpdateAnchor = BlockchainAnchor
 
@@ -858,7 +866,7 @@ UpdateAnchor = BlockchainAnchor
 def anchor_update(
     ledger: Ledger,
     *,
-    message: IASMessage,
+    message: DIASMessage,
     vid: int,
     timestamp_ns: Optional[int] = None,
 ) -> BlockchainAnchor:
@@ -882,23 +890,23 @@ def anchor_update(
 
 
 __all__ = [
-    "IASError",
+    "DIASError",
     "Operation",
     "UpdateDelta",
     "UpdateRequest",
     "AuthorizationEvolution",
     "IndexEvolution",
     "CommitmentEvolution",
-    "IASMessage",
+    "DIASMessage",
     "ApplyResult",
-    "IASReceipt",
+    "DIASReceipt",
     "UpdateAnchor",
     "BlockchainAnchor",
     "evolve_authorization_state",
     "evolve_index_entries",
     "evolve_commitment",
-    "build_ias_message",
-    "apply_ias",
+    "build_dias_message",
+    "apply_dias",
     "affected_nodes",
     "synchronize",
     "anchor_update",

@@ -72,7 +72,7 @@ class FogSearchNode:
     index: DynamicSearchIndex
     _queue: Deque[QueuedRequest] = field(default_factory=deque, repr=False)
     # Meta_i per authority, as delivered by the AIM in Phase II Step 4 and
-    # updated by IAS in Phase VII Step 6.
+    # updated by DIAS in Phase VII Step 4.
     _synced: Dict[str, AuthorizationMeta] = field(default_factory=dict, repr=False)
     # CIDs whose Sync_i this node has applied — the Phase V Step 4 replay guard.
     _applied: Set[str] = field(default_factory=set, repr=False)
@@ -162,13 +162,13 @@ class FogSearchNode:
     def applied_records(self) -> int:
         return len(self._applied)
 
-    # -- authorization state (Phase II Step 4 / Phase VII Step 6) -----------
+    # -- authorization state (Phase II Step 4 / Phase VII Step 4) -----------
     def apply_meta(self, authority_id: str, meta: AuthorizationMeta) -> bool:
         """Apply ``Meta_i = (Dom_i, VID_i, C_i^auth)`` from the AIM.
 
         Returns whether this node's state changed. A node rejects a version older
         than the one it holds: authorization versions only advance
-        (``VID' = VID + 1``, Phase VII Step 3), so an older message is a replay or
+        (``VID' = VID + 1``, Phase VII Step 2), so an older message is a replay or
         a reordered delivery, and applying it would silently roll the node's
         authorization state backwards.
         """
@@ -233,7 +233,7 @@ class FogSearchNode:
         Phase VI writes ``C_j^sync = |VID_U - VID_j|`` with a single ``VID_j``,
         while Phase II Step 4 synchronizes one ``Meta_i`` per authority. The
         aggregation is therefore ours to choose, and it is the **minimum** across
-        synchronized authorities: a node that has not applied the newest IAS for
+        synchronized authorities: a node that has not applied the newest DIAS for
         any one authority genuinely cannot serve that authority's current state,
         so the minimum is the version the node can actually honour across the
         board. Taking the maximum would let one freshly-synced authority mask

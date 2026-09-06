@@ -1,10 +1,20 @@
-"""Phase IV Step 2 — keyword tokenization and the policy tag (Option D).
+"""Phase IV Step 2 — Policy-State-Bound Keyword Encoding (as Option D).
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:635` writes the index token as
+.. warning::
+
+   **The current manuscript contradicts this module.** Its Phase IV Step 2 and
+   Phase VI Step 2 both write the token as ``H(w ‖ PID ‖ PV ‖ Dom)`` and prove
+   their equality as a theorem, where Option D below reduces both to ``H(w)``.
+   The reasoning below is preserved because it is why the code is as it is, but
+   it argues against a version of the paper that no longer exists. See
+   ``MANUSCRIPT_DIVERGENCE.md`` D1 before treating any formula here as the
+   published one.
+
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex` writes the index token as
 
     T_j = H( w_j ‖ PID_i ‖ VID_i ‖ Dom_i )
 
-while Phase VI Step 1 `:829` writes the query token as
+while Phase VI Step 1 writes the query token as
 ``T_Q = {H(w_i ‖ VID_U)}`` and Phase VI Step 4 leaves the matching relation
 ``T_Q → I_i`` undefined. ``PHASE_IV_PLAN.md`` §1 sets out why those cannot all
 hold, and **Option D was chosen on 2026-08-10**:
@@ -14,7 +24,7 @@ hold, and **Option D was chosen on 2026-08-10**:
 
 Policy, version and domain leave the lookup key and become (a) payload on the
 index entry, (b) the ``(domain, policy)`` bitmap key the FSN filters on, and
-(c) this compact tag. §V `:1892` requires exactly this shape: "a single
+(c) this compact tag. §V requires exactly this shape: "a single
 authorization-bound trapdoor… reused across participating domains, while each fog
 search node enforces domain-specific authorization locally… bitmap filtering
 removes unauthorized ciphertexts before encrypted matching".
@@ -41,7 +51,7 @@ token in the index. Not a weakening introduced by Option D: the published
 four-input token is dictionary-attackable too, since ``PID_i``, ``VID_i`` and
 ``Dom_i`` are all low-entropy and enumerable. Option D only makes it trivial.
 
-Textual support for keying, from the manuscript itself: Phase I Step 1 `:380`
+Textual support for keying, from the manuscript itself: Phase I Step 1
 lists ``P = {H, SHA-256, AES-256-GCM, HKDF, ML-KEM}`` with **``H`` and SHA-256 as
 separate members**, assigning SHA-256 to "constructs Merkle commitments" and
 ``H`` to "searchable-index generation". ``H`` is therefore *not* SHA-256, and the

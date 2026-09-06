@@ -1,6 +1,6 @@
-"""Phase V Steps 2-3 — metadata registration and the initial ``BC_i`` anchor.
+"""Phase IV Step 5 and Phase V Step 4 — metadata registration and the initial anchor.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:763` (Step 2):
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex` (Step 2):
 
     Meta_i = ( CID_i, PID_i, VID_i, Root_i, Commit_i )
 
@@ -8,7 +8,7 @@ Manuscript `Overleaf/PQ-AVDSE-OJCOMS:763` (Step 2):
 compact searchable metadata… maintained by the cloud--fog infrastructure and
 synchronized with the consortium blockchain."
 
-And `:780` (Step 3):
+And (Step 3):
 
     BC_i = ( CID_i, Commit_i, Root_i, VID_i, TS_i )
 
@@ -21,7 +21,7 @@ on-chain transaction (Step 3, :class:`~..types.BlockchainAnchor`). They overlap 
 four fields and differ in two — Step 2 carries ``PID_i``, Step 3 carries ``TS_i``
 — which is why both exist.
 
-**This closes the Phase VIII Step 3 gap.** Until now only Phase VII Step 7 wrote
+**This closes the Phase VIII Step 2 gap.** Until now only Phase VII Step 5 wrote
 an anchor, so a record that had never been updated had no ``BC_i`` and blockchain
 consistency verification failed for it. :func:`anchor_initial_commitment` writes
 the version-0 anchor at outsourcing time, which is where the manuscript puts it.
@@ -49,7 +49,7 @@ from ..types import (  # noqa: E402
     RecordMetadata,
 )
 from .ipfs import ContentStore, upload_ciphertext  # noqa: E402
-# Phase VII Step 7 anchors into the version-identifier namespace and Phase VIII
+# Phase VII Step 5 anchors into the version-identifier namespace and Phase VIII
 # Step 3 reads from it, so Step 3's initial anchor must land in the same place —
 # otherwise a record's history would be split across two namespaces.
 from .ledger import Ledger, NS_VERSION_IDENTIFIERS  # noqa: E402
@@ -131,7 +131,7 @@ def register_metadata(
 
 
 def anchor_key(cid: str, vid: int) -> str:
-    """Ledger key for ``BC_i`` — the same scheme Phase VII Step 7 uses.
+    """Ledger key for ``BC_i`` — the same scheme Phase VII Step 5 uses.
 
     Zero-padded so lexicographic order is version order. Both writers and
     ``verify/ledger.py`` must agree on this, or Step 3 looks up keys that were
@@ -152,7 +152,7 @@ def anchor_initial_commitment(
 ) -> BlockchainAnchor:
     """Phase V Step 3: anchor ``BC_i`` for a newly outsourced record.
 
-    The same record and the same key scheme Phase VII Step 7 uses for ``BC_i'``, so
+    The same record and the same key scheme Phase VII Step 5 uses for ``BC_i'``, so
     a record's anchors form one ordered history from version 0 onward and Phase
     VIII Step 3 needs no special case for "never updated".
     """

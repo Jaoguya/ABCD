@@ -89,6 +89,13 @@ committed result carries `n_runs = 10`. Decided 2026-09-03: **keep 10** —
 re-running the whole campaign at 30 is not affordable. Section V is back to 10
 and `test_manuscript_section_v_matches_the_config` passes.
 
+**RECURRED 2026-09-06.** The Overleaf revision synced that day said "30 times"
+again, so the decision had to be re-applied when the manuscript was copied into
+the repo. This is now twice; the drift is in the draft, not in the repo, and the
+test only catches it once the `.tex` is synced. If it happens a third time, the
+fix is upstream — say in Overleaf why the number is 10 — rather than another
+silent correction here.
+
 ### TEST-1 — four provenance tests crash on Windows `[FIX]` **FIXED 2026-09-03**
 
 `test_repetition_count_agreement.py` read README and the manuscript with

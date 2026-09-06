@@ -342,7 +342,7 @@ def reportability(
     # that fires when it should not trains readers to ignore it.
     #
     # Exp. 6 WAS listed here (451df65, 2026-08-28) on the grounds that it "times
-    # IAS through to blockchain anchoring (README §5, Phase VII Step 7)". Removed
+    # DIAS through to blockchain anchoring (README §5, Phase VII Step 5)". Removed
     # 2026-09-03: that justification cited a PROTOCOL STEP, not a measurement
     # boundary, and it does not hold against the code. ``sync/ias.py::synchronize``
     # takes ``ledger`` as OPTIONAL and anchors only inside ``if ledger is not
@@ -354,7 +354,7 @@ def reportability(
     # "chain consistency" INSIDE its boundary in as many words.
     #
     # §V must state the exclusion and report anchoring separately -- the treatment
-    # README §5 already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 7
+    # README §5 already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 5
     # is ever brought inside the boundary, the runner must pass a ledger and
     # ``exp6_authorization_sync`` must come back into this tuple.
     if experiment in ("exp4_verification_overhead",) and not ledger_faithful:

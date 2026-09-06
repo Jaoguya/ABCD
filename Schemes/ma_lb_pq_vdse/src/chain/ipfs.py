@@ -1,6 +1,6 @@
-"""Phase V Step 1 — encrypted data outsourcing to content-addressed storage.
+"""Phase V Step 4 — IPFS outsourcing and content identification.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:741`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     CT_i  = ( C_i, I_i, Commit_i )
     CID_i = IPFS.Upload(CT_i)
@@ -62,10 +62,10 @@ class ContentNotFound(ContentStoreError):
 
 
 class ContentStore(ABC):
-    """The storage interface Phase V Step 1 and Phase VIII Step 4 share.
+    """The storage interface Phase V Step 1 and Phase VIII Step 3 share.
 
     A real IPFS client implements this; :class:`InProcessContentStore` is what the
-    scheme runs against until the daemon is available. Phase VIII Step 4 (ciphertext
+    scheme runs against until the daemon is available. Phase VIII Step 3 (ciphertext
     retrieval) is outside Exp. 4's measurement boundary, so nothing timed depends on
     which implementation is live — but ``CID_i`` itself is bound into ``BC_i``, so a
     reportable run does.

@@ -2,7 +2,7 @@
 
 Phase II Step 3: "Each authority initializes its authorization state by assigning
 a version identifier ``VID_i`` and constructing an **authenticated revocation
-root** ``RevRoot_i`` over the current revocation list." Phase VII Step 3 then
+root** ``RevRoot_i`` over the current revocation list." Phase VII Step 2 then
 "updates its revocation root ``RevRoot_k'``" whenever revocation state changes.
 
 *Authenticated* is why this is a Merkle tree rather than a flat digest: a root
@@ -30,7 +30,7 @@ It now uses :class:`Common.crypto.merkle.SetMerkleTrie`, a canonical binary
 radix Merkle trie keyed by the leaf digest. The shape depends on the key set
 alone, so the root is still order-independent and ``restore`` still returns to
 the exact previous root — while an insertion or deletion rewrites only the
-O(log n) nodes on one path. That is the incremental update Phase VII Step 3
+O(log n) nodes on one path. That is the incremental update Phase VII Step 2
 already claims to perform, rather than a rebuild wearing its name.
 
 **The empty list needs a sentinel.** ``Common/crypto/merkle.py`` refuses a
@@ -94,7 +94,7 @@ class RevocationList:
     one root-to-leaf path in O(log n), so reading :meth:`root` is free and the
     cost of a revocation does not grow with how many identifiers are already
     revoked. Exp. 6 sweeps ``delta`` to 10^5 and reads the root after every
-    update, so anything worse than that measures this class instead of the IAS
+    update, so anything worse than that measures this class instead of the DIAS
     mechanism it is meant to measure.
     """
 

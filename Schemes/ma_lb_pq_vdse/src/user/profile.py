@@ -1,6 +1,6 @@
-"""Phase III Step 4 — Version-Bound Authorization Profile Generation.
+"""Phase III Step 3 — Version-Bound Authorization Profile Generation.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:549`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     S_U        = union_{i=1..N_U} S_{U,i}
     C_U        = { C_1^auth, ..., C_{N_U}^auth }
@@ -16,7 +16,7 @@ token, Phase VI Step 2 checks them, Phase VI Step 3 computes
 ``AuthRoot_U`` to verify retrieval. The Data Owner's profile supplies
 ``AuthRoot_DO`` to Phase IV Step 5's ``Commit_i``.
 
-The AIM *maintains* the profile (`:643`), so :func:`build_profile_from_aim` reads
+The AIM *maintains* the profile, so :func:`build_profile_from_aim` reads
 its commitments and version table rather than taking them from the user or the
 authorities. Deriving the profile from the AIM's ledger-backed view is what makes
 it verifiable: ``aim.verify_against_ledger()`` already proves that view matches

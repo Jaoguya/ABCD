@@ -1,6 +1,6 @@
-"""Phase V Steps 4-5 — shard propagation and the index catalog.
+"""Phase VII Step 3 — shard propagation and the index catalog.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:797` (Step 4):
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex` (Step 4):
 
     Sync_i = ( I_i, PID_i, VID_i, CID_i )
 
@@ -8,7 +8,7 @@ Manuscript `Overleaf/PQ-AVDSE-OJCOMS:797` (Step 4):
 encrypted IoMT data, each Fog Search Node maintains **only searchable-index
 shards and corresponding metadata** required for encrypted search."
 
-And `:813` (Step 5):
+And (Step 5):
 
     Catalog <- Catalog ∪ (CID_i, PID_i, VID_i)
 
@@ -23,7 +23,7 @@ separate endpoint object to keep in step with it.
 
 **Propagation is selective, and there is no broadcast.** Same discipline as
 ``aim/aim.py``: :func:`route` computes which nodes serve a domain and
-:func:`propagate` takes the nodes to reach. Phase VII Step 6's selectivity is
+:func:`propagate` takes the nodes to reach. Phase VII Step 4's selectivity is
 what Exp. 6 measures, and a fan-out helper here would be inherited by the phase
 that is supposed to be selective.
 
@@ -173,7 +173,7 @@ class IndexCatalog:
 
     Maintained by the AIM so that search "can efficiently locate authorized
     searchable-index shards without scanning the complete encrypted repository"
-    (`:813`).
+   .
     """
 
     def __init__(self) -> None:

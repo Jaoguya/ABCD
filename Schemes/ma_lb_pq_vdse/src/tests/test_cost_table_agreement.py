@@ -59,6 +59,16 @@ NOT_DISCRIMINABLE = "not_discriminable"
 #: the mean, in the median point.
 MIN_NOISE_FRACTION = 0.20
 
+#: TWO TABLES, because there are two constructions.
+#:
+#: The rows below are the SUPERSEDED ``tab:cost`` -- the one the implemented
+#: Option D scheme satisfies and every banked results.csv was measured under.
+#: They are still asserted because that data is still what §V would cite today.
+#: The current manuscript's rows are different in all five cells; they are
+#: asserted separately in ``PSA_CLAIMS``, against the ``psa_*`` directories, so
+#: neither table is checked against the other's data. This is divergence D6 --
+#: see ``MANUSCRIPT_DIVERGENCE.md``.
+#:
 #: (scheme, experiment dir, tab:cost cell, swept symbol, claim shape)
 CLAIMS = [
     ("ma_lb_pq_vdse", "exp1_trapdoor_generation",
@@ -98,9 +108,23 @@ MIN_INTERCEPT_FRACTION = -0.15
 #: A cost claimed O(1) may drift by harness overhead but must not scale with
 #: the input. The sweeps here span 20x, so anything near-linear blows past this.
 MAX_CONSTANT_RATIO = 2.5
+#: How far two factorizations of the same |T_Q| may differ before O(|T_Q|)T_H is
+#: the wrong shape. Generous, because these are microsecond-scale measurements
+#: where scheduler noise is a real fraction of the mean; a genuine per-policy
+#: term would show up as a spread growing with |P_U|, not as 20% jitter.
+MAX_FACTORIZATION_SPREAD = 1.35
 
 
-def _load(scheme: str, experiment: str):
+def _load(scheme: str, experiment: str, x_column: str = "variable_value"):
+    """Load (x, y, ci) from a results.csv.
+
+    ``x_column`` exists because one sweep does not put its cost driver in
+    ``variable_value``: ``psa_exp1``'s sweep value is an INDEX into the
+    ``(q, |P_U|)`` pairs, since ``|T_Q|`` is not injective over them (see that
+    experiment's docstring). Fitting against the index would be fitting against
+    an ordinal, which is why this parameter is here rather than a comment
+    apologising for the axis.
+    """
     path = REPO / "Schemes" / scheme / experiment / "results.csv"
     if not path.is_file():
         return None, path
@@ -108,7 +132,7 @@ def _load(scheme: str, experiment: str):
     with path.open(newline="", encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
             try:
-                x = float(row["variable_value"])
+                x = float(row[x_column])
                 y = float(row["primary_mean"])
             except (KeyError, TypeError, ValueError):
                 continue
@@ -191,6 +215,118 @@ def test_cost_table_claim_matches_the_measurement(
         f"start that far below zero, so the linear model is the wrong shape "
         f"here even though R^2={r2:.4f}."
     )
+
+
+#: The CURRENT manuscript's ``tab:cost`` row for the proposed scheme, checked
+#: against the policy-state-aware track (``harness/psa_experiments.py``).
+#:
+#: Only the cells that track produces are here. The manuscript's Search row
+#: ``O(|T_Q|)T_L`` and Verification row ``O(r log t)T_H + O(r)T_BC`` need the
+#: full online path and the ledger, which the PSA track deliberately does not
+#: fork -- so they have no data and are absent rather than asserted against a
+#: measurement of something else.
+#: (scheme, dir, cell, symbol, shape, x column in results.csv)
+PSA_CLAIMS = [
+    ("ma_lb_pq_vdse", "psa_exp1_token_generation",
+     "Proposed(PSA) / Token Generation  O(|T_Q|)T_H", "|T_Q|", LINEAR,
+     "secondary_1_mean"),
+    ("ma_lb_pq_vdse", "psa_exp5_retokenization",
+     "Proposed(PSA) / Dynamic Update  O(k log t)T_H", "k", LINEAR,
+     "variable_value"),
+    ("ma_lb_pq_vdse", "psa_exp6_affected_ratio__dias",
+     "Proposed(PSA) / Auth. Sync  O(a + k log t)T_H", "affected ratio", LINEAR,
+     "variable_value"),
+]
+
+
+@pytest.mark.parametrize(
+    "scheme,experiment,cell,symbol,shape,x_column",
+    PSA_CLAIMS,
+    ids=[c[2].split("  ")[0].replace(" ", "") for c in PSA_CLAIMS],
+)
+def test_psa_cost_table_claim_matches_the_measurement(
+    scheme, experiment, cell, symbol, shape, x_column
+):
+    """The current manuscript's rows, against the construction that implements them.
+
+    Skips until the PSA track has been run on a campaign host. That skip is the
+    correct state, not a gap: the numbers must come from the same machine as the
+    Option D ones or the comparison the row exists for is meaningless.
+    """
+    data, path = _load(scheme, experiment, x_column)
+    if data is None:
+        pytest.skip(
+            f"no policy-state-aware results yet for {cell} "
+            f"({path.relative_to(REPO)}); run "
+            f"`python -m Schemes.ma_lb_pq_vdse.src.main --construction psa`"
+        )
+    xs, ys, _ = data
+    if len(xs) < 3:
+        pytest.skip(f"{cell}: {len(xs)} point(s), too few to fit")
+    slope, intercept, r2 = _linear_fit(xs, ys)
+    assert slope > 0, (
+        f"{cell} claims a cost growing in {symbol}, but the fitted slope is "
+        f"{slope:.6g}"
+    )
+    assert r2 >= MIN_R2, (
+        f"{cell} claims a term linear in {symbol}; a straight line explains "
+        f"only R^2={r2:.4f} of the measured curve (need {MIN_R2})"
+    )
+    floor = MIN_INTERCEPT_FRACTION * max(ys)
+    assert intercept >= floor, (
+        f"{cell}: the linear fit needs an intercept of {intercept:.6g} ms "
+        f"against a largest measured value of {max(ys):.6g} ms"
+    )
+
+
+def test_psa_exp1_cost_depends_on_the_product_not_its_factorization():
+    """``O(|T_Q|)T_H`` says ``q=20,|P_U|=1`` and ``q=5,|P_U|=4`` cost the same.
+
+    This is the one claim in the current ``tab:cost`` that the previous table
+    could not even express, because Option D's trapdoor has no ``|P_U|``. If it
+    fails, the row is wrong: the cost has a per-policy term the notation hides.
+    """
+    path = REPO / "Schemes" / "ma_lb_pq_vdse" / "psa_exp1_token_generation" / "raw_runs.csv"
+    if not path.is_file():
+        pytest.skip("no policy-state-aware Exp. 1 results yet")
+
+    import collections
+
+    by_tokens = collections.defaultdict(list)
+    with path.open(newline="", encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            if row.get("status") != "ok":
+                continue
+            try:
+                # raw_runs.csv columns are primary_metric / secondary_metric_N;
+                # the aggregated results.csv uses primary_mean / secondary_N_mean.
+                tokens = int(float(row["secondary_metric_1"]))    # |T_Q|
+                latency = float(row["primary_metric"])
+                keywords = int(float(row["secondary_metric_2"]))  # q
+            except (KeyError, TypeError, ValueError):
+                continue
+            by_tokens[tokens].append((keywords, latency))
+
+    contested = {
+        t: rows for t, rows in by_tokens.items()
+        if len({q for q, _ in rows}) > 1
+    }
+    if not contested:
+        pytest.skip("no |T_Q| reached by more than one factorization")
+
+    for tokens, rows in sorted(contested.items()):
+        means = {}
+        for q, latency in rows:
+            means.setdefault(q, []).append(latency)
+        averaged = {q: sum(v) / len(v) for q, v in means.items()}
+        spread = max(averaged.values()) / min(averaged.values())
+        assert spread <= MAX_FACTORIZATION_SPREAD, (
+            f"|T_Q|={tokens} costs {averaged} depending on how it is factored "
+            f"into (q, |P_U|) -- a {spread:.2f}x spread. The tab:cost row "
+            f"O(|T_Q|)T_H claims the product alone determines the cost, so "
+            f"either the row needs a per-policy term or the implementation is "
+            f"doing per-policy work it should not."
+        )
 
 
 def test_every_measurable_cost_row_is_covered():

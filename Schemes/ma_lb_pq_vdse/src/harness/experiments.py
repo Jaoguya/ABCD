@@ -13,9 +13,19 @@ The boundaries, from README §5 and ``SCHEME.md``:
 * Exp. 3 — one trapdoor reused across ``d`` domains; count trapdoors issued.
 * Exp. 4 — client-side verification only; IPFS fetch and decryption excluded.
 * Exp. 5 — incremental update only; a global rebuild is a Phase VII bug.
-* Exp. 6 — IAS end-to-end until every affected FSN reports the new VID.
+* Exp. 6 — DIAS end-to-end until every affected FSN reports the new VID.
 * Exp. 7–8 — one closed-loop workload per variant, both metric sets from the
   same runs.
+
+**Titles here follow the manuscript; class names and ``name`` slugs do not.**
+Section V renamed four experiments (Exp. 1 "Policy-State-Aware Token
+Generation", Exp. 4 "Fine-Grained Verification Effectiveness", Exp. 5 "Dynamic
+Index Update", Exp. 6 "DIAS Synchronization Ablation", Exp. 7 "AASS Search
+Throughput"). The ``name`` field of each class is the on-disk results directory
+that every banked run was written into, so it keeps its original slug --
+``exp1_trapdoor_generation`` and the rest -- and the class names track the
+slugs rather than the prose. Renaming either would orphan measured data without
+changing anything a reader of the paper sees.
 
 **Records come from a source, not from the corpus directly.** The committed
 ``dataset_manifest.json`` is the superseded v1, so ``load_verified_corpus()``
@@ -61,7 +71,7 @@ from ..index import extract as extract_mod  # noqa: E402
 from ..index import tokens as tokens_mod  # noqa: E402
 from ..scheduler import aass as aass_mod  # noqa: E402
 from ..shard import propagation as prop_mod  # noqa: E402
-from ..sync import ias as ias_mod  # noqa: E402
+from ..sync import dias as dias_mod  # noqa: E402
 from ..user import profile as profile_mod  # noqa: E402
 from ..user import token as token_mod  # noqa: E402
 from ..verify import ledger as vledger_mod  # noqa: E402
@@ -582,7 +592,7 @@ def _enrol(deployment: Deployment, uid: str, domains: Sequence[str]):
 
 
 # ===========================================================================
-# Exp. 1 — Trapdoor Generation Latency
+# Exp. 1 — Policy-State-Aware Token Generation
 # ===========================================================================
 @dataclass
 class Exp1TrapdoorGeneration:
@@ -876,7 +886,7 @@ class Exp3CrossDomain:
 
 
 # ===========================================================================
-# Exp. 4 — Verification Overhead
+# Exp. 4 — Fine-Grained Verification Effectiveness
 # ===========================================================================
 @dataclass
 class Exp4Verification:
@@ -994,7 +1004,7 @@ class Exp4Verification:
 
 
 # ===========================================================================
-# Exp. 5 — Dynamic Keyword Update
+# Exp. 5 — Dynamic Index Update
 # ===========================================================================
 @dataclass
 class Exp5KeywordUpdate:
@@ -1041,11 +1051,11 @@ class Exp5KeywordUpdate:
             if applied >= pairs:
                 break
             domain = record["record"].domain
-            receipt = ias_mod.synchronize(
-                ias_mod.UpdateRequest(
-                    operation=ias_mod.Operation.MODIFY,
+            receipt = dias_mod.synchronize(
+                dias_mod.UpdateRequest(
+                    operation=dias_mod.Operation.MODIFY,
                     cid=record["cid"],
-                    delta=ias_mod.UpdateDelta(
+                    delta=dias_mod.UpdateDelta(
                         policy_id=f"{domain}/updated-{applied}"
                     ),
                 ),
@@ -1074,20 +1084,31 @@ class Exp5KeywordUpdate:
 
 
 # ===========================================================================
-# Exp. 6 — Authorization Synchronization
+# Exp. 6 — DIAS Synchronization Ablation
 # ===========================================================================
-#: Exp. 6 ablation — one variant per half of the IAS claim.
+#: Exp. 6 ablation — one variant per half of the DIAS claim.
 #:
-#:   ``ias``          the published rule: selective delivery, and only the
-#:                    affected authority evolves. The default.
-#:   ``broadcast``    tests SELECTIVE. IAS_i goes to every FSN rather than only
-#:                    those holding the affected shard — the alternative
-#:                    ``:1111`` names and rejects.
-#:   ``full_rebuild`` tests INCREMENTAL. Every authority recomputes its
-#:                    commitment and the AIM republishes it, instead of
-#:                    ``:1045``'s "only the affected authority updates its
-#:                    commitment, while all other authorities retain their
-#:                    existing authorization states".
+#: The manuscript (Exp. 6) names the three arms *DIAS*, *Incremental-All* and
+#: *Full-State Synchronization*. The constants below carry those names; their
+#: STRING VALUES deliberately still read ``ias`` / ``broadcast`` /
+#: ``full_rebuild`` because the value is the on-disk slug in
+#: ``exp6_authorization_sync__<slug>/``, and every banked result sits in a
+#: directory named that way. Renaming the values would orphan measured data to
+#: buy nothing — the reader never sees a slug, only the figure legend, which
+#: ``Plots/generate_plots.py::EXP6_VARIANTS`` maps to the manuscript names.
+#:
+#:   DIAS (``ias``)                     the published rule: selective
+#:                                      delivery, and only the affected
+#:                                      authority evolves. The default.
+#:   Incremental-All (``broadcast``)    tests SELECTIVE. DIAS_i goes to every
+#:                                      FSN rather than only those holding the
+#:                                      affected shard — the alternative
+#:                                      Phase VII Step 3 names and rejects.
+#:   Full-State (``full_rebuild``)      tests INCREMENTAL. Every authority
+#:                                      recomputes its commitment and the AIM
+#:                                      republishes it, instead of Phase II
+#:                                      Step 4's "unaffected authorities retain
+#:                                      their existing states".
 #:
 #: These are ABLATIONS of the proposed scheme, not baselines from other papers,
 #: exactly as Exp. 7-8's four scheduler variants are. Neither is a strawman built
@@ -1096,29 +1117,29 @@ class Exp5KeywordUpdate:
 #: authorities it calls it for. The superseded O(delta^2) ``RevocationList`` is
 #: deliberately NOT used here — measuring against an old bug would overstate the
 #: advantage.
-VARIANT_IAS = "ias"
-VARIANT_BROADCAST = "broadcast"
-VARIANT_FULL_REBUILD = "full_rebuild"
+VARIANT_DIAS = "ias"
+VARIANT_INCREMENTAL_ALL = "broadcast"
+VARIANT_FULL_STATE = "full_rebuild"
 EXP6_VARIANTS: Tuple[str, ...] = (
-    VARIANT_IAS, VARIANT_BROADCAST, VARIANT_FULL_REBUILD
+    VARIANT_DIAS, VARIANT_INCREMENTAL_ALL, VARIANT_FULL_STATE
 )
 
 
-def _broadcast_selector(message, nodes):
+def _incremental_all_selector(message, nodes):
     """Every FSN, not only those serving the affected domain."""
     return tuple(nodes)
 
 
 @dataclass
 class Exp6AuthorizationSync:
-    """"IAS propagation: authority commitment recomputation → Merkle path update
-    → IAS message → selective FSN propagation, until all affected FSNs report the
+    """"DIAS propagation: authority commitment recomputation → Merkle path update
+    → DIAS message → selective FSN propagation, until all affected FSNs report the
     new VID. Report FSNs touched."
 
     ``synchronize`` verifies that postcondition itself, so a run that returns has
     reached it.
 
-    **Boundary.** Phase VII Step 7 (anchoring ``BC_i'``) is OUTSIDE this
+    **Boundary.** Phase VII Step 5 (anchoring ``BC_i'``) is OUTSIDE this
     measurement: no ledger is passed to ``synchronize``, so nothing is anchored on
     the timed path. That matches README §5, whose Exp. 6 boundary ends at "until
     all affected FSNs report the new ``VID``", and ``tab:cost``'s authorization-
@@ -1129,7 +1150,7 @@ class Exp6AuthorizationSync:
     handles ML-KEM encapsulation for Exp. 1.
 
     **What ``fsns_touched`` can and cannot show.** ``assign_domains_to_fsns`` gives
-    each domain to exactly ONE node, and an ``IASMessage`` carries exactly one
+    each domain to exactly ONE node, and a ``DIASMessage`` carries exactly one
     domain, so selective delivery touches exactly one node for ANY ``d`` and ``m``.
     Under ``ias`` the metric is therefore a constant 1 BY CONSTRUCTION, and is
     evidence of nothing unless read against ``broadcast``'s ``m``. Every run before
@@ -1138,8 +1159,8 @@ class Exp6AuthorizationSync:
 
     **Why ``delivered_kb`` is measured and not derived.** It is the quantity the
     selective claim is actually about: the bytes the network carries per update.
-    ``ias_message_size x fsns_touched`` looks like the same number and is not,
-    because under ``full_rebuild`` only ONE of the deliveries is an IAS message.
+    ``dias_message_size x fsns_touched`` looks like the same number and is not,
+    because under ``full_rebuild`` only ONE of the deliveries is a DIAS message.
     The other ``(d-1) x m`` are ``AuthorizationMeta`` republishes, which are a
     third the size — ``Meta_i = (Dom_i, VID_i, C_i^auth)`` against a message that
     also carries the entries, the root and the commit. The product therefore
@@ -1153,10 +1174,10 @@ class Exp6AuthorizationSync:
     number: int = 6
     variable: str = "authorization_updates"
     values: Tuple[Any, ...] = ()
-    variant: str = VARIANT_IAS
+    variant: str = VARIANT_DIAS
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
-        MetricSpec("ias_message_size", KB),
+        MetricSpec("dias_message_size", KB),
         MetricSpec("fsns_touched", COUNT),
         MetricSpec("delivered_kb", KB),
     )
@@ -1183,9 +1204,9 @@ class Exp6AuthorizationSync:
         authority = d.authorities[domain]
         others = tuple(a for dom, a in d.authorities.items() if dom != domain)
         selector = (
-            _broadcast_selector if self.variant == VARIANT_BROADCAST else None
+            _incremental_all_selector if self.variant == VARIANT_INCREMENTAL_ALL else None
         )
-        rebuild = self.variant == VARIANT_FULL_REBUILD
+        rebuild = self.variant == VARIANT_FULL_STATE
         # Sized BEFORE the timer, not inside the loop. Meta_i is
         # (Dom_i, VID_i, C_i^auth) and none of the three changes length while
         # the loop runs -- only `authority` is revoked, and its VID is not in
@@ -1202,11 +1223,11 @@ class Exp6AuthorizationSync:
         delivered = 0.0
         started = time.perf_counter_ns()
         for index in range(prepared["updates"]):
-            receipt = ias_mod.synchronize(
-                ias_mod.UpdateRequest(
-                    operation=ias_mod.Operation.REVOKE,
+            receipt = dias_mod.synchronize(
+                dias_mod.UpdateRequest(
+                    operation=dias_mod.Operation.REVOKE,
                     cid=record["cid"],
-                    delta=ias_mod.UpdateDelta(revoked=(f"patient-{index}",)),
+                    delta=dias_mod.UpdateDelta(revoked=(f"patient-{index}",)),
                 ),
                 authority=authority,
                 nodes=d.nodes,
@@ -1236,7 +1257,7 @@ class Exp6AuthorizationSync:
         return Sample(
             primary=elapsed / 1e6,
             secondaries={
-                "ias_message_size": total_bytes / updates,
+                "dias_message_size": total_bytes / updates,
                 "fsns_touched": touched / updates,
                 "delivered_kb": delivered / updates,
             },
@@ -1687,9 +1708,20 @@ class Exp8LoadBalance(SchedulerAblation):
 # ===========================================================================
 # Exp. 9 — Verification Granularity under Tampering
 # ===========================================================================
+# NOT AN EXPERIMENT IN THE MANUSCRIPT. Section V has eight experiments and no
+# Exp. 9: this arm's numbers are panel (b) of the manuscript's Exp. 4 figure
+# ("invalid-result localization and valid-result retention"), while Exp4Verification
+# supplies panel (a). The split is a HARNESS split, kept because the two halves
+# sweep different variables -- Exp. 4 sweeps r at zero tampering, this sweeps the
+# tamper count t at pinned r -- and a single sweep cannot produce both. See
+# ``Plots/generate_plots.py``, where ExperimentSpec(4, ...) draws panel (b) with
+# ``folder="exp9_verification_granularity"``.
+# ===========================================================================
 @dataclass
 class Exp9VerificationGranularity:
     """What verification BUYS, where Exp. 4 measures what it COSTS.
+
+    Feeds Fig. 4(b) of the manuscript; there is no Experiment 9 in Section V.
 
     The result-set size is PINNED (``global.yaml``: ``returned_results: 20000``)
     and the number of tampered records is swept. The question is not how fast a
@@ -1899,7 +1931,7 @@ def build_experiment(
     measured `aass` alone and the ablation the paper claims had never been run.
 
     It is ignored for Exp. 1-6, and deliberately so for Exp. 6: that experiment
-    measures IAS propagation -- commitment recomputation, Merkle path update,
+    measures DIAS propagation -- commitment recomputation, Merkle path update,
     selective FSN delivery -- and the scheduler decides which FSN serves a
     QUERY. It plays no part in propagating an authorization change, so running
     four variants there would measure the same thing four times.

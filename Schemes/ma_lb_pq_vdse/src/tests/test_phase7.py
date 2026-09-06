@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verification tests for MA-LB-PQ-VDSE Phase VII (IAS).
+"""Verification tests for MA-LB-PQ-VDSE Phase VII (DIAS).
 
 Each test checks a DEFINING PROPERTY. An update that produces the right root by
 rebuilding the whole index has passed the shallow test and is the exact bug
@@ -36,7 +36,7 @@ from Schemes.ma_lb_pq_vdse.src.index import commit as commit_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import extract as extract_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.index import tokens as tokens_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.shard import propagation as prop_mod  # noqa: E402
-from Schemes.ma_lb_pq_vdse.src.sync import ias as ias_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.sync import dias as dias_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.tests import test_phase1_2 as p12  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.tests import test_phase4 as p4  # noqa: E402
 
@@ -109,19 +109,19 @@ def outsourced_record(keywords: int = 6, dom: int = 0):
     return nodes, authority, record, entries, commitment, cid
 
 
-def revoke_request(cid: str, *identifiers: str) -> ias_mod.UpdateRequest:
-    return ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.REVOKE,
+def revoke_request(cid: str, *identifiers: str) -> dias_mod.UpdateRequest:
+    return dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.REVOKE,
         cid=cid,
-        delta=ias_mod.UpdateDelta(revoked=tuple(identifiers or ("patient-9",))),
+        delta=dias_mod.UpdateDelta(revoked=tuple(identifiers or ("patient-9",))),
     )
 
 
-def modify_request(cid: str, policy_id: str) -> ias_mod.UpdateRequest:
-    return ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.MODIFY,
+def modify_request(cid: str, policy_id: str) -> dias_mod.UpdateRequest:
+    return dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.MODIFY,
         cid=cid,
-        delta=ias_mod.UpdateDelta(policy_id=policy_id),
+        delta=dias_mod.UpdateDelta(policy_id=policy_id),
     )
 
 
@@ -130,7 +130,7 @@ def modify_request(cid: str, policy_id: str) -> ias_mod.UpdateRequest:
 # ===========================================================================
 def test_request_covers_the_four_published_operations():
     """Op in {Insert, Modify, Delete, Revoke} (:1007)."""
-    assert {op.value for op in ias_mod.Operation} == {
+    assert {op.value for op in dias_mod.Operation} == {
         "Insert",
         "Modify",
         "Delete",
@@ -141,14 +141,14 @@ def test_request_covers_the_four_published_operations():
 def test_request_validates_the_delta_each_operation_needs():
     cid = "cid-0"
     for operation, delta in (
-        (ias_mod.Operation.INSERT, ias_mod.UpdateDelta()),
-        (ias_mod.Operation.DELETE, ias_mod.UpdateDelta()),
-        (ias_mod.Operation.MODIFY, ias_mod.UpdateDelta()),
-        (ias_mod.Operation.REVOKE, ias_mod.UpdateDelta()),
+        (dias_mod.Operation.INSERT, dias_mod.UpdateDelta()),
+        (dias_mod.Operation.DELETE, dias_mod.UpdateDelta()),
+        (dias_mod.Operation.MODIFY, dias_mod.UpdateDelta()),
+        (dias_mod.Operation.REVOKE, dias_mod.UpdateDelta()),
     ):
         try:
-            ias_mod.UpdateRequest(operation=operation, cid=cid, delta=delta)
-        except ias_mod.IASError:
+            dias_mod.UpdateRequest(operation=operation, cid=cid, delta=delta)
+        except dias_mod.DIASError:
             continue
         raise AssertionError(f"{operation} with an empty delta should be refused")
 
@@ -156,12 +156,12 @@ def test_request_validates_the_delta_each_operation_needs():
 def test_request_refuses_revocation_smuggled_into_another_operation():
     """One mechanism per operation, so Exp. 6 measures one thing."""
     try:
-        ias_mod.UpdateRequest(
-            operation=ias_mod.Operation.MODIFY,
+        dias_mod.UpdateRequest(
+            operation=dias_mod.Operation.MODIFY,
             cid="cid-0",
-            delta=ias_mod.UpdateDelta(policy_id="p1", revoked=("u1",)),
+            delta=dias_mod.UpdateDelta(policy_id="p1", revoked=("u1",)),
         )
-    except ias_mod.IASError as exc:
+    except dias_mod.DIASError as exc:
         assert "revocation information" in str(exc)
         return
     raise AssertionError("revocation inside a Modify should be refused")
@@ -169,18 +169,18 @@ def test_request_refuses_revocation_smuggled_into_another_operation():
 
 def test_operation_classifies_what_it_touches():
     """Revoke changes authorization state only; Insert/Delete change no VID_k."""
-    assert not ias_mod.Operation.REVOKE.touches_index
-    assert ias_mod.Operation.REVOKE.touches_authorization
-    assert ias_mod.Operation.MODIFY.touches_index
-    assert ias_mod.Operation.MODIFY.touches_authorization
-    for op in (ias_mod.Operation.INSERT, ias_mod.Operation.DELETE):
+    assert not dias_mod.Operation.REVOKE.touches_index
+    assert dias_mod.Operation.REVOKE.touches_authorization
+    assert dias_mod.Operation.MODIFY.touches_index
+    assert dias_mod.Operation.MODIFY.touches_authorization
+    for op in (dias_mod.Operation.INSERT, dias_mod.Operation.DELETE):
         assert op.touches_index
         assert not op.touches_authorization
 
 
 def test_delta_reports_the_exp5_sweep_variable():
     """Exp. 5 sweeps k = (keyword, document) pairs."""
-    delta = ias_mod.UpdateDelta(
+    delta = dias_mod.UpdateDelta(
         keywords_added=("a", "b"), keywords_removed=("c",)
     )
     assert delta.keyword_pair_count == 3
@@ -198,7 +198,7 @@ def test_evolution_increments_the_version_by_exactly_one():
     authority = p12.make_authority("AA1", "dom0")
     assert authority.vid == 0
     for expected in (1, 2, 3):
-        evolution = ias_mod.evolve_authorization_state(authority, revoke=(f"u{expected}",))
+        evolution = dias_mod.evolve_authorization_state(authority, revoke=(f"u{expected}",))
         assert evolution.new_vid == expected
         assert evolution.delta_vid == 1
         assert authority.vid == expected
@@ -206,7 +206,7 @@ def test_evolution_increments_the_version_by_exactly_one():
 
 def test_evolution_updates_the_revocation_root_and_commitment():
     authority = p12.make_authority("AA1", "dom0")
-    evolution = ias_mod.evolve_authorization_state(authority, revoke=("patient-7",))
+    evolution = dias_mod.evolve_authorization_state(authority, revoke=("patient-7",))
     assert evolution.new_revocation_root != evolution.previous_revocation_root
     assert evolution.new_commitment != evolution.previous_commitment
     assert authority.commitment() == evolution.new_commitment
@@ -217,7 +217,7 @@ def test_evolution_recomputes_the_commitment_from_its_five_inputs():
     from Schemes.ma_lb_pq_vdse.src.authority import authority as authority_mod
 
     authority = p12.make_authority("AA1", "dom0")
-    evolution = ias_mod.evolve_authorization_state(authority, revoke=("u1",))
+    evolution = dias_mod.evolve_authorization_state(authority, revoke=("u1",))
     assert evolution.new_commitment == authority_mod.authorization_state_commitment(
         authority_id=authority.authority_id,
         domain=authority.domain,
@@ -238,7 +238,7 @@ def test_evolution_leaves_other_authorities_untouched():
         for i in range(1, 5)
     ]
     before = {a.authority_id: (a.vid, a.commitment()) for a in authorities}
-    ias_mod.evolve_authorization_state(authorities[1], revoke=("patient-7",))
+    dias_mod.evolve_authorization_state(authorities[1], revoke=("patient-7",))
     for authority in authorities:
         vid, commitment = before[authority.authority_id]
         if authority is authorities[1]:
@@ -250,9 +250,9 @@ def test_evolution_leaves_other_authorities_untouched():
 
 def test_evolution_supports_restoring_a_revoked_identifier():
     authority = p12.make_authority("AA1", "dom0")
-    ias_mod.evolve_authorization_state(authority, revoke=("u1",))
+    dias_mod.evolve_authorization_state(authority, revoke=("u1",))
     root_with = authority.revocation_root()
-    evolution = ias_mod.evolve_authorization_state(authority, restore=("u1",))
+    evolution = dias_mod.evolve_authorization_state(authority, restore=("u1",))
     assert evolution.new_revocation_root != root_with
     assert authority.vid == 2          # a restore is still a version advance
 
@@ -268,7 +268,7 @@ def test_modify_rewrites_payload_but_no_token():
     tokens_rewritten stays 0.
     """
     _, _, record, entries, _, cid = outsourced_record(keywords=6)
-    evolution = ias_mod.evolve_index_entries(
+    evolution = dias_mod.evolve_index_entries(
         entries, modify_request(cid, "dom0/new-policy"), token_for=token_for
     )
     assert evolution.entries_rewritten == 6
@@ -280,11 +280,11 @@ def test_modify_rewrites_payload_but_no_token():
 def test_revoke_touches_no_index_entry():
     """A revocation changes authorization state only, not the index.
 
-    This is what lets Exp. 6 measure the IAS mechanism rather than re-indexing a
+    This is what lets Exp. 6 measure the DIAS mechanism rather than re-indexing a
     domain of 285,268 records.
     """
     _, _, _, entries, _, cid = outsourced_record()
-    evolution = ias_mod.evolve_index_entries(
+    evolution = dias_mod.evolve_index_entries(
         entries, revoke_request(cid, "patient-7"), token_for=token_for
     )
     assert evolution.entries_touched == 0
@@ -293,12 +293,12 @@ def test_revoke_touches_no_index_entry():
 
 def test_insert_adds_only_the_new_keywords():
     _, _, _, entries, _, cid = outsourced_record(keywords=6)
-    request = ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.INSERT,
+    request = dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.INSERT,
         cid=cid,
-        delta=ias_mod.UpdateDelta(keywords_added=("cond:new-1", "cond:new-2")),
+        delta=dias_mod.UpdateDelta(keywords_added=("cond:new-1", "cond:new-2")),
     )
-    evolution = ias_mod.evolve_index_entries(entries, request, token_for=token_for)
+    evolution = dias_mod.evolve_index_entries(entries, request, token_for=token_for)
     assert evolution.entries_inserted == 2
     assert len(evolution.entries) == 8
     # The record's other entries are rewritten too: Step 2's I_j' primes VID_i',
@@ -311,14 +311,14 @@ def test_insert_adds_only_the_new_keywords():
 
 def test_insert_refuses_a_keyword_already_indexed():
     _, _, record, entries, _, cid = outsourced_record()
-    request = ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.INSERT,
+    request = dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.INSERT,
         cid=cid,
-        delta=ias_mod.UpdateDelta(keywords_added=(record.keywords[0],)),
+        delta=dias_mod.UpdateDelta(keywords_added=(record.keywords[0],)),
     )
     try:
-        ias_mod.evolve_index_entries(entries, request, token_for=token_for)
-    except ias_mod.IASError as exc:
+        dias_mod.evolve_index_entries(entries, request, token_for=token_for)
+    except dias_mod.DIASError as exc:
         assert "already indexed" in str(exc)
         return
     raise AssertionError("re-inserting an indexed keyword should be refused")
@@ -326,26 +326,26 @@ def test_insert_refuses_a_keyword_already_indexed():
 
 def test_delete_removes_only_the_named_keywords():
     _, _, record, entries, _, cid = outsourced_record(keywords=6)
-    request = ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.DELETE,
+    request = dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.DELETE,
         cid=cid,
-        delta=ias_mod.UpdateDelta(keywords_removed=record.keywords[:2]),
+        delta=dias_mod.UpdateDelta(keywords_removed=record.keywords[:2]),
     )
-    evolution = ias_mod.evolve_index_entries(entries, request, token_for=token_for)
+    evolution = dias_mod.evolve_index_entries(entries, request, token_for=token_for)
     assert evolution.entries_removed == 2
     assert len(evolution.entries) == 4
 
 
 def test_delete_refuses_when_a_named_keyword_is_absent():
     _, _, _, entries, _, cid = outsourced_record()
-    request = ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.DELETE,
+    request = dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.DELETE,
         cid=cid,
-        delta=ias_mod.UpdateDelta(keywords_removed=("cond:never-indexed",)),
+        delta=dias_mod.UpdateDelta(keywords_removed=("cond:never-indexed",)),
     )
     try:
-        ias_mod.evolve_index_entries(entries, request, token_for=token_for)
-    except ias_mod.IASError as exc:
+        dias_mod.evolve_index_entries(entries, request, token_for=token_for)
+    except dias_mod.DIASError as exc:
         assert "matched" in str(exc)
         return
     raise AssertionError("deleting an absent keyword should be refused")
@@ -354,14 +354,14 @@ def test_delete_refuses_when_a_named_keyword_is_absent():
 def test_delete_refuses_to_empty_a_record():
     """A record with no entries has no Merkle root (Phase IV Step 4)."""
     _, _, record, entries, _, cid = outsourced_record(keywords=6)
-    request = ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.DELETE,
+    request = dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.DELETE,
         cid=cid,
-        delta=ias_mod.UpdateDelta(keywords_removed=record.keywords),
+        delta=dias_mod.UpdateDelta(keywords_removed=record.keywords),
     )
     try:
-        ias_mod.evolve_index_entries(entries, request, token_for=token_for)
-    except ias_mod.IASError as exc:
+        dias_mod.evolve_index_entries(entries, request, token_for=token_for)
+    except dias_mod.DIASError as exc:
         assert "no index entries" in str(exc)
         return
     raise AssertionError("emptying a record should be refused")
@@ -373,10 +373,10 @@ def test_delete_refuses_to_empty_a_record():
 def test_modify_updates_the_path_without_rebuilding():
     """Root_i' = MerkleUpdate(Root_i, L_delta) — the Exp. 5 rule."""
     _, _, _, entries, commitment, cid = outsourced_record(keywords=6)
-    evolution = ias_mod.evolve_index_entries(
+    evolution = dias_mod.evolve_index_entries(
         entries, modify_request(cid, "dom0/new"), token_for=token_for
     )
-    result = ias_mod.evolve_commitment(
+    result = dias_mod.evolve_commitment(
         commitment,
         evolution,
         policy_id="dom0/new",
@@ -399,13 +399,13 @@ def test_insert_rebuilds_only_that_records_tree():
     a reported figure cannot conflate them.
     """
     _, _, _, entries, commitment, cid = outsourced_record(keywords=6)
-    request = ias_mod.UpdateRequest(
-        operation=ias_mod.Operation.INSERT,
+    request = dias_mod.UpdateRequest(
+        operation=dias_mod.Operation.INSERT,
         cid=cid,
-        delta=ias_mod.UpdateDelta(keywords_added=("cond:new",)),
+        delta=dias_mod.UpdateDelta(keywords_added=("cond:new",)),
     )
-    evolution = ias_mod.evolve_index_entries(entries, request, token_for=token_for)
-    result = ias_mod.evolve_commitment(
+    evolution = dias_mod.evolve_index_entries(entries, request, token_for=token_for)
+    result = dias_mod.evolve_commitment(
         commitment,
         evolution,
         policy_id=entries[0].policy_id,
@@ -419,10 +419,10 @@ def test_insert_rebuilds_only_that_records_tree():
 
 def test_commitment_evolution_refreshes_commit_i():
     _, _, _, entries, commitment, cid = outsourced_record()
-    evolution = ias_mod.evolve_index_entries(
+    evolution = dias_mod.evolve_index_entries(
         entries, modify_request(cid, "dom0/new"), token_for=token_for
     )
-    result = ias_mod.evolve_commitment(
+    result = dias_mod.evolve_commitment(
         commitment,
         evolution,
         policy_id="dom0/new",
@@ -439,23 +439,23 @@ def test_commitment_evolution_refreshes_commit_i():
 
 
 # ===========================================================================
-# Step 5 — the IAS message
+# Step 5 — the DIAS message
 # ===========================================================================
 def test_ias_message_carries_the_published_tuple():
     """IAS_i = (CID_i, dVID_i, dC_i^auth, dI_i, dRoot_i, Commit_i')."""
     nodes, authority, record, entries, commitment, cid = outsourced_record()
-    authorization = ias_mod.evolve_authorization_state(authority, revoke=("u1",))
-    index_evolution = ias_mod.evolve_index_entries(
+    authorization = dias_mod.evolve_authorization_state(authority, revoke=("u1",))
+    index_evolution = dias_mod.evolve_index_entries(
         entries, revoke_request(cid, "u1"), token_for=token_for
     )
-    commitment_evolution = ias_mod.evolve_commitment(
+    commitment_evolution = dias_mod.evolve_commitment(
         commitment,
         index_evolution,
         policy_id=record.policy_id,
         vid=record.metadata.vid,
         auth_root_do=AUTH_ROOT_DO,
     )
-    message = ias_mod.build_ias_message(
+    message = dias_mod.build_dias_message(
         cid=cid,
         authorization=authorization,
         index_evolution=index_evolution,
@@ -474,7 +474,7 @@ def test_ias_message_for_a_revocation_carries_no_index_delta():
     The property Exp. 6's message-size metric reports.
     """
     nodes, authority, record, entries, commitment, cid = outsourced_record(keywords=6)
-    receipt = ias_mod.synchronize(
+    receipt = dias_mod.synchronize(
         revoke_request(cid, "patient-7"),
         authority=authority,
         nodes=nodes,
@@ -487,7 +487,7 @@ def test_ias_message_for_a_revocation_carries_no_index_delta():
 
     # And a Modify, which does carry entries, is strictly larger.
     nodes2, authority2, record2, entries2, commitment2, cid2 = outsourced_record()
-    modify = ias_mod.synchronize(
+    modify = dias_mod.synchronize(
         modify_request(cid2, "dom0/new"),
         authority=authority2,
         nodes=nodes2,
@@ -501,7 +501,7 @@ def test_ias_message_for_a_revocation_carries_no_index_delta():
 def test_ias_message_reports_its_size_in_kb():
     """Exp. 6 secondary metric; README §9 reports sizes in KB."""
     nodes, authority, record, entries, commitment, cid = outsourced_record()
-    receipt = ias_mod.synchronize(
+    receipt = dias_mod.synchronize(
         modify_request(cid, "dom0/new"),
         authority=authority,
         nodes=nodes,
@@ -524,7 +524,7 @@ def test_ias_message_binds_every_field():
         authority_id="AA1",
         domain="dom0",
     )
-    base = ias_mod.IASMessage(**fields).digest()
+    base = dias_mod.DIASMessage(**fields).digest()
     for name, replacement in (
         ("cid", "c2"),
         ("delta_vid", 2),
@@ -534,7 +534,7 @@ def test_ias_message_binds_every_field():
         ("authority_id", "AA2"),
         ("domain", "dom1"),
     ):
-        assert ias_mod.IASMessage(**{**fields, name: replacement}).digest() != base, (
+        assert dias_mod.DIASMessage(**{**fields, name: replacement}).digest() != base, (
             f"{name} not bound"
         )
 
@@ -542,7 +542,7 @@ def test_ias_message_binds_every_field():
 def test_ias_message_refuses_a_negative_version_delta():
     """Authorization versions only advance."""
     try:
-        ias_mod.IASMessage(
+        dias_mod.DIASMessage(
             cid="c",
             delta_vid=-1,
             authority_commitment=bytes(32),
@@ -564,7 +564,7 @@ def test_ias_message_refuses_a_negative_version_delta():
 def test_selective_propagation_touches_one_node_in_four():
     """"the AIM forwards IAS_i ONLY to FSNs that maintain the affected shards"."""
     nodes, authority, record, entries, commitment, cid = outsourced_record()
-    receipt = ias_mod.synchronize(
+    receipt = dias_mod.synchronize(
         revoke_request(cid, "patient-7"),
         authority=authority,
         nodes=nodes,
@@ -587,7 +587,7 @@ def test_selective_propagation_advances_only_the_affected_nodes_version():
     others = [n for n in nodes if not n.serves_domain(record.domain)]
     assert affected[0].vid_for_authority(authority.authority_id) == 0
 
-    ias_mod.synchronize(
+    dias_mod.synchronize(
         revoke_request(cid, "patient-7"),
         authority=authority,
         nodes=nodes,
@@ -602,15 +602,15 @@ def test_selective_propagation_advances_only_the_affected_nodes_version():
 
 def test_apply_ias_refuses_a_node_outside_the_affected_domain():
     nodes, authority, record, entries, commitment, cid = outsourced_record()
-    authorization = ias_mod.evolve_authorization_state(authority, revoke=("u1",))
-    index_evolution = ias_mod.evolve_index_entries(
+    authorization = dias_mod.evolve_authorization_state(authority, revoke=("u1",))
+    index_evolution = dias_mod.evolve_index_entries(
         entries, revoke_request(cid, "u1"), token_for=token_for
     )
-    commitment_evolution = ias_mod.evolve_commitment(
+    commitment_evolution = dias_mod.evolve_commitment(
         commitment, index_evolution, policy_id=record.policy_id,
         vid=record.metadata.vid, auth_root_do=AUTH_ROOT_DO,
     )
-    message = ias_mod.build_ias_message(
+    message = dias_mod.build_dias_message(
         cid=cid,
         authorization=authorization,
         index_evolution=index_evolution,
@@ -618,8 +618,8 @@ def test_apply_ias_refuses_a_node_outside_the_affected_domain():
     )
     wrong = [n for n in nodes if not n.serves_domain(record.domain)][0]
     try:
-        ias_mod.apply_ias(wrong, message)
-    except ias_mod.IASError as exc:
+        dias_mod.apply_dias(wrong, message)
+    except dias_mod.DIASError as exc:
         assert "not an affected node" in str(exc)
         return
     raise AssertionError("an unaffected node should refuse the message")
@@ -633,7 +633,7 @@ def test_apply_ias_repolicies_the_shard_entries():
     new_policy = f"{record.domain}/repolicied"
 
     assert len(node.index.candidates([old_pair])) == 6
-    receipt = ias_mod.synchronize(
+    receipt = dias_mod.synchronize(
         modify_request(cid, new_policy),
         authority=authority,
         nodes=nodes,
@@ -654,7 +654,7 @@ def test_apply_ias_does_not_rewrite_tokens_or_postings():
     node = [n for n in nodes if n.serves_domain(record.domain)][0]
     postings_before = {k: list(v) for k, v in node.index._postings.items()}
 
-    ias_mod.synchronize(
+    dias_mod.synchronize(
         modify_request(cid, f"{record.domain}/new"),
         authority=authority,
         nodes=nodes,
@@ -673,25 +673,25 @@ def test_apply_ias_detects_a_delivery_gap():
     """
     nodes, authority, record, entries, commitment, cid = outsourced_record()
     # Advance the authority twice but deliver only the second message.
-    ias_mod.evolve_authorization_state(authority, revoke=("u1",))
-    authorization = ias_mod.evolve_authorization_state(authority, revoke=("u2",))
+    dias_mod.evolve_authorization_state(authority, revoke=("u1",))
+    authorization = dias_mod.evolve_authorization_state(authority, revoke=("u2",))
     assert authorization.new_vid == 2
 
-    index_evolution = ias_mod.evolve_index_entries(
+    index_evolution = dias_mod.evolve_index_entries(
         entries, revoke_request(cid, "u2"), token_for=token_for
     )
-    commitment_evolution = ias_mod.evolve_commitment(
+    commitment_evolution = dias_mod.evolve_commitment(
         commitment, index_evolution, policy_id=record.policy_id,
         vid=record.metadata.vid, auth_root_do=AUTH_ROOT_DO,
     )
-    message = ias_mod.build_ias_message(
+    message = dias_mod.build_dias_message(
         cid=cid,
         authorization=authorization,
         index_evolution=index_evolution,
         commitment_evolution=commitment_evolution,
     )
     node = [n for n in nodes if n.serves_domain(record.domain)][0]
-    result = ias_mod.apply_ias(node, message)
+    result = dias_mod.apply_dias(node, message)
     # The node applied dVID=1 to its stale 0 and reached 1, not 2.
     assert result.new_vid == 1 != authorization.new_vid
 
@@ -703,7 +703,7 @@ def test_anchor_records_the_published_tuple():
     """BC_i' = (CID_i, Commit_i', Root_i', VID_i', TS_i')."""
     nodes, authority, record, entries, commitment, cid = outsourced_record()
     chain = ledger_mod.InProcessLedger()
-    receipt = ias_mod.synchronize(
+    receipt = dias_mod.synchronize(
         revoke_request(cid, "u1"),
         authority=authority,
         nodes=nodes,
@@ -735,7 +735,7 @@ def test_anchor_history_is_append_only():
     chain = ledger_mod.InProcessLedger()
     current_entries, current_commitment = entries, commitment
     for round_index in range(3):
-        receipt = ias_mod.synchronize(
+        receipt = dias_mod.synchronize(
             modify_request(cid, f"{record.domain}/pol-{round_index}"),
             authority=authority,
             nodes=nodes,
@@ -761,9 +761,9 @@ def test_revocation_anchors_nothing_new():
     """
     nodes, authority, record, entries, commitment, cid = outsourced_record()
     chain = ledger_mod.InProcessLedger()
-    ias_mod.anchor_update(
+    dias_mod.anchor_update(
         chain,
-        message=ias_mod.IASMessage(
+        message=dias_mod.DIASMessage(
             cid=cid, delta_vid=0,
             authority_commitment=hashes.sha256(b"c", domain=b"t"),
             entries=(), root=commitment.root, commit=commitment.commit,
@@ -772,7 +772,7 @@ def test_revocation_anchors_nothing_new():
         vid=record.metadata.vid,
     )
     before = len(chain.keys(ledger_mod.NS_VERSION_IDENTIFIERS))
-    ias_mod.synchronize(
+    dias_mod.synchronize(
         revoke_request(cid, "patient-7"),
         authority=authority,
         nodes=nodes,
@@ -789,13 +789,13 @@ def test_revocation_anchors_nothing_new():
 # End to end, and the metrics Exp. 5 / Exp. 6 report
 # ===========================================================================
 def test_synchronize_reports_the_exp6_metrics():
-    """IAS end-to-end: FSNs touched, message size, elapsed time."""
+    """DIAS end-to-end: FSNs touched, message size, elapsed time."""
     nodes, authority, record, entries, commitment, cid = outsourced_record()
     aim = aim_mod.AuthorizationIndexManager()
     aim.register_meta(authority.authority_id, authority.meta())
     chain = ledger_mod.InProcessLedger()
 
-    receipt = ias_mod.synchronize(
+    receipt = dias_mod.synchronize(
         revoke_request(cid, "patient-7"),
         authority=authority,
         nodes=nodes,
@@ -816,7 +816,7 @@ def test_synchronize_reports_the_exp6_metrics():
 def test_synchronize_reports_the_exp5_metrics():
     """Merkle nodes recomputed and entries rewritten, both measured."""
     nodes, authority, record, entries, commitment, cid = outsourced_record(keywords=6)
-    receipt = ias_mod.synchronize(
+    receipt = dias_mod.synchronize(
         modify_request(cid, f"{record.domain}/new"),
         authority=authority,
         nodes=nodes,
@@ -843,7 +843,7 @@ def test_synchronize_leaves_the_record_searchable_under_the_new_policy():
     )
     assert before.result_count == 1
 
-    ias_mod.synchronize(
+    dias_mod.synchronize(
         modify_request(cid, new_policy),
         authority=authority,
         nodes=nodes,
@@ -872,11 +872,11 @@ def test_insert_and_delete_do_not_advance_the_authority_version():
     """
     nodes, authority, record, entries, commitment, cid = outsourced_record(keywords=6)
     before = authority.vid
-    receipt = ias_mod.synchronize(
-        ias_mod.UpdateRequest(
-            operation=ias_mod.Operation.INSERT,
+    receipt = dias_mod.synchronize(
+        dias_mod.UpdateRequest(
+            operation=dias_mod.Operation.INSERT,
             cid=cid,
-            delta=ias_mod.UpdateDelta(keywords_added=("cond:brand-new",)),
+            delta=dias_mod.UpdateDelta(keywords_added=("cond:brand-new",)),
         ),
         authority=authority,
         nodes=nodes,
@@ -891,7 +891,7 @@ def test_insert_and_delete_do_not_advance_the_authority_version():
 
 def test_synchronize_has_no_broadcast_path():
     """Selectivity is the Exp. 6 claim; a fan-out would void it."""
-    names = {n for n in dir(ias_mod) if not n.startswith("_")}
+    names = {n for n in dir(dias_mod) if not n.startswith("_")}
     assert not {"broadcast", "propagate_all", "sync_all", "apply_everywhere"} & names
 
 

@@ -1,6 +1,6 @@
 """Phase IV Steps 4-5 — Batch Integrity Commitment and Policy Commitment.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:690` (Step 4) and `:717` (Step 5):
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`, Phase IV Step 4 and Step 5:
 
     L_j      = H(I_j)
     Root_i   = MerkleRoot({L_j})
@@ -8,9 +8,9 @@ Manuscript `Overleaf/PQ-AVDSE-OJCOMS:690` (Step 4) and `:717` (Step 5):
 
 "Only the Merkle root is committed to the blockchain, while the authentication
 paths are maintained by the cloud infrastructure for subsequent verifiable
-retrieval" (`:690`) — so the ledger takes ``Root_i`` and the paths stay off-chain.
+retrieval" — so the ledger takes ``Root_i`` and the paths stay off-chain.
 
-**Batch scope is one record** (`:690`: "batches all index entries associated with
+**Batch scope is one record** (: "batches all index entries associated with
 one IoMT record into a Merkle tree"; ``index.yaml → merkle.batch_scope:
 per_record``). At the frozen corpus's mean ``|W_i| = 31.7`` that is a ~32-leaf
 tree of height 5, which sets the Exp. 4 proof size at roughly 5 x 33 bytes per
@@ -77,7 +77,7 @@ class RecordCommitment:
     """Everything Phase IV Step 4-5 produces for one record.
 
     ``tree`` is retained because the authentication paths live off-chain with the
-    cloud infrastructure (`:690`); only :attr:`root` is anchored.
+    cloud infrastructure; only :attr:`root` is anchored.
     """
 
     record_id: int
@@ -193,7 +193,7 @@ def update_record_commitment(
     vid: int,
     auth_root_do: bytes,
 ) -> Tuple[RecordCommitment, int]:
-    """Phase VII Step 4: ``Root_i' = MerkleUpdate(Root_i, L_delta)``.
+    """Phase VII Step 3: ``Root_i' = MerkleUpdate(Root_i, L_delta)``.
 
     Returns the new commitment and the number of internal nodes recomputed — the
     Exp. 5 secondary metric "Merkle nodes recomputed", measured by

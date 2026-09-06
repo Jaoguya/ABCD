@@ -1,6 +1,6 @@
-"""Phase VI Step 2 — Authorization Verification at the AIM.
+"""Phase VI Step 2 — Authorization Verification and Token Derivation at the AIM.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:860`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
 "The Authorization Index Manager verifies the submitted authorization state by
 checking the user's **authorization root**, **authorization version**,

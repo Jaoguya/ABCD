@@ -1,5 +1,12 @@
 # MA-LB-PQ-VDSE — Phase III Implementation Plan
 
+> **Note (2026-09-06).** Every `Overleaf/PQ-AVDSE-OJCOMS` line anchor below
+> refers to the SUPERSEDED manuscript revision this decision was taken
+> against. The live manuscript is `Overleaf/MA-LB-PQ-VDSE.tex`, whose phases
+> were renumbered; the anchors are kept unchanged so the record still says
+> what was read at the time. See `MANUSCRIPT_DIVERGENCE.md`.
+
+
 **Scope:** Phase III — User Registration and Version-Bound Authorization Profile
 (VAP) Generation — implemented under `Schemes/ma_lb_pq_vdse/src/`.
 

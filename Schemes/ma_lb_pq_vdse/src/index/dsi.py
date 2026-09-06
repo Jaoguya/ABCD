@@ -1,6 +1,6 @@
-"""Phase IV Step 3 — the Policy-Bound Dynamic Search Index.
+"""Phase IV Step 3 — the Policy-State-Aware Dynamic Search Index.
 
-Manuscript `Overleaf/PQ-AVDSE-OJCOMS:661`:
+Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     I_j = (T_j, CID_i, PID_i, VID_i)
     DSI = ∪ I_j
@@ -20,7 +20,7 @@ consequences, each of which a test pins:
   (``PHASE_IV_PLAN.md`` §1.5 option D) the token does not encode the policy, so
   re-policying an entry touches no posting list. That is what keeps Exp. 5
   incremental instead of re-tokenizing.
-* **Authorization filtering precedes matching.** §V `:1892`: "authorization-aware
+* **Authorization filtering precedes matching.** §V: "authorization-aware
   bitmap filtering removes unauthorized ciphertexts **before** encrypted matching,
   so the online search cost depends mainly on the effective authorized candidate
   set ``n_eff``". ``n_eff`` is therefore measured here, not derived.
@@ -65,7 +65,7 @@ class DSIError(RuntimeError):
 class SearchStatistics:
     """The Exp. 2 secondary metrics, measured rather than derived.
 
-    ``n_eff`` is "the effective authorized candidate set" of §V `:1892` — the
+    ``n_eff`` is "the effective authorized candidate set" of §V — the
     entries that survive bitmap filtering AND match a query token.
     ``entries_traversed`` is what the search actually examined, and
     ``prune_ratio`` is the fraction of the shard the bitmap removed before
@@ -151,8 +151,8 @@ class DynamicSearchIndex:
     def ordinals_for_cid(self, cid: str) -> Tuple[int, ...]:
         """Live ordinals holding entries of one record.
 
-        Phase VII Step 2 rewrites a record's entries and Phase VII Step 6 applies
-        an IAS message scoped to one ``CID_i``; both need this in O(|W_i|) rather
+        Phase VII Step 2 rewrites a record's entries and Phase VII Step 4 applies
+        a DIAS message scoped to one ``CID_i``; both need this in O(|W_i|) rather
         than O(N).
         """
         return tuple(sorted(self._by_cid.get(cid, ())))
@@ -294,7 +294,7 @@ class DynamicSearchIndex:
     ) -> Tuple[Tuple[IndexEntry, ...], SearchStatistics]:
         """Match ``tokens`` against the authorized candidate set.
 
-        Filter-then-match, in that order, because §V `:1892` claims the online
+        Filter-then-match, in that order, because §V claims the online
         cost depends on ``n_eff`` rather than total index size — an
         implementation that matched first and filtered after would produce the
         same results and refute its own claim.

@@ -12,7 +12,7 @@ Scope rule — read this before adding anything here:
 A primitive is something a published paper cites rather than defines: SHA-256,
 HMAC, AES-GCM, a Merkle tree, a Bloom filter, discrete Gaussian sampling, a
 bilinear pairing. A construction is what a paper actually contributes: Guo's
-forward index, Zhuang's attribute-based key derivation, our PDSI/AASS/IAS.
+forward index, Zhuang's attribute-based key derivation, our PDSI/AASS/DIAS.
 Constructions live in ``Schemes/<name>/src/`` and stay independent per
 README §14 ("Do NOT copy implementation logic between scheme folders").
 """

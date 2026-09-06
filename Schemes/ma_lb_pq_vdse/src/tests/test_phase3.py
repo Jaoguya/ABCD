@@ -843,7 +843,7 @@ def test_profile_is_version_bound():
     )
     assert profile_mod.profile_matches_aim(vap, aim, participating)
 
-    # Phase VII Step 3: one authority revokes, increments, republishes.
+    # Phase VII Step 2: one authority revokes, increments, republishes.
     authorities[1].revocation.revoke("patient-7")
     authorities[1].vid += 1
     chain.publish_authorization_state(authorities[1].state())

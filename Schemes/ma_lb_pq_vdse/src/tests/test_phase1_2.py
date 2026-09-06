@@ -1088,10 +1088,10 @@ def test_revocation_restore_rejects_an_unrevoked_identifier():
 
 
 def test_revocation_updates_one_path_per_revocation():
-    """Phase VII Step 3 updates RevRoot incrementally, and Exp. 6 sweeps to 1e5.
+    """Phase VII Step 2 updates RevRoot incrementally, and Exp. 6 sweeps to 1e5.
 
     A rebuild per revocation is O(delta^2) hashing and makes Exp. 6 measure this
-    class instead of the IAS mechanism — which is exactly what happened, at a
+    class instead of the DIAS mechanism — which is exactly what happened, at a
     measured O(n^2.02). Assert the mechanism, not just the root: a full rebuild
     would also change the root, so a root-only test cannot tell the two apart.
     """
@@ -1520,7 +1520,7 @@ def test_commitment_cannot_be_reframed_across_fields():
 
 
 def test_commitment_tracks_a_revocation():
-    """Phase VII Step 3 updates RevRoot; the commitment must follow."""
+    """Phase VII Step 2 updates RevRoot; the commitment must follow."""
     authority = make_authority()
     before = authority.commitment()
     authority.revocation.revoke("patient-1")
@@ -1644,7 +1644,7 @@ def test_four_authorities_end_to_end_through_phase_ii_step_3():
     assert chain.verify_chain()
 
     # Only the affected authority's commitment moves when one revokes
-    # (Phase VII Step 3: "all other authorities retain their existing states").
+    # (Phase VII Step 2: "all other authorities retain their existing states").
     authorities[1].revocation.revoke("patient-7")
     assert authorities[1].commitment() != commitments["AA2"]
     for authority in (authorities[0], authorities[2], authorities[3]):
@@ -1979,7 +1979,7 @@ def test_aim_initial_synchronization_reaches_every_node():
 
 
 def test_aim_affected_fsns_is_the_domain_holder_only():
-    """Phase VII Step 6 selectivity: one domain per node means one node in four."""
+    """Phase VII Step 4 selectivity: one domain per node means one node in four."""
     _, _, aim, authorities, nodes, _ = phase_i_ii_federation()
     for authority in authorities:
         affected = aim.affected_fsns(authority.authority_id, nodes)
@@ -1992,7 +1992,7 @@ def test_aim_selective_propagation_touches_one_node_in_four():
     _, chain, aim, authorities, nodes, _ = phase_i_ii_federation()
     target = authorities[1]
 
-    # Phase VII Step 3: the authority revokes, increments, and republishes.
+    # Phase VII Step 2: the authority revokes, increments, and republishes.
     target.revocation.revoke("patient-7")
     target.vid += 1
     chain.publish_authorization_state(target.state())
