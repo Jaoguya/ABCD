@@ -51,7 +51,7 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
-from Common.crypto import merkle  # noqa: E402
+from Common.crypto import hashes, merkle  # noqa: E402
 from Common.timing import gc_quiesced  # noqa: E402
 
 from .. import config as scheme_config  # noqa: E402
@@ -60,6 +60,7 @@ from ..psa import governance as psa_gov  # noqa: E402
 from ..psa import records as psa_records  # noqa: E402
 from ..psa import state as psa_state  # noqa: E402
 from ..psa import tokens as psa_tokens  # noqa: E402
+from ..psa import verify as psa_verify  # noqa: E402
 from .runner import MetricSpec, Sample  # noqa: E402
 
 MS = "ms"
@@ -151,31 +152,55 @@ def build_world(
 POLICY_SCOPES: Tuple[int, ...] = (1, 2, 4, 8)
 
 
+#: One arm per ``|P_U|``, so the figure renders §V's two-variable sweep the way
+#: §V states it: "q is varied as {1,5,10,15,20}, WHILE |P_U| is varied as
+#: {1,2,4,8}" -- q on the x-axis, one curve per authorization scope.
+#:
+#: This replaced a single sweep over an INDEX into the 20 (q, |P_U|) pairs. That
+#: index was injective and ordered, but it was not a quantity: the axis read
+#: 0..19, the mapping survived only in run_meta.json, and two points a reader
+#: would want side by side (q=5 at |P_U|=2 and at |P_U|=8) sat six positions
+#: apart. A family of curves is how a 2-D sweep is normally drawn and it needs
+#: no legend table to read.
+PSA_EXP1_VARIANTS: Tuple[str, ...] = tuple(f"pu{p}" for p in POLICY_SCOPES)
+
+
+def policy_scope_of(variant: str) -> int:
+    """``pu4`` -> 4. The arm name carries its own parameter."""
+    if not variant.startswith("pu") or not variant[2:].isdigit():
+        raise ValueError(
+            f"unknown PSA Exp. 1 variant {variant!r}; "
+            f"valid: {', '.join(PSA_EXP1_VARIANTS)}"
+        )
+    return int(variant[2:])
+
+
 @dataclass
 class PsaExp1TokenGeneration:
     """"the number of generated tokens is ``|T_Q| = q|P_U|``" — manuscript Exp. 1.
 
-    The manuscript sweeps two variables; the runner takes one. So the sweep
-    value is an INDEX into :attr:`pairs`, the ``(q, |P_U|)`` combinations in
-    ascending ``q·|P_U|``, and the quantities that matter are reported as
-    secondaries: ``tokens`` is ``|T_Q|``, alongside ``keywords`` (``q``) and
-    ``policies`` (``|P_U|``). :meth:`label` renders a point as ``q=…, |P_U|=…``.
+    §V varies ``q ∈ {1,5,10,15,20}`` while varying ``|P_U| ∈ {1,2,4,8}``. The
+    runner sweeps one variable, so ``q`` is the sweep and ``|P_U|`` is the ARM:
+    one run per scope, written to ``psa_exp1_token_generation__pu<N>/``, drawn
+    as one curve each. ``|T_Q| = q·|P_U|`` is checked on every sample rather
+    than assumed, and reported as the ``tokens`` secondary.
 
-    ``|T_Q|`` is deliberately NOT the sweep value even though it is the quantity
-    ``tab:cost``'s ``O(|T_Q|)T_H`` is about, because it is not injective:
-    ``|T_Q| = 20`` is ``q=20,|P_U|=1`` and ``q=10,|P_U|=2`` and ``q=5,|P_U|=4``.
-    Collapsing those onto one x would average across three different queries and
-    destroy the only thing this experiment can actually settle — whether the
-    cost depends on the PRODUCT alone, as the manuscript's identity asserts, or
-    on how the product is factored. Keeping them as separate points is what lets
-    the figure show that they coincide (or that they do not).
+    WHY THIS CANNOT LIVE ON THE IMPLEMENTED SCHEME
+    ----------------------------------------------
+    ``index/tokens.py``'s ``generate_trapdoor(scheme, keywords)`` takes no
+    policy argument at all: Option D's token is ``H(w)``, so ``|T_Q| = q``
+    whatever ``|P_U|`` is and the second dimension is structurally inert. §V's
+    Exp. 1 is a measurement OF the policy-bound token (D1), which is why it is
+    here and not in ``experiments.py``. That is divergence D7.
     """
 
     config: scheme_config.Configuration
     name: str = "psa_exp1_token_generation"
     number: int = 1
-    variable: str = "scope_index"
+    variable: str = "keywords"
     values: Tuple[Any, ...] = ()
+    #: ``|P_U|`` — how many authorized policies this arm derives tokens under.
+    policy_scope: int = 1
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("tokens", COUNT),
@@ -183,39 +208,32 @@ class PsaExp1TokenGeneration:
         MetricSpec("policies", COUNT),
         MetricSpec("token_bytes", BYTES),
     )
-    #: ``(q, |P_U|)`` pairs, in ascending ``q·|P_U|``.
-    pairs: Tuple[Tuple[int, int], ...] = ()
 
     def __post_init__(self) -> None:
-        if not self.pairs:
-            keyword_counts = tuple(self.config.experiment("exp1").values)
-            self.pairs = tuple(
-                sorted(
-                    ((q, p) for q in keyword_counts for p in POLICY_SCOPES),
-                    key=lambda qp: (qp[0] * qp[1], qp[0]),
-                )
-            )
+        if self.policy_scope < 1:
+            raise ValueError(f"|P_U| must be >= 1, got {self.policy_scope}")
         if not self.values:
-            self.values = tuple(range(len(self.pairs)))
+            self.values = tuple(self.config.experiment("exp1").values)
 
     def prepare(self, value: Any) -> Any:
-        q, policy_count = self.pairs[int(value)]
-        # Enough domains and policies to supply |P_U| distinct authorized
-        # policies without repeating one -- repeating would collapse distinct
-        # tokens and understate |T_Q|.
-        per_domain = -(-policy_count // len(DOMAIN_NAMES)) or 1
-        world = build_world(policies_per_domain=max(per_domain, 1))
-        scopes = [world.scope(p) for p in world.policies[:policy_count]]
-        if len(scopes) != policy_count:
+        q = int(value)
+        # Enough domains and policies to supply |P_U| DISTINCT authorized
+        # policies. Repeating one would collapse distinct tokens and understate
+        # |T_Q| -- the identity this experiment exists to check.
+        per_domain = max(1, -(-self.policy_scope // len(DOMAIN_NAMES)))
+        world = build_world(policies_per_domain=per_domain)
+        scopes = [world.scope(p) for p in world.policies[: self.policy_scope]]
+        if len(scopes) != self.policy_scope:
             raise RuntimeError(
-                f"needed {policy_count} distinct policies, built {len(scopes)}"
+                f"needed {self.policy_scope} distinct policies, "
+                f"built {len(scopes)}"
             )
         return dict(
             scheme=_keyed_scheme(),
             keywords=[f"kw:{i:05d}" for i in range(q)],
             scopes=scopes,
             q=q,
-            policies=policy_count,
+            policies=self.policy_scope,
         )
 
     def measure(self, prepared: Any) -> Sample:
@@ -240,10 +258,6 @@ class PsaExp1TokenGeneration:
                 "token_bytes": float(sum(len(t) for t in produced)),
             },
         )
-
-    def label(self, value: Any) -> str:
-        q, p = self.pairs[int(value)]
-        return f"q={q}, |P_U|={p}"
 
 
 # ===========================================================================
@@ -348,10 +362,23 @@ class PsaExp5ReTokenization:
     def prepare(self, value: Any) -> Any:
         pairs = int(value)
         world = build_world()
-        record_count = max(1, -(-pairs // self.keywords_per_record))
         scheme = _keyed_scheme()
+        # The pool is sized by the AFFECTED entries, not by every entry built.
+        # `measure` skips records no governing authority touched (that skip IS
+        # eq:unaffected-policy), so sizing at ceil(k / |W_i|) records left the
+        # loop running out of dependent records at roughly the governance
+        # fraction -- measured 0.500 of the swept k at every point with the
+        # default 2-of-4 AA(PID). The x-axis said k while the work was k/2, and
+        # the whole point of this experiment is to put that curve beside
+        # Exp5KeywordUpdate's at the SAME k (which does reach k: 1002 entries
+        # at k=1000). Independent records still make up the rest of the pool,
+        # so the skip path stays on the timed loop.
+        moved = sorted(world.authorities.values())[0]
         records: List[Dict[str, Any]] = []
-        for rid in range(record_count):
+        affected_entries = 0
+        rid = -1
+        while affected_entries < pairs:
+            rid += 1
             policy = world.policies[rid % len(world.policies)]
             domain = policy.split("/", 1)[0]
             pv = world.pv(policy)
@@ -378,6 +405,8 @@ class PsaExp5ReTokenization:
                     ),
                 )
             )
+            if moved in world.governance.governing(policy):
+                affected_entries += self.keywords_per_record
         return dict(world=world, scheme=scheme, records=records, pairs=pairs)
 
     def measure(self, prepared: Any) -> Sample:
@@ -441,6 +470,66 @@ class PsaExp5ReTokenization:
 # ===========================================================================
 # D8 — Exp. 6 over the AFFECTED-POLICY RATIO
 # ===========================================================================
+@dataclass
+class _PsaShard:
+    """One Fog Search Node's view: the entries it serves, and its auth state.
+
+    ``F_k^aff``, the last link of the manuscript's dependency chain
+    ``AA_k -> P_k^aff -> R_k^aff -> S_k^aff -> F_k^aff``. Deliberately minimal
+    -- ``fsn/`` is written against ``types.IndexEntry`` and its scalar ``vid``
+    and cannot hold a ``PolicyStateIndexEntry`` -- but it is a real recipient
+    that does real work, which is the part that matters: without one, "delivers
+    to all FSNs" and "delivers only to affected FSNs" differ by a multiplier on
+    a counter rather than by anything measured.
+    """
+
+    node_id: str
+    domains: set
+    index: Dict[bytes, Any] = field(default_factory=dict)
+    #: Advances on every message this node accepts, whether or not it holds the
+    #: affected shard -- which is the cost Incremental-All pays for its extra
+    #: fan-out, and the reason its curve can differ from DIAS's at all.
+    auth_view: bytes = b"\x00" * 32
+
+    def apply(self, delta: "_PsaDelta") -> int:
+        """Ingest one delivered delta. Returns entries rewritten on this node.
+
+        Two effects, mirroring ``sync/dias.py::apply_dias``: the node's
+        authorization view advances, and IF it holds the shard its entries are
+        replaced. A node without the shard still pays the first -- that is the
+        honest cost of an unnecessary delivery, not a penalty invented to make
+        the ablation come out.
+        """
+        self.auth_view = hashes.sha256(
+            self.auth_view, delta.auth_state, delta.payload,
+            domain=b"psa-fsn-auth-view/v1",
+        )
+        if delta.domain not in self.domains:
+            return 0
+        for token in delta.retired:
+            self.index.pop(token, None)
+        for entry in delta.entries:
+            self.index[entry.token] = entry
+        return len(delta.entries)
+
+
+@dataclass
+class _PsaDelta:
+    """One record's synchronization message, as it goes on the wire."""
+
+    cid: str
+    domain: str
+    entries: Tuple[Any, ...]
+    retired: Tuple[bytes, ...]
+    auth_state: bytes
+    payload: bytes
+
+    @property
+    def size_bytes(self) -> int:
+        return len(self.payload)
+
+
+
 VARIANT_DIAS = "dias"
 VARIANT_INCREMENTAL_ALL = "incremental_all"
 VARIANT_FULL_STATE = "full_state"
@@ -537,9 +626,26 @@ class PsaExp6AffectedRatio:
                     ],
                 )
             )
+        # F^aff -- the FSN layer the dependency chain ends at. One shard per
+        # node, domains assigned round-robin the way `assign_domains_to_fsns`
+        # does, so at d = m = 4 each node holds exactly one domain. Without a
+        # node layer there is nothing for "propagates the deltas only to FSNs
+        # maintaining affected shards" to be true OF, and the three arms could
+        # differ only in a counter.
+        nodes = [
+            _PsaShard(node_id=f"FSN{i}", domains=set())
+            for i in range(self.fog_search_nodes)
+        ]
+        for index, domain in enumerate(world.domains):
+            nodes[index % len(nodes)].domains.add(domain)
+        for record in records:
+            for node in nodes:
+                if record["domain"] in node.domains:
+                    for entry in record["entries"]:
+                        node.index[entry.token] = entry
         return dict(
             world=world, scheme=scheme, records=records, moved=moved,
-            affected_count=affected_count,
+            affected_count=affected_count, nodes=nodes,
         )
 
     def measure(self, prepared: Any) -> Sample:
@@ -550,10 +656,34 @@ class PsaExp6AffectedRatio:
         full_state = self.variant == VARIANT_FULL_STATE
         selective = self.variant == VARIANT_DIAS
 
+        nodes = prepared["nodes"]
+        others = tuple(a for a in sorted(world.authorities.values()) if a != moved)
+
+        # AUTHORIZATION-STATE REDISTRIBUTION, the other half of what §V calls
+        # Full-State: "reconstructs and propagates the relevant
+        # authorization/index state to all FSNs". The index half is the policy
+        # loop below; this is the authorization half, and without it this arm
+        # measured only part of what it is named after -- so `FS/DIAS` came out
+        # a lower bound and the two Exp. 6 figures defined `full_state`
+        # differently.
+        #
+        # Sized BEFORE the timer for the reason `experiments.py` gives at the
+        # same point: the republished payload does not change length while the
+        # loop runs, so one encoding is the size of every republish. Doing it
+        # per update would put an encode() on the timed path and charge
+        # Full-State for measurement work the other two arms do not do.
+        rebuild_bytes_per_authority = 0
+        if full_state:
+            rebuild_bytes_per_authority = len(
+                psa_state.PolicyAuthorityState.build(
+                    world.commitments, [others[0]]
+                ).encode()
+            ) * len(nodes)
+
         evolved = 0
         retokenized = 0
         delivered_bytes = 0
-        touched = 0
+        reached: set = set()
 
         with gc_quiesced():
             started = time.perf_counter_ns()
@@ -585,17 +715,53 @@ class PsaExp6AffectedRatio:
                 evolved += 1
                 retokenized += len(fresh)
 
-                # The delta actually put on the wire: the new entries plus the
-                # authenticated metadata. Measured from the real encodings, not
-                # derived as size x fan-out -- the mistake `experiments.py`
-                # documents for the Option D Exp. 6.
-                payload = sum(len(e.encode()) for e in fresh)
-                payload += len(commitment.meta.encode())
-                # Selective delivery reaches the one FSN holding the domain's
-                # shard; the other two arms reach every node.
-                fan_out = 1 if selective else self.fog_search_nodes
-                delivered_bytes += payload * fan_out
-                touched += fan_out
+                # The delta as it goes on the wire: the new entries plus the
+                # authenticated metadata, from the REAL encodings.
+                delta = _PsaDelta(
+                    cid=record["cid"], domain=record["domain"],
+                    entries=tuple(fresh),
+                    retired=tuple(e.token for e in record["entries"]),
+                    auth_state=commitment.meta.auth_state,
+                    payload=b"".join(
+                        [e.encode() for e in fresh] + [commitment.meta.encode()]
+                    ),
+                )
+                record["entries"] = fresh
+
+                # PROPAGATION -- the half of the claim the arms actually ablate.
+                # DIAS delivers only to FSNs maintaining an affected shard;
+                # Incremental-All and Full-State deliver to every FSN. Each
+                # recipient really ingests the message (`_PsaShard.apply`), so
+                # the extra fan-out is work done rather than a counter
+                # incremented. `delivered_bytes` accumulates per DELIVERY from
+                # the message's own length -- never `payload x fan_out`, the
+                # derivation `experiments.py` records as wrong on 2026-09-04.
+                targets = (
+                    [n for n in nodes if delta.domain in n.domains]
+                    if selective else nodes
+                )
+                for node in targets:
+                    node.apply(delta)
+                    delivered_bytes += delta.size_bytes
+                    reached.add(node.node_id)
+
+            if full_state:
+                # Every OTHER authority recomputes C_k^auth and the AIM
+                # republishes it to every FSN. Built from `world.commitments`
+                # each time rather than read back from a cache, so this is the
+                # real recomputation -- the same standard `experiments.py`
+                # holds `Authority.commitment()` to.
+                for authority in others:
+                    republished = psa_state.PolicyAuthorityState.build(
+                        world.commitments, [authority]
+                    ).digest()
+                    for node in nodes:
+                        node.auth_view = hashes.sha256(
+                            node.auth_view, republished,
+                            domain=b"psa-fsn-auth-view/v1",
+                        )
+                        reached.add(node.node_id)
+                    delivered_bytes += rebuild_bytes_per_authority
             elapsed = time.perf_counter_ns() - started
 
         return Sample(
@@ -604,7 +770,139 @@ class PsaExp6AffectedRatio:
                 "policies_evolved": float(evolved),
                 "entries_retokenized": float(retokenized),
                 "delivered_kb": delivered_bytes / 1024.0,
-                "fsns_touched": float(touched),
+                # DISTINCT nodes, which is what `F_k^aff` is and what Option D's
+                # metric of the same name means. Accumulating fan-out per record
+                # instead reported 160 "FSNs touched" on a 4-node deployment.
+                "fsns_touched": float(len(reached)),
+            },
+        )
+
+
+# ===========================================================================
+# D3 — Exp. 4 under the policy-state-aware commitment
+# ===========================================================================
+def _psa_batched_chain_checker(anchors: Dict[str, bytes], cids: Sequence[str]):
+    """Phase VIII Step 3 for a whole response, anchors fetched ONCE.
+
+    Same shape as ``verify/ledger.py::batched_chain_checker`` and for the same
+    reason: a per-record namespace walk made Option D's Step 3 O(r^2) and 99.6%
+    of the step's cost. The fetch is LAZY -- it happens on the first bundle
+    checked, inside whatever region the caller is timing -- so the harness
+    cannot make the cost vanish by resolving anchors in an untimed ``prepare``.
+    Its whole cost is charged to the first record, which is right: a client
+    pays it once per response.
+    """
+    resolved: Dict[str, bytes] = {}
+    done = [False]
+
+    def check(bundle) -> psa_verify.StepResult:
+        if not done[0]:
+            resolved.update({cid: anchors[cid] for cid in cids if cid in anchors})
+            done[0] = True
+        anchored = resolved.get(bundle.cid)
+        if anchored is None:
+            return psa_verify.StepResult(
+                "chain", False, f"no anchor for {bundle.cid}"
+            )
+        return psa_verify.StepResult(
+            "chain",
+            hashes.constant_time_equal(anchored, bundle.meta.commit),
+            "" if anchored == bundle.meta.commit else "Commit_i is not the anchored one",
+        )
+
+    return check
+
+
+@dataclass
+class PsaExp4Verification:
+    """Phase VIII Steps 1-3 per returned RECORD, under ``Commit_i`` of D3.
+
+    The Option D counterpart verifies ``H(Root ‖ PID ‖ VID ‖ AuthRoot_DO)``;
+    this verifies ``H(CID ‖ Root ‖ PID ‖ PV ‖ AuthState)``. Both time the same
+    boundary -- Merkle proof, commitment recomputation, chain consistency, with
+    IPFS fetch and decryption excluded -- so the two curves are comparable at
+    the same ``r``.
+
+    ``r`` COUNTS RECORDS. ``psa/verify.py::build_response`` emits one bundle per
+    index ENTRY, so this takes ``[0]`` per record. Taking them all is defect
+    ``d1cdf9c``, which has already forced two re-runs and then survived into
+    Exp. 9; at ``keywords_per_record = 6`` it would inflate the sweep 6x and
+    compare 6r entries against baselines returning r records.
+    """
+
+    config: scheme_config.Configuration
+    name: str = "psa_exp4_verification_overhead"
+    number: int = 4
+    variable: str = "returned_results"
+    values: Tuple[Any, ...] = ()
+    primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
+    secondaries: Tuple[MetricSpec, ...] = (
+        MetricSpec("proof_size", KB),
+        MetricSpec("path_length", COUNT),
+        MetricSpec("records_verified", COUNT),
+    )
+    keywords_per_record: int = 6
+
+    def __post_init__(self) -> None:
+        if not self.values:
+            self.values = tuple(self.config.experiment("exp4").values)
+
+    def prepare(self, value: Any) -> Any:
+        wanted = int(value)
+        world = build_world()
+        scheme = _keyed_scheme()
+        bundles = []
+        anchors: Dict[str, bytes] = {}
+        for rid in range(wanted):
+            policy = world.policies[rid % len(world.policies)]
+            domain = policy.split("/", 1)[0]
+            pv = world.pv(policy)
+            cid = f"bafyPSA{rid:08d}"
+            entries = [
+                psa_records.PolicyStateIndexEntry(
+                    token=scheme.index_token(
+                        f"kw:{rid:05d}:{k}", policy_id=policy, pv=pv, domain=domain
+                    ),
+                    cid=cid, policy_id=policy, pv=pv,
+                )
+                for k in range(self.keywords_per_record)
+            ]
+            commitment = psa_commit.commit_record(
+                record_id=rid, cid=cid, entries=entries, policy_id=policy,
+                pv=pv, auth_state=world.auth_state(policy),
+            )
+            # ONE bundle per returned ciphertext.
+            bundles.append(psa_verify.build_response(commitment, entries)[0])
+            anchors[cid] = commitment.commit
+        return dict(
+            bundles=tuple(bundles), anchors=anchors,
+            cids=[b.cid for b in bundles],
+        )
+
+    def measure(self, prepared: Any) -> Sample:
+        bundles = prepared["bundles"]
+        checker = _psa_batched_chain_checker(prepared["anchors"], prepared["cids"])
+        with gc_quiesced():
+            started = time.perf_counter_ns()
+            results = [
+                psa_verify.verify_bundle(bundle, chain_check=checker)
+                for bundle in bundles
+            ]
+            elapsed = time.perf_counter_ns() - started
+        rejected = [r for r in results if not r.accepted]
+        if rejected:
+            raise RuntimeError(
+                f"{len(rejected)} of {len(results)} bundles failed verification "
+                f"(first at step {rejected[0].failed_step})"
+            )
+        return Sample(
+            primary=elapsed / 1e6,
+            secondaries={
+                "proof_size": sum(r.proof_size_bytes for r in results) / 1024.0,
+                "path_length": (
+                    sum(r.proof_path_length for r in results) / len(results)
+                ),
+                "records_verified": float(len(results)),
             },
         )
 
@@ -614,6 +912,7 @@ class PsaExp6AffectedRatio:
 PSA_EXPERIMENTS = {
     1: PsaExp1TokenGeneration,
     3: PsaExp3CrossDomainTokens,
+    4: PsaExp4Verification,
     5: PsaExp5ReTokenization,
     6: PsaExp6AffectedRatio,
 }
@@ -628,6 +927,8 @@ def build(number: int, config: scheme_config.Configuration, *, variant: str = ""
             f"scope note in this module's docstring"
         )
     cls = PSA_EXPERIMENTS[number]
+    if number == 1 and variant:
+        return cls(config=config, policy_scope=policy_scope_of(variant))
     if number == 6 and variant:
         return cls(config=config, variant=variant)
     return cls(config=config)
@@ -635,11 +936,14 @@ def build(number: int, config: scheme_config.Configuration, *, variant: str = ""
 
 __all__ = [
     "AFFECTED_RATIOS",
+    "PSA_EXP1_VARIANTS",
+    "policy_scope_of",
     "POLICY_SCOPES",
     "PSA_EXP6_VARIANTS",
     "PSA_EXPERIMENTS",
     "PsaExp1TokenGeneration",
     "PsaExp3CrossDomainTokens",
+    "PsaExp4Verification",
     "PsaExp5ReTokenization",
     "PsaExp6AffectedRatio",
     "VARIANT_DIAS",

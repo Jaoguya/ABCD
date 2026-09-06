@@ -34,43 +34,63 @@ def _run(experiment, value):
 # D7 — |T_Q| = q·|P_U|
 # ===========================================================================
 def test_exp1_token_count_is_the_product(config):
-    experiment = psa.PsaExp1TokenGeneration(config=config)
-    for index in range(len(experiment.values)):
-        q, policies = experiment.pairs[index]
-        sample = _run(experiment, index)
-        assert sample.secondaries["tokens"] == q * policies
-        assert sample.secondaries["keywords"] == q
-        assert sample.secondaries["policies"] == policies
+    """|T_Q| = q*|P_U| on every point of every arm."""
+    for variant in psa.PSA_EXP1_VARIANTS:
+        experiment = psa.build(1, config, variant=variant)
+        scope = psa.policy_scope_of(variant)
+        for q in experiment.values:
+            sample = _run(experiment, q)
+            assert sample.secondaries["tokens"] == q * scope
+            assert sample.secondaries["keywords"] == q
+            assert sample.secondaries["policies"] == scope
 
 
 def test_exp1_sweeps_both_manuscript_dimensions(config):
-    """q ∈ exp1's values and |P_U| ∈ {1,2,4,8}, as §V's Exp. 1 states."""
+    """§V: "q is varied as {1,5,10,15,20} while |P_U| is varied as {1,2,4,8}".
+
+    q is the sweep and |P_U| is the ARM, so the two dimensions are the sweep
+    values and the variant list respectively -- one curve per scope, which is
+    how a reader expects a two-variable sweep to be drawn.
+    """
     experiment = psa.PsaExp1TokenGeneration(config=config)
-    assert {p for _, p in experiment.pairs} == set(psa.POLICY_SCOPES)
-    assert {q for q, _ in experiment.pairs} == set(config.experiment("exp1").values)
-
-
-def test_exp1_points_are_ordered_by_token_count(config):
-    experiment = psa.PsaExp1TokenGeneration(config=config)
-    products = [q * p for q, p in experiment.pairs]
-    assert products == sorted(products)
-
-
-def test_exp1_keeps_equal_products_as_separate_points(config):
-    """The factorization question the experiment exists to answer."""
-    experiment = psa.PsaExp1TokenGeneration(config=config)
-    twenties = [(q, p) for q, p in experiment.pairs if q * p == 20]
-    assert len(twenties) > 1, (
-        "|T_Q|=20 must be reachable by more than one (q, |P_U|); with a single "
-        "factorization the figure cannot show whether cost depends on the "
-        "product alone"
+    assert experiment.variable == "keywords"
+    assert set(experiment.values) == set(config.experiment("exp1").values)
+    assert {psa.policy_scope_of(v) for v in psa.PSA_EXP1_VARIANTS} == set(
+        psa.POLICY_SCOPES
     )
+
+
+def test_exp1_arms_scale_the_curve_by_exactly_their_scope(config):
+    """The identity, read across arms rather than along one.
+
+    At a fixed q, doubling |P_U| must double |T_Q|. That is the whole content
+    of |T_Q| = q|P_U|, and it is what makes the four curves parallel on the
+    log axis instead of converging.
+    """
+    baseline = psa.build(1, config, variant="pu1")
+    for variant in psa.PSA_EXP1_VARIANTS:
+        experiment = psa.build(1, config, variant=variant)
+        scope = psa.policy_scope_of(variant)
+        for q in experiment.values:
+            one = _run(baseline, q).secondaries["tokens"]
+            many = _run(experiment, q).secondaries["tokens"]
+            assert many == one * scope
+
+
+def test_exp1_default_arm_is_the_singleton_scope(config):
+    """An unparameterised build must not silently pick a scope."""
+    assert psa.PsaExp1TokenGeneration(config=config).policy_scope == 1
+
+
+def test_exp1_rejects_an_unknown_arm(config):
+    with pytest.raises(ValueError, match="unknown PSA Exp. 1 variant"):
+        psa.build(1, config, variant="round_robin")
 
 
 def test_exp1_tokens_are_distinct(config):
     """q·|P_U| COLLIDING tokens would be q·|P_U| lookups of the same posting list."""
-    experiment = psa.PsaExp1TokenGeneration(config=config)
-    prepared = experiment.prepare(len(experiment.values) - 1)
+    experiment = psa.build(1, config, variant=psa.PSA_EXP1_VARIANTS[-1])
+    prepared = experiment.prepare(max(experiment.values))
     from Schemes.ma_lb_pq_vdse.src.psa import tokens as psa_tokens
 
     produced = psa_tokens.generate_query_tokens(

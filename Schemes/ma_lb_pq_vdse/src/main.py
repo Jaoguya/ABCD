@@ -59,6 +59,7 @@ FOLDERS = {
 PSA_FOLDERS = {
     1: "psa_exp1_token_generation",
     3: "psa_exp3_crossdomain_tokens",
+    4: "psa_exp4_verification_overhead",
     5: "psa_exp5_retokenization",
     6: "psa_exp6_affected_ratio",
 }
@@ -71,9 +72,14 @@ def _run_notes(number: int, variant: str, *, construction: str) -> List[str]:
     "no note" is what every banked Option D run already says and a reader
     cannot tell absence-of-note from not-yet-forked. Stating it always makes the
     two eras distinguishable without rewriting any existing run_meta.
+
     """
     notes = [f"construction={construction}"]
-    if variant and number in (6, 7, 8):
+    # `scheduler_variant` is the key the plotter and every banked run already
+    # use for "which arm produced this"; Exp. 1's |P_U| and Exp. 6's
+    # propagation rule are arms in exactly that sense, whatever the key is
+    # called. Renaming it would orphan 85 banked run_meta.json files.
+    if variant and number in (1, 6, 7, 8):
         notes.append(f"scheduler_variant={variant}")
     if construction == "psa":
         notes.append(
@@ -258,6 +264,20 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         The stale ``exp6_authorization_sync__no_lb`` directory is what that
         produced -- within 3% of the main run at every point.
         """
+        if number == 1 and args.construction == "psa":
+            # §V varies q AND |P_U|; the runner sweeps one variable, so |P_U|
+            # is the arm. Defaults to every scope, because a single-arm run
+            # would silently reproduce the D7 defect it exists to fix.
+            if args.variant in (None, "") or args.variant.lower() == "all":
+                return list(psa_mod.PSA_EXP1_VARIANTS)
+            picked = [v.strip() for v in args.variant.split(",") if v.strip()]
+            bad = [v for v in picked if v not in psa_mod.PSA_EXP1_VARIANTS]
+            if bad:
+                raise SystemExit(
+                    f"unknown PSA Exp. 1 variant(s) {bad}; valid: "
+                    f"{', '.join(psa_mod.PSA_EXP1_VARIANTS)}"
+                )
+            return picked
         if number == 6:
             if args.construction == "psa":
                 if args.variant in (None, ""):
@@ -378,7 +398,8 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         # curve labelled as an ablation.
         folders = PSA_FOLDERS if psa else FOLDERS
         out_dir = sweep.shard_dir(output_root / folders[number], args.points)
-        if variant and number in (6, 7, 8):
+        variant_dir_numbers = (1, 6, 7, 8) if psa else (6, 7, 8)
+        if variant and number in variant_dir_numbers:
             out_dir = out_dir.parent / f"{out_dir.name}__{variant}"
         written = runner.write_outputs(result, out_dir)
         for point in result.points:

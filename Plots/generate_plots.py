@@ -7,6 +7,18 @@ Walks ``Schemes/*/exp<N>_*/results.csv`` and emits one figure per experiment
 so a partial campaign still plots — that is deliberate: the campaign runs
 per-scheme on separate instances and finishes at different times.
 
+TWO FIGURE FAMILIES
+-------------------
+``--construction option_d`` (the default) draws README §10's eight figures from
+``exp<N>_*/``. ``--construction psa`` draws the manuscript's policy-state-aware
+track (MANUSCRIPT_DIVERGENCE.md D6-D9) from ``psa_exp<N>_*/``, into separate
+``fig_psa_exp*.pdf`` filenames. They are never merged: the two constructions
+time DIFFERENT functions at the same experiment number, psa_exp6 sweeps a
+different variable entirely, and every psa run is built on in-process synthetic
+data and so is non-reportable by construction. The flag takes the same words as
+``Schemes/ma_lb_pq_vdse/src/main.py --construction``, which writes those
+directories.
+
 FIGURE CONVENTIONS (README §10, followed exactly)
 -------------------------------------------------
 * Vector PDF, single-column width.
@@ -83,6 +95,14 @@ class PanelSpec:
     #: Derived here rather than in the runner so `results.csv` keeps the raw
     #: measurement and the figure states the transform in one place.
     per_x: bool = False
+    #: Draw a SECOND metric of the same series as a companion curve, with
+    #: `companion_label` naming it. For a panel whose claim is a contrast
+    #: between two columns of ONE run rather than between two schemes: psa_exp3
+    #: records both `tokens_issued` and `option_d_tokens_issued` on every run,
+    #: and the D9 claim is precisely the gap between them. Drawn dashed and
+    #: grey so it reads as the reference line it is, never as a fifth scheme.
+    companion_metric: Optional[int] = None
+    companion_label: str = ""
 
 
 @dataclass(frozen=True)
@@ -105,6 +125,16 @@ class ExperimentSpec:
     #: a metric it wins would be choosing the metric after seeing the result.
     #: All three are recorded on every run, so all three are shown.
     panels: Tuple["PanelSpec", ...] = ()
+    #: Directory-name prefix. Empty for the implemented scheme, whose folders
+    #: are `exp<N>_*`; `psa_` for the manuscript's policy-state-aware
+    #: construction, whose folders are `psa_exp<N>_*` (main.py: PSA_FOLDERS).
+    #: A prefix rather than a `__psa` suffix for the reason main.py gives: the
+    #: two constructions time DIFFERENT functions at the same experiment
+    #: number, so they must never fall into one glob and be averaged or
+    #: overlaid as if they were arms of one measurement.
+    prefix: str = ""
+    #: Override the ablation vocabulary. Empty means `variants_for()` decides.
+    variants: Tuple[Tuple[str, str], ...] = ()
 
 
 EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
@@ -194,6 +224,136 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                        PanelSpec(2, "Cross-node forwards", "c"),
                    )),
 )
+
+#: The PSA track's Exp. 6 arms. Same three claims as EXP6_VARIANTS, but the
+#: slugs are the manuscript's own words rather than the frozen Option D
+#: directory names -- psa_exp6 has no banked data to keep compatible, so
+#: `harness/psa_experiments.py` was free to name them `dias` /
+#: `incremental_all` / `full_state` outright. The legend text is identical to
+#: EXP6_VARIANTS' so the two figures read the same way.
+PSA_EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
+    ("incremental_all", "Incremental-All"),
+    ("full_state", "Full-State Synchronization"),
+    ("dias", "DIAS (proposed)"),
+)
+
+
+#: THE POLICY-STATE-AWARE TRACK (MANUSCRIPT_DIVERGENCE.md D6-D9).
+#:
+#: A SEPARATE figure family, selected with `--construction psa`, never merged
+#: into the eight above. Three reasons, all of them the reason the runner keeps
+#: `psa_exp*/` separate from `exp*/` in the first place:
+#:
+#: * They time different functions at the same experiment number. Exp. 1 is
+#:   Option D trapdoor generation; psa_exp1 is `q x |P_U|` token derivation.
+#:   One axis cannot carry both.
+#: * psa_exp6 sweeps a different VARIABLE entirely -- the affected-policy ratio
+#:   (10%-100%), not an update count -- which is divergence D8.
+#: * Every psa run is built on in-process synthetic data, so `reportable` is
+#:   false by construction. These figures are for deciding whether to adopt
+#:   D1-D5; README §4 admits only `synthea` for anything quoted in §V, and
+#:   `--require-reportable` drops the whole family accordingly.
+#:
+#: Filenames carry `psa_` for the same reason the directories do: a figure
+#: dropped into the manuscript's `images/` must not be able to shadow
+#: `fig_exp1_trapdoor.pdf`.
+#: One curve per |P_U|, which is how §V states Exp. 1: "q is varied as
+#: {1,5,10,15,20}, WHILE |P_U| is varied as {1,2,4,8}". A family of curves over
+#: a real x-axis, not a sweep over an index into the 20 pairs -- that reads
+#: directly and puts q=5 at |P_U|=2 and at |P_U|=8 on the same vertical.
+PSA_EXP1_VARIANTS: Tuple[Tuple[str, str], ...] = (
+    ("pu1", "$|P_U| = 1$"),
+    ("pu2", "$|P_U| = 2$"),
+    ("pu4", "$|P_U| = 4$"),
+    ("pu8", "$|P_U| = 8$"),
+)
+
+PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
+    ExperimentSpec(1, "psa_exp1_token_generation", "fig_psa_exp1_tokens.pdf",
+                   "Queried keywords $q$", "Token generation latency (ms)",
+                   log_y=True, prefix="psa_", variants=PSA_EXP1_VARIANTS,
+                   panels=(
+                       PanelSpec(0, "Token generation\nlatency (ms)", "a"),
+                       # |T_Q| is the quantity tab:cost's O(|T_Q|)T_H is about,
+                       # and the panel that shows the identity holding: the four
+                       # curves must trace q*|P_U| exactly, so they fan out by a
+                       # constant factor rather than converging anywhere.
+                       PanelSpec(1, "Tokens issued $|T_Q|$", "b", log_y=True),
+                   )),
+    # D9. Panel (b) is the whole claim: Option D issues ONE trapdoor at every
+    # d, this construction issues q per authorized policy. Both curves live in
+    # the same results.csv (`tokens_issued` and `option_d_tokens_issued`), so
+    # the comparison is read from measured columns rather than assembled here.
+    ExperimentSpec(3, "psa_exp3_crossdomain_tokens",
+                   "fig_psa_exp3_tokens.pdf",
+                   "Domains $d$", "Token generation latency (ms)",
+                   log_y=True, prefix="psa_",
+                   panels=(
+                       PanelSpec(0, "Token generation\nlatency (ms)", "a"),
+                       PanelSpec(1, "Trapdoors issued", "b", log_y=True,
+                                 companion_metric=3,
+                                 companion_label="Option D (implemented)"),
+                   )),
+    # Exp. 4 under Commit_i of D3. Same measured boundary as the Option D
+    # figure -- Merkle proof, commitment recomputation, chain consistency, with
+    # IPFS fetch and decryption excluded -- so the two are comparable at the
+    # same r. Panel (a) is T_avg = T_verify / r, which is what §V reports.
+    ExperimentSpec(4, "psa_exp4_verification_overhead",
+                   "fig_psa_exp4_verify.pdf",
+                   "Returned results $r$", "Verification latency (ms)",
+                   log_x=True, log_y=True, prefix="psa_",
+                   panels=(
+                       PanelSpec(0, "Verification latency\nper result (ms)", "a",
+                                 per_x=True, log_x=True),
+                       PanelSpec(1, "Proof size (KB)", "b", log_x=True),
+                   )),
+    # D1's price. The companion to `fig_exp5_update.pdf` at the SAME k -- which
+    # is only true since the sweep was sized by affected entries rather than by
+    # total entries (test_psa_units.py pins it).
+    ExperimentSpec(5, "psa_exp5_retokenization", "fig_psa_exp5_retokenize.pdf",
+                   "Updated (keyword, document) pairs $k$",
+                   "Re-tokenization latency (ms)",
+                   log_x=True, log_y=True, prefix="psa_"),
+    # D8, and the manuscript's three configurations exactly: Full-State
+    # reconstructs and propagates to all FSNs; Incremental-All updates only
+    # affected state but still propagates to all; DIAS updates only dependent
+    # state and propagates only to FSNs maintaining affected shards.
+    #
+    # BOTH panels are required -- Section V says "synchronization latency and
+    # transferred synchronization data are measured", and the two halves of the
+    # claim land in different places. Panel (a) carries the INCREMENTAL half:
+    # Full-State is flat and 9.7x DIAS at a 10% ratio, narrowing to 1.09x at
+    # 100% as Section V predicts. Panel (b) carries the SELECTIVE half, where
+    # Incremental-All's unnecessary propagation is a clean 4x: in an in-process
+    # harness a delivery is a function call, so the same fan-out costs only
+    # 2-11% of latency. Section V should therefore attribute the selective
+    # saving primarily to DELIVERY VOLUME, and say why.
+    #
+    # Linear x: the ratio sweep is 0.1-1.0, a single decade with a zero-ish
+    # lower end, so a log axis would stretch the first gap and squash the rest.
+    ExperimentSpec(6, "psa_exp6_affected_ratio", "fig_psa_exp6_sync.pdf",
+                   "Affected-policy ratio", "Synchronization latency (ms)",
+                   prefix="psa_", variants=PSA_EXP6_VARIANTS,
+                   panels=(
+                       PanelSpec(0, "Synchronization\nlatency (ms)", "a"),
+                       # Linear, unlike the Option D Exp. 6 panel: this sweep
+                       # is one decade of ratio and the payload runs 3.5-140
+                       # KB, so the 4x that IS the selective claim reads
+                       # directly. `PanelSpec.log_y` only opts a SECONDARY into
+                       # the FIGURE's log setting, and this figure is linear,
+                       # so setting it here would be a no-op that misdescribes
+                       # the axis.
+                       PanelSpec(3, "DIAS payload delivered (KB)", "b"),
+                   )),
+)
+
+#: The two families, by `--construction`. Keyed by the same words main.py's
+#: own `--construction` takes, so one flag name means one thing across the repo.
+CONSTRUCTIONS: Dict[str, Tuple[ExperimentSpec, ...]] = {
+    "option_d": EXPERIMENTS,
+    "psa": PSA_EXPERIMENTS,
+}
+
 
 # LOG-Y CRITERION, applied uniformly: an experiment gets a log y-axis when its
 # measured values span >= LOG_Y_DECADES orders of magnitude. On a linear axis a
@@ -289,6 +449,15 @@ ABLATION_STYLE_SLOT: Dict[str, int] = {
     "DIAS (proposed)": 0,
     "Incremental-All": 1,
     "Full-State Synchronization": 2,
+    # PSA Exp. 1's arms are |P_U| values, so they are ORDERED and the styles
+    # should read that way: slot 0 (the proposed scheme's blue circle) is
+    # |P_U| = 1, the baseline scope, and the rest step up from there. Without
+    # these four entries all four curves drew in one colour and the figure
+    # could not be read at all in grayscale, which README §10 requires.
+    "$|P_U| = 1$": 0,
+    "$|P_U| = 2$": 1,
+    "$|P_U| = 4$": 2,
+    "$|P_U| = 8$": 3,
 }
 
 
@@ -454,9 +623,11 @@ EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
 )
 
 
-def variants_for(number: int) -> Tuple[Tuple[str, str], ...]:
+def variants_for(spec: "ExperimentSpec") -> Tuple[Tuple[str, str], ...]:
     """Which variant vocabulary an experiment's ablation figure uses."""
-    return EXP6_VARIANTS if number == 6 else ABLATION_VARIANTS
+    if spec.variants:
+        return spec.variants
+    return EXP6_VARIANTS if spec.number == 6 else ABLATION_VARIANTS
 
 
 def _variant_of(exp_dir: Path) -> Optional[str]:
@@ -482,9 +653,9 @@ def _has_variant_dirs(input_root: Path, spec: ExperimentSpec) -> bool:
     """Whether any directory names a variant this experiment's ablation knows."""
     if not input_root.is_dir():
         return False
-    known = dict(variants_for(spec.number))
+    known = dict(variants_for(spec))
     for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
-        for exp_dir in scheme_dir.glob(f"exp{spec.number}_*__*"):
+        for exp_dir in scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*__*"):
             if exp_dir.is_dir() and _variant_of(exp_dir) in known:
                 return True
     return False
@@ -503,14 +674,14 @@ def collect_ablation(input_root: Path, spec: ExperimentSpec) -> List[Series]:
         return found
     by_variant: Dict[str, Path] = {}
     for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
-        for exp_dir in sorted(scheme_dir.glob(f"exp{spec.number}_*__*")):
+        for exp_dir in sorted(scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*__*")):
             if not exp_dir.is_dir():
                 continue
             variant = _variant_of(exp_dir)
             # Skips the `__points-<N>` sweep shards, which are not variants.
-            if variant in dict(variants_for(spec.number)):
+            if variant in dict(variants_for(spec)):
                 by_variant.setdefault(variant, exp_dir)
-    for variant, label in variants_for(spec.number):
+    for variant, label in variants_for(spec):
         exp_dir = by_variant.get(variant)
         if exp_dir is None:
             print(f"  NOTE exp{spec.number}: no directory for variant "
@@ -558,6 +729,13 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     found: List[Series] = []
     if spec.number in (7, 8):
         return collect_ablation(input_root, spec)
+    if spec.variants:
+        # A spec that names its own arms IS an ablation, whatever its number.
+        # PSA Exp. 1 is one: |P_U| is the arm, so the four `__pu<N>` directories
+        # are four curves. Without this it fell through to the cross-scheme
+        # branch, which takes the FIRST matching directory per scheme and stops
+        # -- one arm drawn, three silently dropped, labelled with the scheme.
+        return collect_ablation(input_root, spec)
     if spec.number == 6 and _has_variant_dirs(input_root, spec):
         # Exp. 6 gained an ablation on 2026-09-03 (ias / broadcast /
         # full_rebuild). Probed rather than assumed so results predating it still
@@ -567,7 +745,7 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     if not input_root.is_dir():
         return found
     for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
-        matches = sorted(scheme_dir.glob(f"exp{spec.number}_*"))
+        matches = sorted(scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*"))
         used: Optional[Path] = None
         for exp_dir in matches:
             if not exp_dir.is_dir():
@@ -716,11 +894,16 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
             _draw_panel(
                 ax, spec, panel_series, warnings,
                 metric=panel.metric, ylabel=panel.ylabel,
-                # Legend once, on the top panel -- EXCEPT for a cross-folder
-                # panel, which has its own scheme set. Exp. 4 panel (b) omits
-                # Scheme [54] (no granularity arm), so borrowing panel (a)'s
-                # four-entry legend would claim a curve that is not drawn.
-                add_legend=(i == 0 or bool(panel.folder)),
+                # Legend once, on the top panel -- EXCEPT for a panel that
+                # draws curves the top one does not. A cross-folder panel has
+                # its own scheme set (Exp. 4 panel (b) omits Scheme [54], which
+                # has no granularity arm, so borrowing panel (a)'s four-entry
+                # legend would claim a curve that is not drawn), and a
+                # companion panel adds a reference curve of its own -- psa_exp3
+                # panel (b)'s flat line at 1 is Option D's trapdoor count, and
+                # unlabelled it is just an unexplained rule across the figure.
+                add_legend=(i == 0 or bool(panel.folder)
+                            or panel.companion_metric is not None),
                 # Warnings once, or each series would report itself per panel.
                 collect_warnings=(i == 0),
                 # Every panel labels its own x when they are different
@@ -733,6 +916,8 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
                 per_x=panel.per_x,
                 xlabel=panel.xlabel,
                 force_log_x=panel.log_x,
+                companion_metric=panel.companion_metric,
+                companion_label=panel.companion_label,
             )
             ax.set_title(f"({panel.tag})", loc="left", fontsize=8, pad=2)
         fig.align_ylabels(axes)
@@ -754,7 +939,9 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 add_legend: bool, collect_warnings: bool,
                 add_xlabel: bool, allow_log_y: bool,
                 per_x: bool = False, xlabel: Optional[str] = None,
-                force_log_x: bool = False) -> None:
+                force_log_x: bool = False,
+                companion_metric: Optional[int] = None,
+                companion_label: str = "") -> None:
     """Draw every series' `metric` onto one axes."""
     # The furthest point any scheme reached, so a shorter series can be marked.
     _all_x = [v for s in series_list for v in s.x]
@@ -822,6 +1009,24 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 f"{required} for reportable data"
             )
         warnings.extend(series.problems)
+
+    # A COMPANION CURVE is a second column of the same run, not another
+    # scheme, so it is drawn once (from the first series that has it) in a
+    # neutral dashed grey. psa_exp3 is the case: the D9 claim is the gap
+    # between `tokens_issued` and `option_d_tokens_issued`, and both are
+    # measured columns of one results.csv.
+    if companion_metric is not None:
+        for series in series_list:
+            cvals, cerrs = _panel_values(series, companion_metric, per_x)
+            if not cvals:
+                continue
+            ax.errorbar(
+                series.x, cvals, yerr=cerrs,
+                label=companion_label or f"secondary {companion_metric}",
+                color="#666666", linestyle="--", marker="None",
+                linewidth=1.0, elinewidth=0.8, capsize=2, zorder=1,
+            )
+            break
 
     if add_xlabel:
         # A cross-folder panel sweeps its own variable, so it labels its own
@@ -951,6 +1156,16 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="root containing <scheme>/exp<N>_*/results.csv")
     parser.add_argument("--output", default="Plots/output",
                         help="directory to write the PDFs into")
+    parser.add_argument("--construction", default="option_d",
+                        choices=sorted(CONSTRUCTIONS),
+                        help="which figure family to draw. 'option_d' (the "
+                             "default) is README §10's eight figures, from "
+                             "exp<N>_*/. 'psa' is the manuscript's "
+                             "policy-state-aware track (D6-D9), from "
+                             "psa_exp<N>_*/ -- a separate family with its own "
+                             "filenames, because the two constructions time "
+                             "different functions at the same experiment "
+                             "number and none of the psa runs is reportable.")
     parser.add_argument("--experiment", default="all",
                         help="all, or a comma-separated subset e.g. 1,2,6")
     parser.add_argument("--require-reportable", action="store_true",
@@ -979,16 +1194,25 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         w, h = plt.rcParams["figure.figsize"]
         plt.rcParams["figure.figsize"] = (w * args.scale, h * args.scale)
 
+    specs = CONSTRUCTIONS[args.construction]
+    available = {spec.number for spec in specs}
     if args.experiment.strip().lower() == "all":
-        wanted = {spec.number for spec in EXPERIMENTS}
+        wanted = available
     else:
         try:
             wanted = {int(tok) for tok in args.experiment.split(",") if tok.strip()}
         except ValueError:
             raise SystemExit(f"--experiment {args.experiment!r} is not a number list")
-        unknown = wanted - {spec.number for spec in EXPERIMENTS}
+        unknown = wanted - available
         if unknown:
-            raise SystemExit(f"no such experiment(s): {sorted(unknown)} (1-8)")
+            # Names the construction, because 2, 4, 7 and 8 exist for option_d
+            # and have no psa form at all -- D1-D9 are construction and
+            # experiment-design divergences, not a fork of the whole harness.
+            raise SystemExit(
+                f"no such experiment(s) for --construction "
+                f"{args.construction}: {sorted(unknown)} "
+                f"(have {sorted(available)})"
+            )
 
     input_root = Path(args.input)
     output_root = Path(args.output)
@@ -999,7 +1223,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     skipped: List[str] = []
     all_warnings: List[str] = []
 
-    for spec in EXPERIMENTS:
+    for spec in specs:
         if spec.number not in wanted:
             continue
         found = collect(input_root, spec)
