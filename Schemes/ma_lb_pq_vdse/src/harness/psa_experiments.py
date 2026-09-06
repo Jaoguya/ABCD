@@ -975,21 +975,36 @@ class PsaExp2SearchLatency:
 
         traversed = 0
         hits = 0
+        issued = 0
         with gc_quiesced():
             started = time.perf_counter_ns()
-            tokens = psa_tokens.generate_query_tokens(
-                deployment.scheme, query, prepared["scopes"]
-            )
-            for node_id, served, index in deployment.nodes:
-                authorized = [
-                    (s.domain, s.policy_id)
-                    for s in prepared["scopes"] if s.domain in served
-                ]
-                if not authorized:
-                    continue
-                found, stats = index.lookup(tokens, authorized)
-                hits += len(found)
-                traversed += stats.entries_traversed
+            # ONE CONJUNCTIVE LOOKUP PER AUTHORIZED POLICY, unioned.
+            #
+            # A PSA query is a disjunction ACROSS policies of a conjunction
+            # OVER keywords: the user holds |P_U| policies and a record matches
+            # if it carries all q keywords under ANY one of them. Handing the
+            # flat q*|P_U| token set to a single conjunctive lookup asks one
+            # record to satisfy tokens bound to five different policies, which
+            # no record can -- it returned n_eff = 0 at every sweep point even
+            # after the per-record intersection fix, because the defect is in
+            # how the query is POSED, not how it is matched.
+            #
+            # |T_Q| = q*|P_U| is unchanged, and so is the work: the same tokens
+            # are derived and the same posting lists walked. Only the grouping
+            # differs, and the grouping is what makes an answer possible.
+            for scope in prepared["scopes"]:
+                scope_tokens = psa_tokens.generate_query_tokens(
+                    deployment.scheme, query, [scope]
+                )
+                issued += len(scope_tokens)
+                for _node_id, served, index in deployment.nodes:
+                    if scope.domain not in served:
+                        continue
+                    found, stats = index.lookup(
+                        scope_tokens, [(scope.domain, scope.policy_id)]
+                    )
+                    hits += len(found)
+                    traversed += stats.entries_traversed
             elapsed = time.perf_counter_ns() - started
 
         entries = deployment.entry_count
@@ -999,7 +1014,7 @@ class PsaExp2SearchLatency:
             secondaries={
                 "n_eff": float(hits),
                 "entries_traversed": float(traversed),
-                "tokens_issued": float(len(tokens)),
+                "tokens_issued": float(issued),
                 # Entries per DISTINCT token -- a sharing ratio, so HIGHER is
                 # more sharing. Named that way round deliberately: the first
                 # draft called it `index_fragmentation`, which reads as the
