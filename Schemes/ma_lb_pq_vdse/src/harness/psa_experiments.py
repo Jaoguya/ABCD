@@ -58,6 +58,9 @@ from ..index import dsi as dsi_mod  # noqa: E402
 from ..aim import verification as authz_mod  # noqa: E402
 from ..user import token as token_mod  # noqa: E402
 from . import experiments as experiments_mod  # noqa: E402
+from ..chain import outsourcing as out_mod  # noqa: E402
+from ..chain import select as chain_select  # noqa: E402
+from ..verify import ledger as vledger_mod  # noqa: E402
 
 from .. import config as scheme_config  # noqa: E402
 from ..psa import commit as psa_commit  # noqa: E402
@@ -1014,36 +1017,58 @@ class PsaExp2SearchLatency:
 # ===========================================================================
 # D3 — Exp. 4 under the policy-state-aware commitment
 # ===========================================================================
-def _psa_batched_chain_checker(anchors: Dict[str, bytes], cids: Sequence[str]):
-    """Phase VIII Step 3 for a whole response, anchors fetched ONCE.
+def _psa_batched_chain_checker(ledger, cids: Sequence[str]):
+    """Phase VIII Step 3 for a whole response, against a REAL ledger.
 
-    Same shape as ``verify/ledger.py::batched_chain_checker`` and for the same
-    reason: a per-record namespace walk made Option D's Step 3 O(r^2) and 99.6%
-    of the step's cost. The fetch is LAZY -- it happens on the first bundle
-    checked, inside whatever region the caller is timing -- so the harness
-    cannot make the cost vanish by resolving anchors in an untimed ``prepare``.
-    Its whole cost is charged to the first record, which is right: a client
-    pays it once per response.
+    Reads through ``verify/ledger.py::lookup_anchors``, so whatever
+    ``ABCD_LEDGER`` selected is what gets queried: ``memory`` walks the
+    in-process chain, ``fabric`` talks to the running Hyperledger network. The
+    experiment therefore prices the chain step the paper describes rather than
+    a dictionary, and ``ledger_faithful`` in run_meta.json describes the object
+    that was actually called.
+
+    Batched for the reason ``batched_chain_checker`` documents: a per-record
+    namespace walk made Option D's Step 3 O(r^2) and 99.6% of the step's cost.
+    The fetch is LAZY -- it happens on the first bundle checked, inside
+    whatever region the caller is timing -- so the harness cannot make the cost
+    vanish by resolving anchors in an untimed ``prepare``. Its whole cost lands
+    on the first record, which is right: a client pays it once per response.
     """
-    resolved: Dict[str, bytes] = {}
+    resolved: Dict[str, Any] = {}
+    missing: set = set()
     done = [False]
 
     def check(bundle) -> psa_verify.StepResult:
         if not done[0]:
-            resolved.update({cid: anchors[cid] for cid in cids if cid in anchors})
+            anchors, absent = vledger_mod.lookup_anchors(ledger, cids)
+            resolved.update(anchors)
+            missing.update(absent)
             done[0] = True
-        anchored = resolved.get(bundle.cid)
-        if anchored is None:
+        found = resolved.get(bundle.cid)
+        if found is None:
             return psa_verify.StepResult(
-                "chain", False, f"no anchor for {bundle.cid}"
+                "chain", False, f"no anchor on the ledger for {bundle.cid}"
             )
+        ok = hashes.constant_time_equal(found.anchor.commit, bundle.meta.commit)
         return psa_verify.StepResult(
-            "chain",
-            hashes.constant_time_equal(anchored, bundle.meta.commit),
-            "" if anchored == bundle.meta.commit else "Commit_i is not the anchored one",
+            "chain", ok,
+            "" if ok else "Commit_i is not the one anchored on the ledger",
         )
 
     return check
+
+
+@dataclass(frozen=True)
+class _PsaAnchoredCommitment:
+    """What ``anchor_initial_commitment`` reads: ``.commit`` and ``.root``.
+
+    A PSA commitment is not a ``RecordCommitment`` -- it binds CID and
+    AuthState where that one binds AuthRoot_DO -- but the ANCHOR is the same
+    two fields, so the ledger write path is shared rather than duplicated.
+    """
+
+    commit: bytes
+    root: bytes
 
 
 @dataclass
@@ -1063,14 +1088,13 @@ class PsaExp4Verification:
     compare 6r entries against baselines returning r records.
     """
 
-    #: Phase VIII Step 3 runs against an IN-PROCESS anchor map, not a chain.
-    #: The banked Option D Exp. 4 ran against real Hyperledger Fabric
-    #: (`5ee7c16`, "like-for-like axis against real Fabric"), so the two
-    #: numbers are NOT comparable: at r=1000 Option D measures 1675.34 ms and
-    #: this measures 16.86 ms, and essentially all of that ~99x is the ledger
-    #: backend rather than the construction. Stamped into `run_meta.json` so a
-    #: reader cannot put the two curves on one axis by accident.
-    LEDGER_BACKEND: ClassVar[str] = "in_process_anchor_map"
+    #: Phase VIII Step 3 now runs against whatever ``ABCD_LEDGER`` selects, the
+    #: same switch ``build_deployment`` reads -- so with ``ABCD_LEDGER=fabric``
+    #: this measures the same chain the banked Option D Exp. 4 measured
+    #: (`5ee7c16`, "like-for-like axis against real Fabric") and the two curves
+    #: share an axis. It previously used an in-process anchor MAP, which is why
+    #: 16.86 ms sat against Option D's 1675.34 ms at r=1000: that ~99x was the
+    #: backend, not the construction.
 
     config: scheme_config.Configuration
     name: str = "psa_exp4_verification_overhead"
@@ -1093,8 +1117,10 @@ class PsaExp4Verification:
         wanted = int(value)
         world = build_world()
         scheme = _keyed_scheme()
+        # ABCD_LEDGER decides, exactly as build_deployment decides it. `fabric`
+        # refuses to fall back, so a run stamped Fabric-backed was Fabric-backed.
+        ledger = chain_select.make_ledger()
         bundles = []
-        anchors: Dict[str, bytes] = {}
         for rid in range(wanted):
             policy = world.policies[rid % len(world.policies)]
             domain = policy.split("/", 1)[0]
@@ -1115,15 +1141,25 @@ class PsaExp4Verification:
             )
             # ONE bundle per returned ciphertext.
             bundles.append(psa_verify.build_response(commitment, entries)[0])
-            anchors[cid] = commitment.commit
+            # Phase V Step 3: anchor BC_i. The PSA commitment carries the policy
+            # state inside Commit_i, so there is no scalar VID to key on and the
+            # anchor sits at version 0 -- the same key scheme Phase VII Step 5
+            # would extend if this record were later evolved.
+            out_mod.anchor_initial_commitment(
+                ledger, cid=cid,
+                commitment=_PsaAnchoredCommitment(
+                    commit=commitment.commit, root=commitment.root
+                ),
+                vid=0,
+            )
         return dict(
-            bundles=tuple(bundles), anchors=anchors,
+            bundles=tuple(bundles), ledger=ledger,
             cids=[b.cid for b in bundles],
         )
 
     def measure(self, prepared: Any) -> Sample:
         bundles = prepared["bundles"]
-        checker = _psa_batched_chain_checker(prepared["anchors"], prepared["cids"])
+        checker = _psa_batched_chain_checker(prepared["ledger"], prepared["cids"])
         with gc_quiesced():
             started = time.perf_counter_ns()
             results = [
@@ -1274,16 +1310,13 @@ class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
                 )
                 for dom, policy in decision.authorized_shards
             ]
-            # THE SAME KEYWORD SET Option D's trace uses -- one keyword --
-            # so the only difference between the two arms is the construction.
-            # An earlier draft took q=5 here, which made the PSA request carry
-            # 5x the keywords AND |P_U|x the policies, and the resulting
-            # "PSA is 1.38x faster" was an artefact of comparing two different
-            # workloads. Option D's trace using ONE keyword against §V's
-            # published q=5 is itself a defect, recorded in DECISIONS.md; it is
-            # not this arm's to fix unilaterally, because it moves banked
-            # Exp. 7-8 numbers.
-            keywords = [record["record"].keywords[0]]
+            # THE SAME KEYWORD SET Option D's trace uses, so the only
+            # difference between the two arms is the construction. Both are now
+            # q per README §6; when that was q=5 here and 1 there, the resulting
+            # "PSA is 1.38x faster" was the workload mismatch, not a result.
+            keywords = list(dict.fromkeys(record["record"].keywords))[
+                : self.config.defaults.keywords_per_query
+            ]
             psa_query = psa_tokens.generate_query_tokens(scheme, keywords, scopes)
             requests.append((
                 _PsaTrapdoor(tokens=psa_query, vid_u=option_d_token.vid_u),

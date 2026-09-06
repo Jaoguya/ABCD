@@ -1612,8 +1612,19 @@ class SchedulerAblation:
             if not pool_for_domain:
                 continue
             record = pool_for_domain[index % len(pool_for_domain)]
+            # q KEYWORDS, per README §6 and §V's "each query contains five
+            # keywords". This was `[keywords[0]]` -- one keyword, uncommented --
+            # so Exp. 7's throughput and Exp. 8's spread were both measured on a
+            # q=1 workload and reported against a paper that says 5. Same class
+            # as the 2026-09-03 Exp. 2 defect: the number was real, the workload
+            # was not the published one. Deduplicated because
+            # generate_search_token rejects a repeated keyword, and a record can
+            # carry the same keyword twice.
+            query_keywords = list(dict.fromkeys(record["record"].keywords))[
+                : self.config.defaults.keywords_per_query
+            ]
             token = token_mod.generate_search_token(
-                deployment.scheme, profile, [record["record"].keywords[0]]
+                deployment.scheme, profile, query_keywords
             )
             decision = authz_mod.verify_search_request(
                 deployment.aim, token, profile,

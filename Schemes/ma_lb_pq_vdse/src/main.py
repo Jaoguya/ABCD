@@ -91,13 +91,11 @@ def _run_notes(
             "policy-state-aware construction (MANUSCRIPT_DIVERGENCE.md D1-D9); "
             "measures token/commitment cost, NOT end-to-end search"
         )
-        backend = getattr(experiment, "LEDGER_BACKEND", None)
-        if backend:
-            notes.append(
-                f"ledger_backend={backend}; the banked Option D Exp. 4 ran "
-                f"against real Hyperledger Fabric, so the two per-result "
-                f"latencies are NOT on a common axis"
-            )
+        if number == 4:
+            # The LIVE selection, not a literal: a psa Exp. 4 stamped 'fabric'
+            # must have talked to Fabric. chain_select.make_ledger() refuses to
+            # fall back, so the two cannot disagree.
+            notes.append(f"ledger_backend={chain_select.ledger_backend()}")
     return notes
 
 

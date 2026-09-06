@@ -371,7 +371,7 @@ def test_psa_exp4_r_counts_records_not_index_entries(config):
     keywords_per_record=6, taking them all would make r=100 into 600 bundles
     and compare 6r entries against baselines that return r records.
     """
-    experiment = psa.build(4, config)
+    experiment = psa.build(4, config, source=_source())
     for r in (10, 100):
         sample = experiment.measure(experiment.prepare(r))
         assert sample.secondaries["records_verified"] == r
@@ -384,7 +384,7 @@ def test_psa_exp4_step_3_is_not_quadratic(config):
     step's cost. Asserted on the shape of the curve rather than a wall-clock
     threshold, so it holds on the campaign host too.
     """
-    experiment = psa.build(4, config)
+    experiment = psa.build(4, config, source=_source())
     per_record = {}
     for r in (100, 500):
         best = min(experiment.measure(experiment.prepare(r)).primary for _ in range(3))
@@ -395,10 +395,10 @@ def test_psa_exp4_step_3_is_not_quadratic(config):
 
 def test_psa_exp4_chain_check_actually_runs(config):
     """Step 3 is inside §5's Exp. 4 boundary, so it must be on the timed path."""
-    experiment = psa.build(4, config)
+    experiment = psa.build(4, config, source=_source())
     prepared = experiment.prepare(10)
     checker = psa_mod._psa_batched_chain_checker(
-        prepared["anchors"], prepared["cids"]
+        prepared["ledger"], prepared["cids"]
     )
     result = psa_verify_mod.verify_bundle(prepared["bundles"][0], chain_check=checker)
     assert [s.step for s in result.steps] == ["merkle", "authorization", "chain"]
@@ -406,10 +406,19 @@ def test_psa_exp4_chain_check_actually_runs(config):
 
 
 def test_psa_exp4_rejects_an_unanchored_commitment(config):
-    """A record whose Commit_i is not the anchored one must fail at chain."""
-    experiment = psa.build(4, config)
+    """A record with no anchor on the ledger must fail at chain, not pass.
+
+    An EMPTY ledger, not an empty dict: Step 3 now reads through
+    `verify/ledger.py::lookup_anchors`, so whatever ABCD_LEDGER selects is what
+    gets queried and an unanchored record is a real miss.
+    """
+    from Schemes.ma_lb_pq_vdse.src.chain import ledger as ledger_mod
+
+    experiment = psa.build(4, config, source=_source())
     prepared = experiment.prepare(5)
-    checker = psa_mod._psa_batched_chain_checker({}, prepared["cids"])
+    checker = psa_mod._psa_batched_chain_checker(
+        ledger_mod.InProcessLedger(), prepared["cids"]
+    )
     result = psa_verify_mod.verify_bundle(prepared["bundles"][0], chain_check=checker)
     assert not result.accepted and result.failed_step == "chain"
 
@@ -566,11 +575,13 @@ def test_psa_exp7_shards_hold_psa_entries_and_tokens_scale_with_pu(config):
     sample_entry = deployment.records[0]["psa_entries"][0]
     assert isinstance(sample_entry, psa_records_mod.PolicyStateIndexEntry)
 
-    # One token per (keyword, authorized policy). Option D issues one per
-    # keyword, so |P_U| > 1 must mean strictly more tokens.
+    # One token per (keyword, authorized policy) -- q*|P_U|, where Option D
+    # issues q. Was `== len(authorized_shards)` while the trace still used one
+    # keyword; the q=1 fix made that the wrong identity.
     trapdoor, decision = requests[0]
-    assert len(trapdoor.tokens) == len(decision.authorized_shards)
-    assert len(trapdoor.tokens) > 1
+    q = config.defaults.keywords_per_query
+    assert len(trapdoor.tokens) == q * len(decision.authorized_shards)
+    assert len(trapdoor.tokens) > q
 
 
 def test_psa_exp7_uses_the_same_keyword_count_as_option_d(config):
@@ -600,3 +611,22 @@ def test_psa_exp8_shares_the_ablation_and_its_metrics(config):
         m.name for m in theirs.secondaries
     ]
     assert ours.variable == theirs.variable
+
+
+def test_both_exp7_traces_use_the_published_q(config):
+    """README §6 fixes q=5 from §V; the trace used ONE keyword until 2026-09-06.
+
+    Asserted for BOTH constructions, because the moment they differ the Exp. 7
+    comparison measures two workloads rather than two schemes.
+    """
+    source = _source()
+    q = config.defaults.keywords_per_query
+    theirs = option_d.Exp7Throughput(config=config, source=source, variant="aass")
+    ours = psa_mod.PsaExp7Throughput(config=config, source=source, variant="aass")
+    yours = theirs.prepare(40)["requests"]
+    mine = ours.prepare(40)["requests"]
+    assert yours and mine
+    assert len(yours[0][0].tokens) == q, (
+        f"Option D's trace carries {len(yours[0][0].tokens)} tokens for q={q}"
+    )
+    assert len(mine[0][0].tokens) == q * len(mine[0][1].authorized_shards)
