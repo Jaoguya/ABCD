@@ -33,7 +33,7 @@
       "is_pinned_experiment_host": false,
       "metadata_reachable": true,
       "pin_configured": false,
-      "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
+      "platform": "Linux-7.0.0-1012-aws-x86_64-with-glibc2.39"
     },
     "kem_backends_available": {
       "cryptography": true,
@@ -52,7 +52,7 @@
       "charm_type3": true,
       "petrelic_bn254": false
     },
-    "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
+    "platform": "Linux-7.0.0-1012-aws-x86_64-with-glibc2.39",
     "python_implementation": "CPython",
     "python_version": "3.11.15"
   },
@@ -65,10 +65,10 @@
     "is_pinned_experiment_host": false,
     "metadata_reachable": true,
     "pin_configured": false,
-    "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
+    "platform": "Linux-7.0.0-1012-aws-x86_64-with-glibc2.39"
   },
-  "finished_utc": "2026-09-06T12:27:02.838457+00:00",
-  "git_commit": "144e8b1d07ee03c2a6de486a9f5709cc4fb5b7ac-dirty",
+  "finished_utc": "2026-09-06T14:02:17.215287+00:00",
+  "git_commit": "37aa787cf42209860f68b93af75dcbac4f96a415-dirty",
   "instance_type": "unknown",
   "libraries": {
     "bitarray": "3.10.1",
@@ -87,12 +87,12 @@
     "scheduler_variant=pu4",
     "policy-state-aware construction (MANUSCRIPT_DIVERGENCE.md D1-D9); measures token/commitment cost, NOT end-to-end search"
   ],
-  "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
+  "platform": "Linux-7.0.0-1012-aws-x86_64-with-glibc2.39",
   "python_version": "3.11.15",
   "reportable": false,
   "runs": 10,
   "scheme": "ma_lb_pq_vdse",
-  "started_utc": "2026-09-06T12:27:02.759864+00:00",
+  "started_utc": "2026-09-06T14:02:17.137060+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": null,
     "NUMEXPR_NUM_THREADS": null,
