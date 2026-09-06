@@ -458,3 +458,33 @@ destructive act.
 
 TASKS.md carried this as FIX-4, "two stale merged directories". There were
 three.
+
+---
+
+## 2026-09-07 — psa Exp. 7 cannot discriminate schedulers either
+
+**RESOLVED: §V excludes psa Exp. 7 from the scheduler claim, as it already
+does Exp. 8.** Extends the 2026-09-07 Exp. 8 entry rather than contradicting
+it.
+
+After the per-policy grouping fix, psa Exp. 7's queries match (950 hits / 40
+requests) and it was re-measured at n=10 on the pinned host. The four variants
+land within noise of one another -- 2453.6 / 2516.2 / 2493.9 / 2515.2 q/s at
+concurrency 10,000 -- and the rank order shuffles across sweep points with no
+variant leading twice in a row. Option D at the same q separates cleanly, with
+AASS first at every concurrency.
+
+**Same mechanism as Exp. 8, and I should have predicted it there.** A request
+is dispatched to ONE node and that node evaluates only the query groups whose
+domain it serves, so the work a dispatch actually costs is set by the overlap
+between the user's authorized policies and the node's domain, not by which
+node the scheduler chose. Throughput and utilization are two views of the same
+per-request cost, so if one cannot discriminate, neither can the other.
+
+An earlier §V edit today said psa throughput WAS obtained comparably; that was
+written before this run existed and is now corrected -- the setup paragraph
+excludes both Experiments 7 and 8.
+
+**Not a defect to repair.** The fix is cross-node forwarding, which changes
+what Exps. 7-8 model. README §5 already records that communication as
+unmeasurable at d = m = 4.
