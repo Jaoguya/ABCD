@@ -227,7 +227,12 @@ def test_cost_table_claim_matches_the_measurement(
 #: measurement of something else.
 #: (scheme, dir, cell, symbol, shape, x column in results.csv)
 PSA_CLAIMS = [
-    ("ma_lb_pq_vdse", "psa_exp1_token_generation",
+    # The |P_U|=1 ARM. Exp. 1 writes one directory per authorization scope
+    # (`__pu1/2/4/8`) because §V sweeps q WHILE varying |P_U|; there is no
+    # un-suffixed directory to read. Any arm would fit -- within an arm
+    # |T_Q| = q*|P_U| is linear in q -- and pu1 is the one where |T_Q| IS q,
+    # so the fitted slope is the per-token cost directly.
+    ("ma_lb_pq_vdse", "psa_exp1_token_generation__pu1",
      "Proposed(PSA) / Token Generation  O(|T_Q|)T_H", "|T_Q|", LINEAR,
      "secondary_1_mean"),
     ("ma_lb_pq_vdse", "psa_exp5_retokenization",
@@ -286,15 +291,28 @@ def test_psa_exp1_cost_depends_on_the_product_not_its_factorization():
     could not even express, because Option D's trapdoor has no ``|P_U|``. If it
     fails, the row is wrong: the cost has a per-policy term the notation hides.
     """
-    path = REPO / "Schemes" / "ma_lb_pq_vdse" / "psa_exp1_token_generation" / "raw_runs.csv"
-    if not path.is_file():
+    # ACROSS THE ARMS, not within one. Exp. 1 sweeps q inside a directory and
+    # |P_U| across directories, so a given |T_Q| is reached by two different
+    # factorizations only when two arms are read together: |T_Q|=20 is
+    # q=20 in pu1, q=10 in pu2 and q=5 in pu4. Reading a single directory
+    # would find no contested |T_Q| at all and skip, which is how this test
+    # would silently stop checking the one claim it exists for.
+    paths = sorted(
+        (REPO / "Schemes" / "ma_lb_pq_vdse").glob(
+            "psa_exp1_token_generation__pu*/raw_runs.csv"
+        )
+    )
+    if not paths:
         pytest.skip("no policy-state-aware Exp. 1 results yet")
 
     import collections
 
     by_tokens = collections.defaultdict(list)
-    with path.open(newline="", encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
+    rows = []
+    for path in paths:
+        with path.open(newline="", encoding="utf-8") as handle:
+            rows.extend(csv.DictReader(handle))
+    for row in rows:
             if row.get("status") != "ok":
                 continue
             try:
