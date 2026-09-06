@@ -616,7 +616,7 @@ def test_search_never_returns_the_token():
         node, (scheme().query_token(keywords[domain]),), [(domain, policy)]
     )
     fields = set(search_mod.SearchHit.__dataclass_fields__)
-    assert fields == {"cid", "policy_id", "vid"}
+    assert fields == {"cid", "policy_id", "policy_state"}
     assert "token" not in fields
 
 
@@ -776,7 +776,7 @@ def test_search_across_refuses_when_nothing_is_reachable():
 
 def test_merge_deduplicates_by_cid():
     """A duplicated hit would inflate the r that Exp. 4 sweeps."""
-    hit = search_mod.SearchHit(cid="c1", policy_id="p", vid=0)
+    hit = search_mod.SearchHit(cid="c1", policy_id="p", policy_state=0)
     stats = search_mod.SearchStatistics(1, 1, 1, 1, 0)
     responses = [
         search_mod.SearchResponse("FSN1", (hit,), stats, 10),

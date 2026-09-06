@@ -193,6 +193,21 @@ def build_profile(
             "no authority appears in both V_U and C_U; the user is enrolled "
             "with nothing the AIM can validate against"
         )
+    # A PARTIAL overlap is refused for the same reason
+    # `PolicyVersionState.build` refuses a missing version rather than
+    # defaulting it to 0. Intersecting silently drops the authorities that
+    # appear in only one half, and the profile that comes back looks complete:
+    # `covers()` then returns False for every policy those authorities govern,
+    # so the user is denied at Phase VI Step 2 by a caller mistake that left no
+    # trace. AuthRoot_U would also be taken over the narrowed set.
+    one_sided = sorted((set(versions) ^ set(commitments)))
+    if one_sided:
+        raise RecordError(
+            f"V_U and C_U disagree on the authority roster: {one_sided} "
+            f"appear in one but not the other. Both halves must name the same "
+            f"authorities (PolicyStateProfile enforces this too); intersecting "
+            f"them here would silently narrow AA_U and AuthRoot_U"
+        )
     version_state = PolicyVersionState.build(versions, authority_ids)
     commitment_state = PolicyAuthorityState.build(commitments, authority_ids)
     return PolicyStateProfile(

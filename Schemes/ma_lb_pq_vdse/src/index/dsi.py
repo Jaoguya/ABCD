@@ -262,6 +262,38 @@ class DynamicSearchIndex:
         self._entries[ordinal] = updated
         return updated
 
+    def retokenize(self, ordinal: int, *, token: bytes, pv: bytes):
+        """Move an entry to a new token — Phase VII Step 2 under the PSA token.
+
+        The counterpart of :meth:`repolicy`, and deliberately a SEPARATE method
+        rather than a branch inside it, because the two constructions do
+        genuinely different work and that difference is what Exp. 5 measures:
+
+        * ``repolicy`` rewrites payload. ``T_j = H(w)`` does not depend on the
+          policy state, so the posting list is untouched.
+        * ``retokenize`` rewrites the KEY. ``T = H(w ‖ PID ‖ PV ‖ Dom)`` moves
+          when ``PV`` moves, so the entry leaves its old posting list and joins
+          a new one — and the Bloom filter's membership set changes with it.
+
+        Folding these into one method would let a caller silently get the cheap
+        one under a construction that owes the expensive one. The ordinal is
+        stable, so every bitmap keeps pointing at the same entry.
+        """
+        entry = self.entry(ordinal)
+        updated = entry.re_tokenized(token=token, pv=pv)
+        if updated.token != entry.token:
+            postings = self._postings.get(entry.token, [])
+            if ordinal in postings:
+                postings.remove(ordinal)
+            if not postings:
+                self._postings.pop(entry.token, None)
+            self._postings.setdefault(updated.token, []).append(ordinal)
+            # The membership set changed, so a stale filter would answer "not
+            # present" for a token that IS present and prune a real match.
+            self._bloom = None
+        self._entries[ordinal] = updated
+        return updated
+
     # -- authorization filtering (§V :1892) ---------------------------------
     def authorized_bitmap(
         self, authorized: Iterable[Tuple[str, str]]

@@ -36,7 +36,7 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, Sequence, Tuple
+from typing import Any, Iterable, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
@@ -64,7 +64,32 @@ class SearchHit:
 
     cid: str
     policy_id: str
-    vid: int
+    #: The record's policy state as the construction expresses it: ``VID_i``
+    #: (an int) under Option D, ``PV_i`` (a 32-byte digest) under the
+    #: manuscript's policy-state-aware token. One field rather than two,
+    #: because a hit carries exactly one of them and an optional pair would let
+    #: a caller read the wrong one and get ``None`` instead of an error.
+    policy_state: Any
+
+    @property
+    def vid(self) -> int:
+        """``VID_i`` — Option D only; PSA's policy state is a digest."""
+        if not isinstance(self.policy_state, int):
+            raise TypeError(
+                "this hit carries a PV_i digest, not a scalar VID_i; read "
+                "`policy_state` (the PSA construction has no VID)"
+            )
+        return self.policy_state
+
+    @classmethod
+    def of(cls, entry) -> "SearchHit":
+        """Project whichever index-entry type the shard holds."""
+        return cls(
+            cid=entry.cid,
+            policy_id=entry.policy_id,
+            policy_state=getattr(entry, "vid", None)
+            if hasattr(entry, "vid") else entry.pv,
+        )
 
 
 @dataclass(frozen=True)
@@ -153,8 +178,7 @@ def execute_search(
     return SearchResponse(
         node_id=node.node_id,
         hits=tuple(
-            SearchHit(cid=entry.cid, policy_id=entry.policy_id, vid=entry.vid)
-            for entry in entries
+            SearchHit.of(entry) for entry in entries
         ),
         statistics=statistics,
         elapsed_ns=elapsed,

@@ -45,6 +45,6 @@ bump. Exp. 5 and Exp. 6 under ``--construction psa`` are what turn that estimate
 into a number.
 """
 
-from . import commit, governance, records, state, tokens  # noqa: F401
+from . import commit, governance, records, state, tokens, verify  # noqa: F401
 
-__all__ = ["commit", "governance", "records", "state", "tokens"]
+__all__ = ["commit", "governance", "records", "state", "tokens", "verify"]
