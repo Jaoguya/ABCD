@@ -365,3 +365,31 @@ Exp. 8 under both constructions.
 The alternative -- keep per-entry semantics and call every §V query
 single-keyword -- would mean the paper's q=5 conjunctive claim has never been
 measured by anything, which is worse than a re-run.
+
+---
+
+## 2026-09-07 — Scheme [41]'s Exp. 2 stays extrapolated above N=10^4
+
+**RESOLVED: author's call, and the numbers support it.** Measuring the missing
+points was launched on three boxes and stopped within minutes on the
+instruction "search single or 10k, then multiply into a straight line, do not
+run the whole million".
+
+From Scheme [41]'s own banked `raw_runs.csv` -- 740.1 s per run at N=10^4, 10
+runs = 123 min -- and its published O(N) search with no early termination:
+
+    N          per run    per point (10 runs + 5 warm-ups)
+    50,000       1.03 h      15.4 h
+    100,000      2.05 h      30.8 h
+    500,000     10.2  h     154   h
+    1,000,000   20.5  h     307   h    (~12.8 days)
+
+~508 instance-hours for one baseline's one experiment, against ~$98 of compute
+and nearly a fortnight of wall clock on the pinned host.
+
+**What this does NOT weaken:** every other scheme measures N=10^6 at n=10 --
+the proposed scheme, [30], [35] and [54]. Scheme [41] is the only curve with
+extrapolated points, its markers are already drawn hollow, and
+`MANUSCRIPT_FIXES.txt` item 1 carries the caption text that says so.
+
+**Blocked:** nothing. Three boxes were started for this and are stopped again.

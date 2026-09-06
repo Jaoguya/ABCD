@@ -30,8 +30,22 @@ ADD     to the fig:exp2 caption:
         its search is $O(N)$ pairings with no early termination, which places
         a full sweep beyond the per-track compute budget."
 
-STATUS  A measurement campaign for these points is running; if it completes,
-        delete this item and the hollow markers with it.
+DECIDED 2026-09-07: the extrapolation STAYS. Measuring those points was
+        started and then stopped on the author's instruction -- "search single
+        or 10k, then multiply into a straight line, do not run the whole
+        million". The arithmetic behind that call, from Scheme [41]'s own
+        banked raw_runs.csv (740.1 s per run at N=10^4, 10 runs = 123 min):
+
+            N        per run     per point (10 runs + 5 warm-ups)
+            50,000     1.03 h        15.4 h
+            100,000    2.05 h        30.8 h
+            500,000   10.2  h       154   h
+            1,000,000 20.5  h       307   h   (~12.8 days)
+
+        So the four missing points are ~508 instance-hours for one baseline's
+        one experiment. Every other scheme -- the proposed one, [30], [35] and
+        [54] -- already MEASURES N=10^6 at n=10, so [41] is the only curve
+        carrying extrapolated points and the disclosure is confined to it.
 
 
 --------------------------------------------------------------------------
