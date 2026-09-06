@@ -110,3 +110,54 @@ described as moderate.
   recommended; that is choosing the axis after seeing the result.
 
 **Blocked:** nothing.
+
+---
+
+## 2026-09-06 — PSA runs were marked reportable on the campaign host
+
+**RESOLVED: fixed, no decision needed.** Recorded because it changed what a
+`run_meta.json` claims, and because the false assurance was in a docstring.
+
+**Found:** `main.py` passed the outer `source.corpus_type` and
+`corpus_sha256` into `build_metadata` for PSA runs too. A PSA experiment
+builds its world in-process via `build_world()` and never opens the corpus, so
+on the campaign host — where the corpus IS present — every PSA run came back
+stamped `corpus_type: synthea`, carrying a corpus SHA it never used, and
+`reportable: true`. `psa_experiments.py`'s module docstring asserts the
+opposite ("provenance.reportability() refuses it for the same reason it
+refuses any corpus_type: synthetic run"), and that assertion held only by the
+accident of the dev host having no corpus.
+
+**Fix:** PSA runs stamp `corpus_type="psa_in_process"` with no SHA, so the
+existing gate refuses them on any host. Verified: `reportable: False`, refused
+for corpus type and for the missing pin.
+
+**Consequence:** the first PSA campaign (2026-09-06, host 3.81.228.58) wrote
+`reportable: true` into five directories. Those runs are being re-run on the
+corrected code rather than hand-edited.
+
+---
+
+## 2026-09-06 — PSA Exp. 4 and Option D Exp. 4 are not on a common axis
+
+**RESOLVED: stamped, not silently compared.** The numbers are both correct;
+putting them on one figure would not be.
+
+**Found:** PSA Exp. 4's Phase VIII Step 3 runs against an in-process anchor
+map. The banked Option D Exp. 4 ran against **real Hyperledger Fabric** —
+commit `5ee7c16`, "like-for-like axis against real Fabric — we are now
+slowest". Measured at r=1000: Option D **1675.34 ms**, PSA **16.86 ms**.
+Essentially all of that ~99x is the ledger backend, not the construction.
+
+**Fix:** `PsaExp4Verification.LEDGER_BACKEND` is stamped into every run's
+`run_meta.json` with an explicit note that the two latencies are not on a
+common axis. No figure merges them.
+
+**Still open, and the user's call:** whether to wire the Fabric adapter into
+PSA Exp. 4 so the comparison becomes real. That needs the Fabric network up on
+the campaign host (`infra/fabric/`), which is the same gate TASKS.md BUILD-1
+describes. Until then the PSA Exp. 4 curve prices verification WITHOUT chain
+consistency, which §5 puts inside Exp. 4's boundary — so it is a lower bound,
+not the experiment §V describes.
+
+**Blocked:** nothing else; Exp. 1, 3, 5 and 6 are unaffected.

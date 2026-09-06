@@ -65,7 +65,9 @@ PSA_FOLDERS = {
 }
 
 
-def _run_notes(number: int, variant: str, *, construction: str) -> List[str]:
+def _run_notes(
+    number: int, variant: str, *, construction: str, experiment=None
+) -> List[str]:
     """What run_meta.json must record to keep a directory identifiable.
 
     The construction is recorded on EVERY run, including the default, because
@@ -86,6 +88,13 @@ def _run_notes(number: int, variant: str, *, construction: str) -> List[str]:
             "policy-state-aware construction (MANUSCRIPT_DIVERGENCE.md D1-D9); "
             "measures token/commitment cost, NOT end-to-end search"
         )
+        backend = getattr(experiment, "LEDGER_BACKEND", None)
+        if backend:
+            notes.append(
+                f"ledger_backend={backend}; the banked Option D Exp. 4 ran "
+                f"against real Hyperledger Fabric, so the two per-result "
+                f"latencies are NOT on a common axis"
+            )
     return notes
 
 
@@ -345,11 +354,21 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             experiment = experiments_mod.build_experiment(
                 number, config, source, variant=variant
             )
+        # A PSA experiment builds its world in-process (`build_world`) and
+        # never reads the corpus, so it must NOT inherit the outer source's
+        # provenance. On the dev host that was harmless -- the corpus is absent
+        # and `corpus_type` was already 'synthetic' -- but on the CAMPAIGN host
+        # the corpus IS present, so these runs came back stamped
+        # `corpus_type: synthea`, carrying a corpus SHA they never used, and
+        # `reportable: true`. psa_experiments.py's docstring asserts the
+        # opposite ("reportability() refuses it"), and that assertion was only
+        # ever true by accident of the corpus being missing.
+        psa_corpus = "psa_in_process"
         metadata = provenance.build_metadata(
             config,
             experiment=experiment.name,
-            corpus_type=source.corpus_type,
-            corpus_sha256=source.corpus_sha256,
+            corpus_type=psa_corpus if psa else source.corpus_type,
+            corpus_sha256=None if psa else source.corpus_sha256,
             group_faithful=group_faithful,
             fsn_processes=fsn_processes,
             token_scheme_keyed=True,
@@ -361,7 +380,10 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             # Which scheduler produced these numbers. Exp. 7-8 is a four-way
             # ablation, so a result that does not name its variant is
             # unidentifiable the moment the directory is renamed or merged.
-            notes=_run_notes(number, variant, construction=args.construction),
+            notes=_run_notes(
+                number, variant,
+                construction=args.construction, experiment=experiment,
+            ),
         )
         if args.require_reportable and not metadata.reportable:
             log(f"REFUSED {experiment.name}: not reportable")

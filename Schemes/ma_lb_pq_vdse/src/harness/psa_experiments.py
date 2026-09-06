@@ -47,7 +47,7 @@ import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, ClassVar, Dict, List, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
@@ -829,6 +829,15 @@ class PsaExp4Verification:
     Exp. 9; at ``keywords_per_record = 6`` it would inflate the sweep 6x and
     compare 6r entries against baselines returning r records.
     """
+
+    #: Phase VIII Step 3 runs against an IN-PROCESS anchor map, not a chain.
+    #: The banked Option D Exp. 4 ran against real Hyperledger Fabric
+    #: (`5ee7c16`, "like-for-like axis against real Fabric"), so the two
+    #: numbers are NOT comparable: at r=1000 Option D measures 1675.34 ms and
+    #: this measures 16.86 ms, and essentially all of that ~99x is the ledger
+    #: backend rather than the construction. Stamped into `run_meta.json` so a
+    #: reader cannot put the two curves on one axis by accident.
+    LEDGER_BACKEND: ClassVar[str] = "in_process_anchor_map"
 
     config: scheme_config.Configuration
     name: str = "psa_exp4_verification_overhead"

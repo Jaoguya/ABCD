@@ -25,8 +25,14 @@ ask about what has two.** Anything that changes a number already in a
 
 ## Hard rules
 
-- **Never edit `Overleaf/*.tex`.** Report file, line and the replacement text;
-  the user applies it. Same for `README.md` — edit only when asked.
+- **`Overleaf/*.tex` may be edited** (granted 2026-09-06). Back the file up
+  first, change only the sentences the decision names, and show the diff.
+  `README.md` is still edit-only-when-asked.
+- **Stop an idle instance.** The moment a fleet node has no task left —
+  campaign finished, harvested, or blocked awaiting a decision — stop it:
+  `aws ec2 stop-instances --instance-ids <id>`. Never leave one running to
+  wait for a human; restarting costs ~2 minutes, idling costs ~$0.19/hr per
+  `m6i.xlarge`. Only `Project=OJCOMS` instances are ever touched.
 - **No branches.** Commit straight to `main`, repo and fleet nodes alike.
 - **The corpus is frozen.** Only `corpus_type: synthea` on the pinned AWS
   `m6i.xlarge` is reportable. `~/.venv-malbpq` is the Mac dev venv; nothing run

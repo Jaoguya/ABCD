@@ -4,7 +4,11 @@
       "WebSearch",
       "WebFetch(domain:blog.noonomyen.com)",
       "WebFetch(domain:github.com)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(ssh -i ~/.ssh/ojcoms.pem *)",
+      "Bash(scp -i ~/.ssh/ojcoms.pem *)",
+      "Bash(infra/fleet.sh *)",
+      "Bash(bash infra/fleet.sh *)"
     ]
   }
 }

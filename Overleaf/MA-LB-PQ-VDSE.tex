@@ -2197,8 +2197,9 @@ This experiment evaluates the online cost of generating policy-state-aware
 search tokens. The number of queried keywords is varied as
 $q\in\{1,5,10,15,20\}$, while the number of authorized policies is varied
 as $|\mathcal{P}_U|\in\{1,2,4,8\}$. The proposed framework is compared
-with Guo \textit{et al}.~\cite{ref35}, XB-Muse~\cite{ref36}, Thingom
-\textit{et al}.~\cite{ref41}, and Zhuang \textit{et al}.~\cite{ref52}.
+with Guo \textit{et al}.~\cite{ref35}, Ge \textit{et al}.~\cite{ref55},
+Thingom \textit{et al}.~\cite{ref41}, and Perera and
+Fugkeaw~\cite{ref54}.
 ML-KEM key establishment is excluded because it is performed during
 attribute-key delivery rather than for each search request.
 
@@ -2359,8 +2360,9 @@ explicit retrieval-verification mechanisms.
     \label{fig:exp4}
 \end{figure}
 
-Fig.~\ref{fig:exp4}(a) shows that MA-LB-PQ-VDSE incurs a moderate
-per-result verification cost. For each returned entry $I_{i,j}$, the DU
+Fig.~\ref{fig:exp4}(a) shows that MA-LB-PQ-VDSE incurs the highest
+per-result verification cost of the four compared schemes; the axis is
+logarithmic for that reason. For each returned entry $I_{i,j}$, the DU
 reconstructs
 \[
 L_{i,j}=H(\mathsf{Encode}(I_{i,j}))
@@ -2383,6 +2385,10 @@ evidence, a modified, stale, or policy-state-inconsistent entry can be
 localized and rejected while valid entries remain acceptable. In
 contrast, schemes relying primarily on aggregated verification evidence
 provide less direct fault localization at individual-result granularity.
+Scheme~\cite{ref54} is omitted from Fig.~\ref{fig:exp4}(b) because it
+already verifies each record individually rather than through an
+aggregate check, so the all-or-nothing behaviour this panel measures does
+not describe it.
 
 Overall, MA-LB-PQ-VDSE introduces additional per-result verification
 overhead in exchange for fine-grained integrity and freshness checking.
