@@ -166,6 +166,12 @@ not the experiment §V describes.
 
 ## 2026-09-06 — a timing assertion in the Option D Exp. 6 unit tests is flaky
 
+**RESOLVED: A — asserts the mechanism now, not the clock.** Fixed in 202cdbd.
+`test_full_rebuild_costs_more_than_the_incremental_path` compares FSNs touched
+and bytes delivered, both recorded per run and deterministic; that IS the
+claim (Full-State processes more state) and it cannot race. 27 passed, three
+consecutive runs.
+
 **Found:** `test_exp6_propagation_ablation.py::test_full_rebuild_costs_more_than_the_incremental_path`
 failed once in a full-suite run and passed three times in isolation and on the
 next full run. It compares wall-clock latency between two arms inside a unit
@@ -232,6 +238,14 @@ fixed, both arms change together and stay comparable.
 ---
 
 ## 2026-09-06 — PSA Exp. 8's arms do not separate, and I cannot yet say why
+
+**RESOLVED: A was done, and it answered the question.** Instrumenting
+`entries_traversed` found TWO defects underneath -- the conjunctive query
+could never match >1 keyword (9519a02) and the PSA query was posed as one flat
+conjunction across policies (2e98705, 7bf4152). With both fixed the queries
+match and the arms STILL do not separate, for a reason now understood: see the
+2026-09-07 entries for Exp. 8 and Exp. 7. Not a scheduler defect; §V cites the
+cross-scheme results for both.
 
 **Found:** psa_exp8 was measured on the pinned host, n=10, four variants. Its
 utilization spread is flat across all of them, where Option D's separates ~9x
