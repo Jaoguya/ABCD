@@ -220,3 +220,50 @@ claim rests on.
 **Blocked:** nothing today. The PSA arm deliberately uses the SAME one keyword
 so that its comparison against Option D isolates the construction; if this is
 fixed, both arms change together and stay comparable.
+
+---
+
+## 2026-09-06 — PSA Exp. 8's arms do not separate, and I cannot yet say why
+
+**Found:** psa_exp8 was measured on the pinned host, n=10, four variants. Its
+utilization spread is flat across all of them, where Option D's separates ~9x
+on the same experiment at the same q:
+
+              aass   least_loaded   no_lb   round_robin   (std dev @ conc=10000)
+    PSA      0.0810     0.0726      0.0640     0.0831
+    OptD     0.0587     0.0437      0.3885     0.0748
+
+`no_lb` is the tell. It pins every request to one FSN, so its spread must be
+the WORST by construction -- Option D shows exactly that (0.3885, and 8364
+cross-node forwards). Under PSA it is the BEST (0.0640, 936 forwards), which
+cannot be right.
+
+**What is ruled out:** routing. The scheduler's node selection is byte-identical
+between the two constructions -- same picks {FSN1:36, FSN2:12, FSN3:8, FSN4:4},
+same |P_U| distribution, same request count -- because PsaSchedulerAblation
+reuses Option D's decision objects and `_population`. So the arms ARE being
+scheduled differently from each other; what differs is what each request COSTS
+once dispatched.
+
+**What is not ruled out:** the per-request work profile. PSA carries q*|P_U|
+tokens (10-40) against Option D's q (5), and max_node_utilization is lower
+under PSA (0.77 against 0.95) while throughput is comparable. That combination
+-- more tokens, less node saturation -- has no explanation yet. The likeliest
+candidate is that PSA's policy-state-bound tokens are far more selective, so
+each of the many lookups is rejected by the Bloom filter almost immediately and
+the work per request becomes both smaller and more uniform. Not verified.
+
+**Costs:** psa_exp8 only. psa_exp7, psa_exp1-6 and every Option D result are
+unaffected -- Option D's Exp. 8 separates correctly and is the one §V cites.
+
+**Options:**
+- **A (would take)** — instrument entries_traversed per request in the psa
+  Exp. 7/8 replay and compare the distribution against Option D's. If PSA
+  requests really do near-zero traversal, Exp. 8 under PSA is measuring an
+  empty search and the fixture needs queries that match.
+- **B** — report psa_exp8 as inconclusive in §V and cite Option D's Exp. 8 for
+  the load-balancing claim, which is what the paper already does.
+
+**Blocked:** nothing. NOT reported as a result in the meantime; the psa_exp8
+directories are banked with their numbers, and this entry is why they must not
+be read as "AASS and no_lb are equivalent".
