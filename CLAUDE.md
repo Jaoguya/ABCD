@@ -18,10 +18,16 @@ number), and **measured vs extrapolated**.
 
 ## Fixing things
 
-Follow `.claude/skills/bug-sweep`'s boundary: **fix what has one right answer;
-ask about what has two.** Anything that changes a number already in a
-`results.csv`, a figure, or the manuscript is the user's call — record it in
-`.claude/skills/bug-sweep/DECISIONS.md` and keep working on the rest.
+Follow `.claude/skills/bug-sweep`'s boundary to decide what gets RECORDED,
+but **do not ask which option to take** (granted 2026-09-06). Pick the option
+you would recommend and execute it. Anything that changes a number already in
+a `results.csv`, a figure, or the manuscript still gets an entry in
+`.claude/skills/bug-sweep/DECISIONS.md`, marked `RESOLVED: <what you did>` in
+the same pass. Report what changed, not what you considered.
+
+This does not override the refusal rules: destructive or irreversible actions
+— terminating instances, discarding measured data, force-pushing — are still
+confirmed first.
 
 ## Hard rules
 

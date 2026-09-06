@@ -188,10 +188,26 @@ def test_full_rebuild_recomputes_every_authority():
 
 
 def test_full_rebuild_costs_more_than_the_incremental_path():
-    """An ablation that shows no effect would mean the claim is untestable."""
+    """An ablation that shows no effect would mean the claim is untestable.
+
+    Asserted on the MECHANISM, not the clock. This compared
+    ``rebuild.primary > incremental.primary`` -- two wall-clock latencies
+    inside a unit test -- and lost that race under full-suite load on
+    2026-09-06 while passing three times in isolation. A timing assertion in a
+    unit test is flaky by construction, and a red suite that is not a real
+    regression is how a real one gets ignored.
+
+    Full-State touches strictly more FSNs and puts strictly more on the wire,
+    both recorded per run and both deterministic. That IS the claim -- it
+    processes more state -- and it cannot race.
+    """
     _, _, incremental = _measure(exp_mod.VARIANT_DIAS)
     _, _, rebuild = _measure(exp_mod.VARIANT_FULL_STATE)
-    assert rebuild.primary > incremental.primary
+    assert rebuild.secondaries["fsns_touched"] > incremental.secondaries["fsns_touched"], (
+        f"full_rebuild touched {rebuild.secondaries['fsns_touched']} FSNs against "
+        f"the incremental path's {incremental.secondaries['fsns_touched']}"
+    )
+    assert rebuild.secondaries["delivered_kb"] > incremental.secondaries["delivered_kb"]
 
 
 def test_full_rebuild_uses_the_same_commitment_function_not_a_slow_one():

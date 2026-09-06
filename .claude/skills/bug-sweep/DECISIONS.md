@@ -188,6 +188,14 @@ and the session's changes are on the psa side.
 
 ## 2026-09-06 — Option D's Exp. 7-8 workload uses ONE keyword, not §V's five
 
+**RESOLVED: A — fixed and re-run, on the user's instruction.** Both
+constructions now take `keywords[:q]`. Exp. 7-8 were re-measured for all four
+variants on the pinned host at commit 37aa787 and the banked q=1 data is
+superseded. The ORDERING the paper rests on did not just survive, it improved:
+AASS is now first at every concurrency (2255/3275/3622 q/s at 100/1000/10000),
+where at q=1 the field was tight and the order moved around below 1000.
+Exp. 8 is unchanged in character -- least_loaded still takes the lowest spread.
+
 **Found:** `experiments.py:1616`, `SchedulerAblation.prepare`:
 
     token = token_mod.generate_search_token(
@@ -267,3 +275,42 @@ unaffected -- Option D's Exp. 8 separates correctly and is the one §V cites.
 **Blocked:** nothing. NOT reported as a result in the meantime; the psa_exp8
 directories are banked with their numbers, and this entry is why they must not
 be read as "AASS and no_lb are equivalent".
+
+---
+
+## 2026-09-06 — I cited the wrong reference in §V Exp. 1
+
+**RESOLVED: fixed.** `yue_ge` is **Scheme [30]** (Ge *et al.*, IEEE IoT-J 2024),
+not `ref55` (Cao *et al.*, puncturable encrypted search). My earlier §V Exp. 1
+edit wrote `\cite{ref55}`, putting a reference into the baseline list that has
+no implementation and no results — the exact defect that edit was made to fix.
+Corrected to `\cite{ref30}`.
+
+Caught by cross-checking §V's citations against the measured roster rather than
+by re-reading my own edit. That audit now covers all five cross-scheme
+experiments and every one passes: Exp. 1-3 cite [30],[35],[41],[54];
+Exp. 4 cites [30],[35],[54]; Exp. 5 cites [30],[35] — each exactly what has a
+`results.csv`.
+
+**Costs:** nothing measured. A reviewer following the citation would have found
+an unrelated paper.
+
+---
+
+## 2026-09-06 — the task board was stale on its highest-impact item
+
+**RESOLVED: TASKS.md corrected.** `BUILD-2b` ("batch Exp. 4's chain lookup")
+was listed `open` and described as "what actually reaches 2nd". It has been
+LANDED since `e252cc9`; `Exp4Verification.measure` calls
+`vledger_mod.batched_chain_checker`, and `d3452c0` measured it at 2.19x with
+the O(r) chain term surviving.
+
+So the batching target was met and reaching 2nd was not — that needs BUILD-2's
+aggregate proof alongside it, which `TASKS.md` separately records as
+insufficient alone (9.08 ms against [30]'s 9.139, a tie).
+
+`DECIDE-1` was also stale: §V already names the measured Exp. 4 roster.
+
+**Why this matters:** I recommended BUILD-2b as the single highest-impact open
+item, on the board's word. Had that recommendation been acted on it would have
+been a day spent re-implementing something already in `main`.
