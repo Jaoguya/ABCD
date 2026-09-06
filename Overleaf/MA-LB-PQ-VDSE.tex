@@ -2156,8 +2156,8 @@ reconstruction and system-wide authorization synchronization.
 \subsubsection{Experimental Setup}
 
 The proposed framework was implemented in Python~3.11 and evaluated
-on Amazon AWS EC2 c6i.xlarge instances, each equipped with 4~vCPUs
-and 8~GB RAM. Four Fog Search Nodes (FSNs) and one cloud server were
+on Amazon AWS EC2 m6i.xlarge instances, each equipped with 4~vCPUs
+and 16~GB RAM. Four Fog Search Nodes (FSNs) and one cloud server were
 deployed within an AWS Virtual Private Cloud (VPC) to emulate a
 distributed cross-domain IoMT healthcare environment. Each FSN
 maintains an authorization-aware searchable index and performs
@@ -2188,6 +2188,15 @@ generation, encrypted-search efficiency, cross-domain search
 scalability, keyword-update performance, result verification,
 authorization synchronization, and authorization-aware load
 balancing under increasing workloads.
+
+Measurements of the policy-state-aware construction are reported
+separately from the cross-scheme comparisons. Those of encrypted search,
+throughput, and load balancing are obtained on the same corpus and host
+as the comparisons above; those of trapdoor generation, cross-domain
+scalability, verification, dynamic update, and authorization
+synchronization are obtained on in-process fixtures that exercise the
+construction rather than the corpus, and are therefore not directly
+comparable with the cross-scheme results.
 
 
 \subsubsection*{\textbf{Experiment 1: Policy-State-Aware Token Generation}}
@@ -2270,7 +2279,12 @@ its output-sensitive search complexity $O(n_w^l)$.
 \begin{figure}[!t]
     \centering
     \includegraphics[width=\columnwidth]{images/fig_exp2_search.pdf}
-    \caption{Encrypted-search latency versus searchable-index size.}
+    \caption{Encrypted-search latency versus searchable-index size.
+    Scheme~\cite{ref41}'s points above $N=10^4$ are extrapolated linearly
+    from its measured $N=10^4$ anchor and are drawn with hollow markers; its
+    search performs $O(N)$ pairings with no early termination, which places a
+    full sweep beyond the per-track compute budget. All other schemes are
+    measured at every point.}
     \label{fig:exp2}
 \end{figure}
 
@@ -2477,9 +2491,21 @@ AA_k
 \rightarrow\mathcal{F}_k^{\rm aff},
 \]
 so unrelated policies, records, shards, and FSNs require no update.
+Blockchain anchoring is excluded from the synchronization boundary and
+reported separately, as it is invariant across the compared
+configurations; the corresponding row of Table~\ref{tab:cost} therefore
+carries no chain term.
 Incremental-All reduces state-reconstruction overhead but still incurs
 unnecessary propagation, whereas Full-State Synchronization processes
 substantially more state.
+
+Two properties of the measurement should be read alongside the figure.
+Because the evaluation harness models no network, Incremental-All's
+unnecessary propagation appears chiefly in transferred synchronization
+data rather than in sender-side latency, where a delivery is a local
+operation. The Full-State arm's authorization-state reconstruction is
+modelled by each authority's commitment digest rather than a full
+re-derivation, so its reported cost is a lower bound.
 
 As the affected-policy ratio approaches 100\%, the advantage of DIAS
 narrows because a larger portion of the system becomes dependency
@@ -2498,7 +2524,9 @@ workloads. Four scheduling strategies are compared: (i) \emph{No Load
 Balancing}; (ii) \emph{Round Robin}; (iii) \emph{Least Loaded}, which
 considers current workload but not shard locality or synchronization
 state; and (iv) \emph{AASS}. Concurrent queries increase from 100 to
-5000, while the number of FSNs and per-query workload are fixed.
+5000, while the number of FSNs and per-query workload are fixed. Each
+replayed request carries the same $q=5$ conjunctive query used throughout
+this section.
 
 For each query, AASS assigns every required shard
 $S\in\mathcal{S}_Q$ only to eligible FSNs maintaining that shard. Among
@@ -2553,13 +2581,17 @@ requiring redirection to an eligible node.
     \label{fig:exp8}
 \end{figure}
 
-Fig.~\ref{fig:exp8}(a) shows that AASS maintains lower utilization
-variation, indicating more balanced workload distribution across
-eligible FSNs. Round Robin and Least Loaded improve upon no load
-balancing but do not jointly account for required-shard locality,
-synchronization state, and predicted processing cost. Consequently,
-Fig.~\ref{fig:exp8}(b) shows that AASS also limits processing hot spots
-as concurrency increases.
+Fig.~\ref{fig:exp8}(a) shows that AASS maintains low utilization
+variation across eligible FSNs, substantially below no load balancing.
+Least-loaded scheduling attains the lowest variation of the four, which
+follows directly from its rule: it minimises queue length and optimises
+that metric by construction. AASS trades a small amount of spread for
+authorization locality, and leads on throughput at every concurrency level
+in Experiment~\ref{exp:throughput}. Round Robin and Least Loaded improve
+upon no load balancing but do not jointly account for required-shard
+locality, synchronization state, and predicted processing cost.
+Consequently, Fig.~\ref{fig:exp8}(b) shows that AASS also limits
+processing hot spots as concurrency increases.
 
 The locality benefit is further demonstrated in
 Fig.~\ref{fig:exp8}(c). Conventional strategies may assign work to an
@@ -2808,6 +2840,14 @@ A. Johnson, L. Bulgarelli, T. Pollard, B. Gow, B. Moody,
 S. Horng, L. A. Celi, and R. Mark,
 ``MIMIC-IV (version 3.1),''
 PhysioNet, 2024, doi: 10.13026/kpb9-mt58.
+
+\bibitem{refSynthea}
+J. Walonoski, M. Kramer, J. Nichols, A. Quina, C. Moesel, D. Hall,
+C. Duffett, K. Dube, T. Gallagher, and S. McLachlan,
+``Synthea: An approach, method, and software mechanism for generating
+synthetic patients and the synthetic electronic health care record,''
+\emph{Journal of the American Medical Informatics Association},
+vol. 25, no. 3, pp. 230--238, 2018.
 
 \end{thebibliography}
 

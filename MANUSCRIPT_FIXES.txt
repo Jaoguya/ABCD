@@ -1,8 +1,11 @@
 MANUSCRIPT FIXES — Overleaf/MA-LB-PQ-VDSE.tex
 =============================================
-Written 2026-09-06. Nothing in this file has been applied to the .tex; the
-manuscript is edited by the user only. Each item gives the location, what is
-wrong, and the replacement text.
+Written 2026-09-06. UPDATED 2026-09-07: items 1-8 have now ALL BEEN APPLIED to
+the .tex on the author's instruction ("Paste MANUSCRIPT_FIXES.txt into Overleaf,
+you do it"). This file is kept as the record of what changed and why. Anything
+added below the APPLIED marker is still outstanding.
+
+Each item gives the location, what was wrong, and the text that replaced it.
 
 Two items (A1, A2) were applied earlier on 2026-09-06 before this rule was set
 and are listed at the bottom as ALREADY APPLIED, so the record is complete.
@@ -178,3 +181,54 @@ D1  DECIDE-2: do the baselines report mean or median? Guo's Exp. 2 at N=10^6
 
 D2  FIX-2: "manuscript claims contradicted by measurement" is on the task
     board with no list attached. It needs the specific sentences.
+
+
+
+==========================================================================
+APPLIED 2026-09-07 — items 1-8, plus FIX-2 and DECIDE-2
+==========================================================================
+Items 1, 2, 3, 4, 5, 6 and 7 were applied as written above. Item 8 was
+verify-only and needed no edit. In addition:
+
+DECIDE-2  RESOLVED: mean. No edit was needed -- §V already reads "the reported
+          results represent the mean with 95\% confidence intervals", and every
+          results.csv carries means. The decision confirms the existing text
+          rather than changing it. Guo's Exp. 2 at N=10^6 has a mean 16.9x its
+          median, so §V should be prepared to defend the spread if asked; the
+          data supporting it is in that experiment's raw_runs.csv.
+
+FIX-2     RESOLVED as three concrete defects, found by auditing §V's setup
+          against run_meta.json and the bibliography rather than by guessing:
+
+          (a) HOST WAS WRONG. §V said "c6i.xlarge ... 4 vCPUs and 8 GB RAM".
+              Every measurement ran on m6i.xlarge with 16 GB -- README §1 pins
+              it and AWS confirms the live instance type. The change was made
+              on 2026-08-03 because Scheme [52] allocates a 381 MB lattice
+              trapdoor per attribute and 8 GiB ran near saturation, which
+              contaminates latency with GC and page-cache effects. README §14
+              item 3 had flagged this and it had not been carried over.
+              -> now reads "m6i.xlarge ... 4 vCPUs and 16 GB RAM".
+
+          (b) BROKEN CITATION. \cite{refSynthea} was used in §V's dataset
+              paragraph but no \bibitem{refSynthea} existed, so it would
+              render as a bare "?" in the PDF. Added at the END of the
+              bibliography, deliberately: \begin{thebibliography} numbers
+              POSITIONALLY, so inserting anywhere earlier would shift every
+              later entry and silently break the [30], [35], [41], [54]
+              references the text depends on. Verified after the edit that
+              every refN is still the Nth entry.
+
+          (c) FOUR UNCITED ENTRIES remain: ref34, ref44, ref49 and ref56
+              (MIMIC-IV). They are NOT removed, for the same positional
+              reason -- deleting ref34 would renumber Scheme [35] to [34] and
+              every later citation with it. ref56 is the last trace of the
+              MIMIC-IV corpus, dropped on 2026-08-03 in favour of Synthea.
+              Leaving an uncited entry is harmless; renumbering the
+              bibliography is not.
+
+STILL OUTSTANDING for the author
+--------------------------------
+README §16 change-log line for 2026-09-06/07. README §13 reserves that file
+for the author, and this session did not touch it. It has been a
+results-affecting two days: the conjunctive-query defect, the q=1 -> q=5
+workload fix, and the psa track's first corpus-backed results all belong in it.
