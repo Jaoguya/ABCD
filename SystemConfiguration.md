@@ -549,3 +549,38 @@ Agent teams need `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
   optimisation on the *measured* path needs a §V note; one on untimed setup does not.
 - **Found a defect?** Say in the commit message: what changed, why, and what it
   means. That file is why the same bug has not been fixed twice.
+
+## 14. Operational traps
+
+Rescued 2026-09-07 from `infra/SESSION_HANDOFF.md` and `infra/CAMPAIGN_RESUME.md`
+before both were deleted as stale. Everything else in those two files was a
+snapshot of a campaign that has since been harvested, committed and superseded;
+these six are not snapshots. Each one cost real time or real data once.
+
+- **Never blanket-unpack a harvest tarball.** Each node's tarball carries stale
+  copies of every *other* scheme's results. Unpacking several in alphabetical
+  order silently overwrites fresh results with stale ones — and the overwrite
+  leaves no trace, because the stale files are valid. Extract scoped, one scheme
+  at a time, from the one node that produced it.
+- **`run_meta.json` existing does NOT mean the point finished.** Restoring tracked
+  files before a run recreates old `run_meta.json` files. Distinguish by
+  `git_commit`, never by presence or mtime.
+- **`python -u`, or the log is useless.** Without it a healthy run block-buffers
+  stdout to a file and is indistinguishable from a hang. A 900 s "timeout" was
+  once diagnosed off an empty log from a run that was fine.
+- **Long runs go in `tmux` on the node.** Three separate incidents had the WORK
+  survive an SSH drop while the RECORD of it died.
+- **`pkill -f smoke.sh` does not kill `timeout`-wrapped children.** Orphans kept
+  writing into a deleted output directory.
+- **The egress IP rotates.** Every host times out at once and the fleet looks
+  dead; it is the security group. Re-authorise and retry before diagnosing
+  anything else.
+
+One more, kept because it is load-bearing for reading git history: **a `-dirty`
+suffix on a pre-`dfa7e69` `run_meta.json` is not evidence that code was
+modified.** `git_commit()` ran `git status --porcelain` over the whole repo
+including tracked result directories, so a run's own output tripped its own
+marker. At the same commit `55aa3c8`, `exp7` and its five shards are clean while
+`exp8`, its five shards, and `exp6` are dirty — same commit, same sweep, opposite
+verdicts. That is write-order contamination. It equally cannot *rule out* a
+modified tree; it simply carries no information either way.
