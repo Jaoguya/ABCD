@@ -4,8 +4,12 @@
 # Phase VI Step 3 defines the Adaptive Authorization-Aware Search Scheduling
 # score
 #
-#   SC_j = L1*C_j^auth + L2*C_j^index + L3*C_j^verify + L4*C_j^sync + L5*C_j^queue
+#   SC_j = L1*C_j^index + L2*C_j^verify + L3*C_j^sync + L4*C_j^queue
 #   FSN* = arg min_j SC_j                                          (Alg. 1)
+#
+# FOUR terms, per eq:search-cost. A fifth, C_j^auth = |P_Q|, belonged to the
+# previous manuscript revision and was removed on 2026-09-07 together with its
+# weight; see Schemes/ma_lb_pq_vdse/src/scheduler/aass.py::CostVector.
 #
 # README §6: the lambda weights are "**not in the paper — must be fixed**", and
 # §6 further requires: "Choose them once by a documented procedure (e.g. a
@@ -30,10 +34,9 @@ meta:
 # must not be substituted.
 # -----------------------------------------------------------------------------
 cost_terms:
-  auth:
-    formula: "|P_Q|"                  # published: number of authorization
-                                      # policies involved in the query
-    source: aim
+  # `auth: |P_Q|` was here until 2026-09-07. eq:search-cost of the current
+  # manuscript has four terms and does not include it; keeping it labelled
+  # "published" described a scheduler the paper does not define.
   index:
     formula: "|Cand_Q^(j)|"           # published: estimated candidate set size
                                       # from local searchable-index statistics
@@ -55,8 +58,8 @@ cost_terms:
 # -----------------------------------------------------------------------------
 # Normalization — NOT IN THE PAPER, and load-bearing.
 #
-# The five published estimators have incommensurable units and magnitudes: at
-# the §6 defaults |P_Q| is O(1), |Cand_Q^(j)| is O(10^4), |R|*log N is O(10^3),
+# The four published estimators have incommensurable units and magnitudes: at
+# the §6 defaults |Cand_Q^(j)| is O(10^4), |R|*log N is O(10^3),
 # |VID_U - VID_j| is O(1), and T_j^queue is a time in ms. Applying raw weights
 # to raw terms would let C_index dominate SC_j by four orders of magnitude
 # regardless of the lambdas, which would make the weight vector — and therefore

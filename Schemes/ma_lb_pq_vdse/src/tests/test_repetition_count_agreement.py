@@ -154,3 +154,71 @@ def test_readme_campaign_commands_match_the_config():
         f"README prints commands at a replication count that is not {n}:\n"
         + "\n".join(stale)
     )
+
+
+#: Every OTHER document that prints a runnable command. This test read README.md
+#: and the manuscript ONLY, which is why the 30 -> 10 migration of 2026-09-03
+#: reached both of those and reached NONE of these: on 2026-09-07 all five
+#: SCHEME.md files and SystemConfiguration.md still printed `--runs 30`, against
+#: a config of 10 and 85 banked run_metas at n_runs=10. Three separate fixes of
+#: this same number passed a green suite because nothing here looked at them.
+#:
+#: A doc that prints a command is a doc someone copies onto a node.
+COMMAND_PRINTING_DOCS = (
+    "SystemConfiguration.md",
+    "Schemes/ma_lb_pq_vdse/SCHEME.md",
+    "Schemes/guo_vdsse/SCHEME.md",
+    "Schemes/yue_ge/SCHEME.md",
+    "Schemes/thingom_pq_abse/SCHEME.md",
+    "Schemes/perera_lv_pqabse/SCHEME.md",
+)
+
+
+#: Commands that are DELIBERATELY not at the campaign count. `dev_runner.py`
+#: bypasses the corpus pin, writes to `_dev_output/` and is documented as "not
+#: reportable"; `--runs 3 --max-records 300` is a smoke test, and forcing it to
+#: 10 would make it slower for no gain. Matched against the whole logical
+#: command, so a continuation line cannot smuggle one past.
+NON_CAMPAIGN_RUNNERS = ("dev_runner",)
+
+
+def _logical_lines(text: str):
+    """Yield (first line number, joined command), backslash-continuations merged.
+
+    These documents wrap commands across lines, so `--runs N` and the runner it
+    belongs to are usually on DIFFERENT physical lines. Checking line by line
+    would judge a flag without seeing which command it modifies.
+    """
+    start, buffer = None, []
+    for i, line in enumerate(text.splitlines(), 1):
+        if start is None:
+            start = i
+        buffer.append(line.rstrip())
+        if line.rstrip().endswith("\\"):
+            continue
+        yield start, " ".join(b.rstrip("\\").strip() for b in buffer)
+        start, buffer = None, []
+    if buffer:
+        yield start, " ".join(b.rstrip("\\").strip() for b in buffer)
+
+
+@pytest.mark.parametrize("relative", COMMAND_PRINTING_DOCS)
+def test_every_document_printing_a_command_matches_the_config(relative):
+    """`--runs N` anywhere a reader can copy it must be the configured N."""
+    path = REPO / relative
+    if not path.is_file():
+        pytest.skip(f"{relative} is not present")
+    n = _configured_repetitions()
+    stale = []
+    for lineno, command in _logical_lines(path.read_text(encoding="utf-8")):
+        found = re.search(r"--runs (\d+)", command)
+        if not found or int(found.group(1)) == n:
+            continue
+        if any(runner in command for runner in NON_CAMPAIGN_RUNNERS):
+            continue
+        stale.append(f"{relative}:{lineno}: {command.strip()}")
+    assert not stale, (
+        f"{relative} prints a command at a replication count that is not {n}; "
+        f"anyone copying it onto a node produces data that cannot be compared "
+        f"to the campaign:\n" + "\n".join(stale)
+    )

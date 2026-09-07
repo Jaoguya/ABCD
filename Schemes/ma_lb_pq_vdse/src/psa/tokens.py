@@ -28,7 +28,7 @@ a measurable cost rather than a matter of taste:
 
 WHY ``H`` IS STILL KEYED
 ------------------------
-The published inputs are all low-entropy: the frozen corpus has 2,006 keywords,
+The published inputs are all low-entropy: the frozen corpus has 2,023 keywords,
 and ``PID_i``, ``PV_i`` and ``Dom_i`` are enumerable from any FSN's own shard
 metadata. An unkeyed ``H`` therefore inverts the entire index by brute force,
 and adding three enumerable fields to the preimage does not change that — it

@@ -182,7 +182,7 @@ Reportable runs need **Linux** — `charm-crypto` supplies the published Type-I 
 python3 -m Schemes.thingom_pq_abse.src.main \
     --experiment 1,2,3 \
     --dataset Dataset/derived \
-    --runs 30
+    --runs 10
 ```
 
 ### Windows — not possible for this scheme

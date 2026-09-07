@@ -294,11 +294,11 @@ docker compose -f infra/fabric/docker-compose.yaml up -d
 ipfs daemon &
 
 # 4. Run the schemes
-python3 -m Schemes.ma_lb_pq_vdse.src.main    --experiment all     --runs 30
-python3 -m Schemes.guo_vdsse.src.main        --experiment 1,2,3,4,5 --runs 30
-python3 -m Schemes.thingom_pq_abse.src.main  --experiment 1,2,3   --runs 30
-python3 -m Schemes.perera_lv_pqabse.src.main --experiment all     --runs 30
-python3 -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 30
+python3 -m Schemes.ma_lb_pq_vdse.src.main    --experiment all     --runs 10
+python3 -m Schemes.guo_vdsse.src.main        --experiment 1,2,3,4,5 --runs 10
+python3 -m Schemes.thingom_pq_abse.src.main  --experiment 1,2,3   --runs 10
+python3 -m Schemes.perera_lv_pqabse.src.main --experiment all     --runs 10
+python3 -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 10
 
 # 5. Figures
 python3 Plots/generate_plots.py --input Schemes --output Plots/output

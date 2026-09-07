@@ -145,7 +145,7 @@ yue_ge/
 ```bash
 python3 -m Schemes.yue_ge.src.main \
     --experiment 1,2,3,4,5 \
-    --runs 30
+    --runs 10
 ```
 
 ### Windows (PowerShell)
@@ -153,7 +153,7 @@ python3 -m Schemes.yue_ge.src.main \
 ```powershell
 python -m Schemes.yue_ge.src.main `
     --experiment 1,2,3,4,5 `
-    --runs 30
+    --runs 10
 ```
 
 ### Variants

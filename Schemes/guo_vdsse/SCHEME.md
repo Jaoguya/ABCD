@@ -46,7 +46,7 @@ python3 -m Schemes.guo_vdsse.src.main \
     --experiment 1,2,3,4,5 \
     --config "Experiment Configuration/global.yaml" \
     --dataset Dataset/derived \
-    --runs 30
+    --runs 10
 ```
 
 ### Windows (PowerShell)
@@ -56,7 +56,7 @@ python -m Schemes.guo_vdsse.src.main `
     --experiment 1,2,3,4,5 `
     --config "Experiment Configuration/global.yaml" `
     --dataset Dataset/derived `
-    --runs 30
+    --runs 10
 ```
 
 ---

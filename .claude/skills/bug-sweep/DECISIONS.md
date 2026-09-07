@@ -525,3 +525,197 @@ matches the results.csv exactly.
 **Found by looking at the rendered figure**, not by reading code -- the first
 time these plots had been generated from final data rather than into a
 scratch directory.
+
+---
+
+## 2026-09-07 — `Plots/output/*.pdf` shipped the pre-fix figures beside the fixed ones
+
+**RESOLVED: regenerated the flat set from current code.** `f68ac60` fixed the
+hollow-marker rule and regenerated `Plots/output/pdf/` and `Plots/output/png/`,
+but the eight files it *added* at the flat path `Plots/output/fig_exp*.pdf|png`
+came from a run made **before** the code fix. Byte sizes show it:
+`Plots/output/fig_exp2_search.pdf` was 19,644 bytes — exactly the pre-fix
+`pdf/fig_exp2_search.pdf` — while the post-fix one is 19,910. Rendering both
+confirms it: the flat copy drew Scheme [41]'s four extrapolated Exp. 2 points
+**solid**, which is the defect `f68ac60`'s message says it fixed, and which
+`fig:exp2`'s caption ("drawn with hollow markers") contradicts.
+
+So the repo carried two sets of the same eight figures, disagreeing, and the
+flat set — the one a person grabs first — was the wrong one.
+
+All four sets regenerated from the current banked data at `e503655` + this
+session's doc-only edits: flat PDF, flat PNG, `pdf/`, `png/`, plus the eight
+`fig_psa_*.png`. Verified by rendering `Plots/output/fig_exp2_search.pdf`:
+hollow at N = 50k, 100k, 500k, 1M; solid at 10^4.
+
+**No measurement changed** — the same `results.csv` cells, drawn correctly.
+
+---
+
+## 2026-09-07 — `scheduler.yaml` and `aass.py` still published the five-term SC_j
+
+**RESOLVED: aligned both to `eq:search-cost`'s four terms.** `59e11f3` dropped
+`C_j^auth` from `CostVector` and `config.py`, and `scheduler.yaml`'s `weights`
+block, but left the five-term formula in three places a reader reproducing the
+scheduler would hit first: `aass.py`'s module docstring, `estimate_costs`'s and
+`_scored`'s docstrings ("the five raw terms"), and `scheduler.yaml`'s header
+formula plus its `cost_terms.auth` entry labelled `# published`. The code was
+right and its documentation described a scheduler the paper does not define.
+
+`cost_terms.auth` removed, the two formulas rewritten to four terms, and the
+manuscript's actual `C_j^sync` (the count of query-relevant authorities the
+node lags) now recorded next to the scalar `|VID_U - VID_j|` the code uses, so
+divergence D2 is visible at the point of use. `sweep:` is left describing the
+1001-vector L1..L5 grid: that is a record of what was run on 2026-08-28, not a
+current rule.
+
+**Config hash moves.** `scheduler.yaml`'s SHA-256 no longer matches the
+`config_hashes` in the banked `run_meta.json` files. Nothing measured changed —
+the removed key was never read by `config.py` — but a re-run will stamp a
+different hash than the banked campaign, and that needs saying rather than
+discovering.
+
+---
+
+## 2026-09-07 — `\usepackage{graphi  cx}` stopped the manuscript compiling
+
+**RESOLVED: fixed to `\usepackage{graphicx}`.** A stray double space inside the
+package name. LaTeX would fail with "File `graphi.sty' not found" before
+reaching any of the nine `\includegraphics` calls. Backed up to
+`Overleaf/MA-LB-PQ-VDSE.tex.bak-20260907`; one-line diff shown in the session.
+
+---
+
+## 2026-09-07 — `requirements.txt` was deleted while `provision.sh` still installs from it
+
+**RESOLVED: restored verbatim from `95eb49f~1`.** `95eb49f`
+("chore: remove AGENT_RULES.md, debug_history.md, requirements.txt") took it
+out with two agent-workflow files, but it is not an agent file — it is the
+dependency manifest for the EC2 experiment host.
+
+`infra/provision.sh:58` is
+
+    pip install --quiet -r "${REPO}/requirements.txt"
+
+under `set -euo pipefail`. With the file absent, provisioning **aborts at line
+58** — before the ML-KEM backend, before the charm-crypto build Ref[41] needs
+for its Type-I pairing, and before the primitive-test gate at line 163 that is
+the whole point of the script. A fresh instance could not be built at all, and
+the failure lands early enough that none of the warnings the script prints for
+partial setups would ever appear. `MacOS/SETUP.md:47` reads from it too.
+
+Restored content checked against what the campaign actually ran, from
+`run_meta.json`: cryptography 50.0.0 (>= 43.0.0, and >= 46.0 so its ML-KEM
+module is live, matching `kem_backends_available.cryptography: true`), numpy
+2.4.6 (>= 1.26.0), scipy 1.17.1 (>= 1.12.0), pyyaml 6.0.3 (>= 6.0.0), Python
+3.11.15. `petrelic` stays commented out, which matches the banked
+`pairing_backends_available.petrelic_bn254: false`. `pip install --dry-run`
+resolves every pin.
+
+**No measurement changed.** This restores the ability to build a host that
+reproduces them.
+
+**Must be committed and pushed before the next `fleet.sh deploy`.** Deploy does
+`git reset --hard origin/main`, so an uncommitted fix does not reach the nodes —
+they would land on `e503655`, which has no `requirements.txt`.
+
+---
+
+## 2026-09-07 — BLAS thread pinning was configured, recorded, and gated nowhere
+
+**RESOLVED: wired `verify_thread_pinning(require=True)` into `reportability()`
+as a blocker.** Its own docstring already said "`require=True` is for reportable
+runs", but the only call site in the repo was a test passing `require=False`.
+So the pin was declared in `global.yaml` (`blas_threads: 1`), exported by
+`provision.sh`, RECORDED into `run_meta.json` by `build_metadata` — and never
+checked. All 85 banked runs carry
+
+    blas_thread_env: {OMP_NUM_THREADS: UNSET, OPENBLAS_NUM_THREADS: UNSET,
+                      MKL_NUM_THREADS: UNSET, NUMEXPR_NUM_THREADS: UNSET}
+
+and every one was still stamped `reportable: true`.
+
+`provision.sh` writes the exports to `/etc/profile.d/malbpq-threads.sh`, which
+only a **login** shell sources; work dispatched over `ssh host "cmd"` never
+reads it. That is the likely mechanism, though the AMI's build date could
+equally explain it — either way the guard would have caught it and did not.
+
+**Why it matters more now than when it was written.** The rationale in the code
+still names Ref[52], a scheme that no longer exists. The live reason is
+different: `environment.instance_type` was dropped 2026-08-30 so guo Exp. 2
+could have the ~52 GB its forward index needs, so the campaign now spans
+`m6i.xlarge` (4 vCPU) and `r6i.4xlarge` (16 vCPU). Unpinned BLAS across two core
+counts is precisely the cross-host incomparability the pin exists to remove.
+
+**A blocker, not a note**, matching the documented intent: an unpinned run now
+fails on its first point instead of after a campaign. Verified both directions —
+refuses with the vars unset, passes with them exported.
+
+**This does not change any banked number.** It changes what a FUTURE run is
+allowed to call reportable. Before the next campaign, export
+
+    OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+    NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+
+in the same shell as the run, or source `/etc/profile.d/malbpq-threads.sh`
+explicitly. **The 85 banked runs were measured unpinned and that is now a stated
+limitation, not a silent one.**
+
+---
+
+## 2026-09-07 — three test gaps that let documentation drift past a green suite
+
+**RESOLVED: all three closed.** `CLAUDE.md` says "every defect found so far was
+found with it green"; these are three reasons why.
+
+1. **`test_cost_table_agreement.py`'s coverage guard did not cover what its
+   docstring claimed** ("everything else that produces a latency curve is
+   asserted above"). Its loop ran over four schemes — `thingom_pq_abse` absent —
+   and two experiments, 1 and 4. Added thingom and Exp. 5, plus the three claims
+   that then became required: `[41]` Trapdoor `O(u+q)(T_H+T_Mul)+T_E`, `[30]`
+   Dynamic Update `O(k)`, `[35]` Dynamic Update. All three fit linear on the
+   banked data.
+
+2. **`PSA_CLAIMS` omitted the Verification row on a stale premise.** The scope
+   note said the PSA track does not fork Verification, so the row was
+   "correspondingly absent". It IS forked — `PsaExp4Verification` is in
+   `PSA_EXPERIMENTS` and `psa_exp4_verification_overhead/` holds a 10-run sweep.
+   Added `O(r log t)T_H + O(r)T_BC`, linear in `r`.
+
+   Exp. 2 stays absent in both tables, now with the reason recorded in
+   `EXP2_NOT_SHAPE_ASSERTABLE`: every Search row is written in a variable that
+   is not the swept `N`, so the measured rise is a property of the
+   constant-selectivity workload rather than a prediction the row makes.
+   Asserting a shape there would invent a claim the table does not make.
+
+3. **`test_repetition_count_agreement.py` read `README.md` and the `.tex`
+   only.** That is why the 30 -> 10 migration reached both of those and none of
+   the six documents that print runnable commands: on 2026-09-07
+   `SystemConfiguration.md` and all five `SCHEME.md` files still said
+   `--runs 30` against a config of 10 and 85 banked runs at `n_runs=10`. Three
+   separate fixes of this number passed a green suite. Added
+   `test_every_document_printing_a_command_matches_the_config`, which
+   parametrises over all six; it caught 15 stale commands, all corrected.
+
+**No measurement changed.** These make the suite able to see the drift class it
+has now missed three times.
+
+---
+
+## 2026-09-07 — two dead cross-references in the code
+
+**RESOLVED.** `yue_ge/src/digest.py:15` and `msre.py:21` both cited
+**"README §245"**, which has never existed; the `Common/` scope rule they quote
+is README **§8** ("Repository Structure"). Retargeted.
+
+Separately, five docstrings described the frozen corpus as having a
+**2,006-keyword** vocabulary; `Dataset/dataset_manifest.json` says
+`keyword_universe_size: 2023`. Corrected in `index/tokens.py` (x2),
+`psa/tokens.py`, `harness/provenance.py` and `tests/test_phase4.py`. These are
+prose claims about the corpus and carry a security argument (the cost of
+inverting an unkeyed token by dictionary attack), not a measured number.
+
+The literal `2006` in `psa_experiments.py:512` is left alone deliberately: it
+sizes the PSA track's **synthetic** vocabulary, which has no corpus behind it,
+and is self-consistent. `experiments.py:104`'s `vocabulary: int = 2006` is a
+dataclass default that line 203 overwrites from the manifest on every real run.

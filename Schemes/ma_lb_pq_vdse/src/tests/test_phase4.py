@@ -966,9 +966,9 @@ def test_tokens_keyed_scheme_depends_on_the_key():
 def test_tokens_unkeyed_is_invertible_by_dictionary_attack():
     """The concrete risk, demonstrated rather than asserted.
 
-    The frozen corpus has a 2,006-keyword vocabulary. An honest-but-curious node
+    The frozen corpus has a 2,023-keyword vocabulary. An honest-but-curious node
     holding unkeyed tokens recovers every keyword by hashing that vocabulary —
-    2,006 evaluations. Simulated here at a smaller scale; the arithmetic is the
+    2,023 evaluations. Simulated here at a smaller scale; the arithmetic is the
     same.
     """
     scheme = tokens_mod.TokenScheme.unkeyed()

@@ -1,0 +1,108 @@
+# =============================================================================
+# MA-LB-PQ-VDSE Benchmark — Python Dependencies
+# =============================================================================
+# Platform: Linux (Ubuntu 22.04) and Windows 10/11
+# Python:   3.11+
+# Install:  pip install -r requirements.txt
+# =============================================================================
+
+# ===========================================================================
+#  GLOBAL DEPENDENCIES — Required by ALL schemes (ours + all 4 baselines)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Core Cryptography (Global)
+# ---------------------------------------------------------------------------
+cryptography>=43.0.0            # ML-KEM-768 (FIPS 203), AES-256-GCM, SHA-256
+pycryptodome>=3.20.0            # Symmetric crypto utilities
+
+# ---------------------------------------------------------------------------
+# Data Processing & Statistics (Global)
+# ---------------------------------------------------------------------------
+numpy>=1.26.0                   # Array operations
+scipy>=1.12.0                   # Confidence intervals (scipy.stats.t)
+pandas>=2.2.0                   # CSV reading/writing, data aggregation
+
+# ---------------------------------------------------------------------------
+# Plotting (Global)
+# ---------------------------------------------------------------------------
+matplotlib>=3.8.0               # Figure generation (vector PDF output)
+
+# ---------------------------------------------------------------------------
+# Hashing & Indexing (Global)
+# ---------------------------------------------------------------------------
+mmh3>=4.0.0                     # MurmurHash3 for Bloom filters
+bitarray>=2.9.0                 # Bitmap / bit-array operations
+
+# ---------------------------------------------------------------------------
+# Configuration (Global)
+# ---------------------------------------------------------------------------
+pyyaml>=6.0.0                   # YAML config file parsing
+
+# ---------------------------------------------------------------------------
+# Utilities (Global)
+# ---------------------------------------------------------------------------
+tqdm>=4.66.0                    # Progress bars for long-running experiments
+psutil>=5.9.0                   # System/process monitoring (FSN utilization sampling)
+
+
+# ---------------------------------------------------------------------------
+# Pairing-Based Cryptography (Global — NOT proposed-scheme-only)
+# ---------------------------------------------------------------------------
+# CORRECTED 2026-08-03: pairing was previously listed under "proposed scheme
+# only". That was wrong. Ref[41] (thingom_pq_abse) is a BASELINE and is itself
+# pairing-based: References/Ref[41].txt:510-513 defines e : I1 x I1 -> I2 over
+# two cyclic groups, with security resting on DBDH (Ref[41].txt:280-300).
+# A pairing library is therefore required to run a baseline, not just ours.
+#
+# Ref[41] publishes a TYPE-I (symmetric) pairing. Only charm-crypto provides a
+# symmetric curve (SS512); petrelic offers Type-III curves only. Reportable
+# Ref[41] runs therefore REQUIRE charm-crypto, which is Linux-only.
+# See Experiment Configuration/crypto.yaml -> thingom_pq_abse.pairing
+#
+# charm-crypto>=0.50            # Type-I (SS512) + Type-III — LINUX ONLY
+#                               # Required for reportable Ref[41] runs.
+#                               # Not on PyPI as a wheel; install separately:
+#                               #   pip install charm-crypto
+# petrelic>=0.1.5                # Type-III only. Cross-platform. DEVELOPMENT
+                                # fallback for Ref[41] — NOT reportable.
+                                # Not resolvable via PyPI as of 2026-08-23
+                                # ("No matching distribution found for
+                                # petrelic") — pinning it here made a hard
+                                # requirements.txt install abort provision.sh
+                                # before it ever reached charm-crypto, even
+                                # though provision.sh's own "Pairing backends"
+                                # step already installs it best-effort with a
+                                # `|| echo ... (dev fallback only)` guard.
+                                # Left commented rather than deleted so the
+                                # intent (Type-III dev fallback) stays
+                                # documented; that step is the sole installer.
+
+
+# ===========================================================================
+#  LOCAL DEPENDENCIES — Required only by the PROPOSED scheme (ma_lb_pq_vdse)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# ML-KEM-768 (Local — post-quantum KEM, proposed scheme only)
+# ---------------------------------------------------------------------------
+# UNVERIFIED ATTRIBUTION: the `cryptography>=43.0.0` line above claims
+# ML-KEM-768. ML-KEM landed in `cryptography` well after 43.0, so a host that
+# satisfies this file may still have no ML-KEM. Common/crypto/kem.py probes
+# several providers and reports which is live — confirm the active backend on
+# the experiment host before any reportable run.
+#
+# Install ONE of the following:
+# cryptography>=46.0            # if its asymmetric.mlkem module is present
+# liboqs-python>=0.10.0         # Open Quantum Safe; needs liboqs C library
+# kyber-py>=1.0                 # pure Python — CORRECT BUT SLOW, dev only.
+#                               # Never report a setup cost measured on it.
+
+# ---------------------------------------------------------------------------
+# Blockchain & Storage (Local — proposed scheme only, install separately)
+# ---------------------------------------------------------------------------
+# These require external infrastructure (Docker, IPFS daemon).
+# Uncomment and install when infrastructure is ready.
+#
+# hfc>=1.0.0                    # Hyperledger Fabric Python SDK
+# ipfshttpclient>=0.8.0a2       # IPFS HTTP client

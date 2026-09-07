@@ -62,7 +62,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         "--runs",
         type=int,
         default=10,
-        help="Number of measured runs per data point (default: 30).",
+        help="Number of measured runs per data point (default: 10).",
     )
     parser.add_argument(
         "--warmup",

@@ -378,7 +378,7 @@ def reportability(
     if token_scheme_keyed is False:
         reasons.append(
             "index tokens use an unkeyed H, which is invertible over the "
-            "2,006-keyword vocabulary; the keyed/unkeyed choice is undecided"
+            "2,023-keyword vocabulary; the keyed/unkeyed choice is undecided"
         )
     elif token_scheme_keyed is None:
         reasons.append("no token scheme was resolved for this run")
@@ -424,6 +424,34 @@ def reportability(
         reasons.append(
             f"measurement.repetitions is {config.measurement.repetitions}, not 10"
         )
+
+    # BLAS thread pinning. `config.verify_thread_pinning`'s own docstring says
+    # "require=True is for reportable runs", but nothing ever called it that
+    # way -- its only call site was a test passing require=False. So the pin was
+    # configured in global.yaml (`blas_threads: 1`), exported by
+    # provision.sh, RECORDED in run_meta.json by build_metadata below, and
+    # gated nowhere. Every one of the 85 banked runs carries
+    # `blas_thread_env: {OMP_NUM_THREADS: UNSET, ...}` and was still stamped
+    # `reportable: true`.
+    #
+    # That matters because numpy's BLAS claims every core by default, so an
+    # unpinned run's latency depends on the host's core count -- and this
+    # campaign is no longer single-instance-type (`environment.instance_type`
+    # was dropped 2026-08-30 so guo Exp. 2 could have the ~52 GB it needs).
+    # Unpinned BLAS across 4-vCPU and 16-vCPU hosts is exactly the
+    # cross-host incomparability the pin exists to remove.
+    #
+    # A BLOCKER rather than a note, matching the documented intent: an
+    # unpinned run is discovered on its first point instead of after a
+    # campaign. Export the variables before the run --
+    # `export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+    #  NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1` -- or source
+    # /etc/profile.d/malbpq-threads.sh, which a non-login ssh shell does not
+    # read on its own.
+    try:
+        scheme_config.verify_thread_pinning(require=True)
+    except scheme_config.ConfigError as exc:
+        reasons.append(str(exc).splitlines()[0])
 
     return (not reasons), reasons
 

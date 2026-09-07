@@ -96,7 +96,34 @@ CLAIMS = [
     # which swamps both the O(|T|)T_PRF growth and the constant it sits on.
     ("perera_lv_pqabse", "exp1_trapdoor_generation",
      "[54] / Trapdoor  O(|T|)T_PRF+T_Sig", "q", NOT_DISCRIMINABLE),
+    # Added 2026-09-07. All three had a measured curve and a tab:cost row, and
+    # neither this list nor the coverage test below reached them: the loop ran
+    # over four schemes (thingom absent) and two experiments (5 absent).
+    ("thingom_pq_abse", "exp1_trapdoor_generation",
+     "[41] / Trapdoor  O(u+q)(T_H+T_Mul)+T_E", "q", LINEAR),
+    ("yue_ge", "exp5_keyword_update",
+     "[30] / Dynamic Update  O(k)", "k", LINEAR),
+    # [35]'s row is written in `t` (keywords in a record-level index), not in
+    # the swept `k`. It is asserted linear in k because the per-keyword hash/PRF
+    # and puncturable-PRF work the row names is applied once per updated pair,
+    # which is what §V's Exp. 5 paragraph says of it.
+    ("guo_vdsse", "exp5_keyword_update",
+     "[35] / Dynamic Update  O(t)(T_H+T_PRF)+T_Punc", "k", LINEAR),
 ]
+
+#: Exp. 2 is deliberately absent from CLAIMS, and this records why so the
+#: coverage test can tell a REASONED omission from an oversight.
+#:
+#: Every Search row is written in a variable that is not the swept one. [30] is
+#: O(n_w^l), [35] O(xq), [41] (2e+1)T_P + O(e)(T_E+T_Mul), [54]
+#: O(|T|)T_L + O(n_cand)T_BF, ours O(|T_Q|)T_L -- none is a function of N. Under
+#: the constant-selectivity workload the match count rises with N, so the
+#: measured curves rise, but that growth is a property of the WORKLOAD, not a
+#: prediction any of these rows makes. §V says so itself for the proposed
+#: scheme: "the main growth arises from output-sensitive result processing".
+#:
+#: Asserting a shape here would be inventing a claim the table does not make.
+EXP2_NOT_SHAPE_ASSERTABLE = "exp2_search_latency"
 
 #: A straight line must explain this much of the variance.
 MIN_R2 = 0.95
@@ -241,6 +268,15 @@ PSA_CLAIMS = [
     ("ma_lb_pq_vdse", "psa_exp6_affected_ratio__dias",
      "Proposed(PSA) / Auth. Sync  O(a + k log t)T_H", "affected ratio", LINEAR,
      "variable_value"),
+    # Added 2026-09-07. The scope note above said the PSA track does not fork
+    # Verification, so its row was "correspondingly absent". It IS forked --
+    # PsaExp4Verification is in PSA_EXPERIMENTS and psa_exp4_verification_
+    # overhead/ holds a 10-run sweep -- so the row is assertable and was simply
+    # not being asserted. Its PSA Search row stays absent for the reason in
+    # EXP2_NOT_SHAPE_ASSERTABLE, which does not depend on the construction.
+    ("ma_lb_pq_vdse", "psa_exp4_verification_overhead",
+     "Proposed(PSA) / Verification  O(r log t)T_H + O(r)T_BC", "r", LINEAR,
+     "variable_value"),
 ]
 
 
@@ -356,9 +392,15 @@ def test_every_measurable_cost_row_is_covered():
     """
     covered = {(scheme, exp) for scheme, exp, _, _, _ in CLAIMS}
     missing = []
-    for scheme in ("ma_lb_pq_vdse", "guo_vdsse", "yue_ge", "perera_lv_pqabse"):
+    # thingom_pq_abse was absent from this tuple, so its Exp. 1 curve -- and the
+    # tab:cost row O(u+q)(T_H+T_Mul)+T_E above it -- went unasserted while the
+    # docstring claimed full coverage. Exp. 5 was absent from the pairs for the
+    # same reason: [30]'s O(k) and [35]'s update row both have curves.
+    for scheme in ("ma_lb_pq_vdse", "guo_vdsse", "yue_ge", "perera_lv_pqabse",
+                   "thingom_pq_abse"):
         for number, name in ((1, "exp1_trapdoor_generation"),
-                             (4, "exp4_verification_overhead")):
+                             (4, "exp4_verification_overhead"),
+                             (5, "exp5_keyword_update")):
             path = REPO / "Schemes" / scheme / name / "results.csv"
             if path.is_file() and (scheme, name) not in covered:
                 missing.append(f"{scheme}/{name}")

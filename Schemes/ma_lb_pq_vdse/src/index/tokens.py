@@ -46,7 +46,7 @@ Three properties follow, each pinned by a test:
 Option D reduces the lookup key to a function of the keyword alone. If that
 function is an unkeyed hash, an honest-but-curious Fog Search Node recovers the
 **entire** index contents by hashing the vocabulary — and the frozen corpus's
-vocabulary is **2,006 keywords**. That is 2,006 hash evaluations to invert every
+vocabulary is **2,023 keywords**. That is 2,023 hash evaluations to invert every
 token in the index. Not a weakening introduced by Option D: the published
 four-input token is dictionary-attackable too, since ``PID_i``, ``VID_i`` and
 ``Dom_i`` are all low-entropy and enumerable. Option D only makes it trivial.
@@ -141,7 +141,7 @@ class TokenScheme:
         """``H`` as a keyed PRF — HMAC-SHA256, per ``crypto.yaml``.
 
         The instantiation the module docstring argues for: without a key, the
-        2,006-keyword vocabulary inverts every token in the index.
+        2,023-keyword vocabulary inverts every token in the index.
         """
         return cls(search_key=bytes(search_key), token_bits=token_bits)
 

@@ -125,7 +125,7 @@ Not runnable yet — `src/` is empty. Once implemented, expected invocation (mir
 python3 -m Schemes.perera_lv_pqabse.src.main \
     --experiment 1,2,3 \
     --dataset Dataset/derived \
-    --runs 30
+    --runs 10
 ```
 
 Dilithium3 availability needs checking against `Common/crypto/kem.py`'s existing multi-backend probe (currently covers ML-KEM via liboqs/cryptography/kyber-py) — liboqs also exposes Dilithium (ML-DSA), so this likely extends the same probe rather than needing a new dependency, but must be verified before implementation, not assumed.

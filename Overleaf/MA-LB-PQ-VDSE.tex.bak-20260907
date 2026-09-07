@@ -10,7 +10,7 @@
 \usepackage{amsthm}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
-\usepackage{graphicx}
+\usepackage{graphi  cx}
 \usepackage{xcolor}
 \usepackage{textcomp}
 \usepackage{hyperref}

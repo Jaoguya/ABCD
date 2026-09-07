@@ -2,13 +2,19 @@
 
 Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
-    SC_j = L1*C_j^auth + L2*C_j^index + L3*C_j^verify + L4*C_j^sync + L5*C_j^queue
+    SC_j = L1*C_j^index + L2*C_j^verify + L3*C_j^sync + L4*C_j^queue
 
-    C_j^auth   = |P_Q|                  authorization policies in the query
     C_j^index  = |Cand_Q^(j)|           estimated candidate set size
     C_j^verify = |R_Q^(j)| * log N_j    predicted matches x log entry count
-    C_j^sync   = |VID_U - VID_j|        version-synchronisation cost
+    C_j^sync   = |{(ID_k,v_k) in V_Q : v_j,k < v_k}|
+                                        query-relevant authorities the node lags
     C_j^queue  = T_j^queue              queue waiting time
+
+    FOUR terms, per ``eq:search-cost``. A fifth, ``C_j^auth = |P_Q|``, belonged
+    to the previous manuscript revision and was removed here on 2026-09-07; see
+    :class:`CostVector`. ``C_j^sync`` is implemented as the SCALAR
+    ``|VID_U - VID_j|`` rather than the lag count above -- divergence D2, whose
+    scalar ``vid`` runs through the whole Option D construction.
 
     FSN* = arg min_j SC_j                                      (Alg. 1)
 
@@ -23,9 +29,9 @@ it was scheduling, and Exp. 7's throughput would measure the scheduler.
 :func:`estimate_costs` therefore does O(q) dict lookups and one bitmap popcount.
 
 **Normalization is ours, and it is load-bearing** (``scheduler.yaml →
-normalization``). The five published estimators have incommensurable units and
-magnitudes: at the §6 defaults ``|P_Q|`` is O(1), ``|Cand_Q^(j)|`` is O(10^4),
-``|R|*log N`` is O(10^3), ``|VID_U - VID_j|`` is O(1), and ``T_j^queue`` is a time
+normalization``). The four published estimators have incommensurable units and
+magnitudes: at the §6 defaults ``|Cand_Q^(j)|`` is O(10^4), ``|R|*log N`` is
+O(10^3), ``|VID_U - VID_j|`` is O(1), and ``T_j^queue`` is a time
 in nanoseconds. Applying raw weights would let ``C_index`` dominate by orders of
 magnitude regardless of the lambdas, making the weight vector — and with it the
 AASS claim — vacuous. Each term is mapped to [0,1] by dividing by the maximum
@@ -238,7 +244,7 @@ def synchronized_version(node: FogSearchNode, request: SearchRequest) -> int:
 
 
 def estimate_costs(node: FogSearchNode, request: SearchRequest) -> CostVector:
-    """The five raw terms of Phase VI Step 3 for one node."""
+    """The four raw terms of Phase VI Step 3 for one node."""
     entries = node.entry_count
     # log N_j: the base is a constant factor that normalization and lambda_3
     # absorb, so log2 is chosen for being the natural unit of a binary tree
@@ -395,7 +401,7 @@ class Scheduler:
     def score(
         self, candidates: Sequence[FogSearchNode], request: SearchRequest
     ) -> Tuple[NodeCost, ...]:
-        """The five weighted terms for each candidate — AASS's rule, alone."""
+        """The four weighted terms for each candidate — AASS's rule, alone."""
         raw = tuple(estimate_costs(node, request) for node in candidates)
         normalized = normalize(
             raw,

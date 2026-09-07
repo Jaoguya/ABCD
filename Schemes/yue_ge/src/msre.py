@@ -18,7 +18,7 @@ server is not trusted to honor a delete flag; it is made *unable* to decrypt.
 Correctness error comes only from the Bloom filter false positive, which the
 paper states plainly (§IV-A, Definition 1) rather than hiding.
 
-Primitives are the repo's shared ones (README §245: primitives a paper *cites*
+Primitives are the repo's shared ones (README §8: primitives a paper *cites*
 live in ``Common/``): ``PuncturablePRF`` is the GGM-tree t-punc-PRF the paper
 specifies in §VI-B, ``BloomFilter`` the ``(b, h, n)`` filter of §III-B, and
 ``symmetric`` the ``SE`` of §IV-B.

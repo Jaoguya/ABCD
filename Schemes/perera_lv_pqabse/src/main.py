@@ -74,7 +74,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--experiment", default="all", help="all, or 1,2,3")
     parser.add_argument("--runs", type=int, default=10,
-                        help="retained runs per point (README §7 fixes 30)")
+                        help="retained runs per point (README §7 fixes 10)")
     parser.add_argument("--warmup", type=int, default=5,
                         help="discarded warm-ups (README §7 fixes 5)")
     parser.add_argument("--seed", type=int, default=20260829)

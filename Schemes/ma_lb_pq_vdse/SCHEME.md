@@ -256,14 +256,14 @@ python3 -m Schemes.ma_lb_pq_vdse.src.main \
     --experiment all \
     --config "Experiment Configuration/global.yaml" \
     --dataset Dataset/derived \
-    --runs 30
+    --runs 10
 
 # Single experiment
 python3 -m Schemes.ma_lb_pq_vdse.src.main \
     --experiment 2 \
     --config "Experiment Configuration/global.yaml" \
     --dataset Dataset/derived \
-    --runs 30
+    --runs 10
 ```
 
 ### Windows (PowerShell)
@@ -274,14 +274,14 @@ python -m Schemes.ma_lb_pq_vdse.src.main `
     --experiment all `
     --config "Experiment Configuration/global.yaml" `
     --dataset Dataset/derived `
-    --runs 30
+    --runs 10
 
 # Single experiment
 python -m Schemes.ma_lb_pq_vdse.src.main `
     --experiment 2 `
     --config "Experiment Configuration/global.yaml" `
     --dataset Dataset/derived `
-    --runs 30
+    --runs 10
 ```
 
 ---

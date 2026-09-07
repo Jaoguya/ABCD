@@ -61,7 +61,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--experiment", type=str, default="1,2,3,4,5",
                         help="Comma-separated experiment numbers (default: all).")
     parser.add_argument("--runs", type=int, default=10,
-                        help="Measured runs per data point (default: 30).")
+                        help="Measured runs per data point (default: 10).")
     parser.add_argument("--warmup", type=int, default=5,
                         help="Warm-up runs to discard (default: 5).")
     parser.add_argument("--output-dir", type=Path,

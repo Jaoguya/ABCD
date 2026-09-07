@@ -129,7 +129,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dataset", default=None, help="derived corpus directory")
     parser.add_argument(
         "--runs", type=int, default=None,
-        help="retained runs per point (README §7 fixes 30)",
+        help="retained runs per point (README §7 fixes 10)",
     )
     parser.add_argument(
         "--warmups", type=int, default=None,
