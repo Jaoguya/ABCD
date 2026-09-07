@@ -258,9 +258,12 @@ class ExperimentSpec:
 
 @dataclass(frozen=True)
 class SchedulerWeights:
-    """lambda_1..lambda_5 of the AASS score (Phase VI Step 3)."""
+    """lambda_1..lambda_4 of the AASS score (Phase VI Step 3).
 
-    auth: float
+    FOUR, matching ``eq:search-cost``. A fifth weight on ``C^auth`` was carried
+    from the previous manuscript revision; see ``scheduler/aass.py::CostVector``.
+    """
+
     index: float
     verify: float
     sync: float
@@ -272,8 +275,8 @@ class SchedulerWeights:
     def is_fixed(self) -> bool:
         return self.status == "fixed"
 
-    def as_tuple(self) -> Tuple[float, float, float, float, float]:
-        return (self.auth, self.index, self.verify, self.sync, self.queue)
+    def as_tuple(self) -> Tuple[float, float, float, float]:
+        return (self.index, self.verify, self.sync, self.queue)
 
     def total(self) -> float:
         return sum(self.as_tuple())
@@ -301,11 +304,10 @@ class SchedulerConfig:
         sweep = _require(raw, "sweep", source="scheduler.yaml")
         return cls(
             weights=SchedulerWeights(
-                auth=float(_require(weights_block, "lambda_1_auth", source="scheduler.yaml")),
-                index=float(_require(weights_block, "lambda_2_index", source="scheduler.yaml")),
-                verify=float(_require(weights_block, "lambda_3_verify", source="scheduler.yaml")),
-                sync=float(_require(weights_block, "lambda_4_sync", source="scheduler.yaml")),
-                queue=float(_require(weights_block, "lambda_5_queue", source="scheduler.yaml")),
+                index=float(_require(weights_block, "lambda_1_index", source="scheduler.yaml")),
+                verify=float(_require(weights_block, "lambda_2_verify", source="scheduler.yaml")),
+                sync=float(_require(weights_block, "lambda_3_sync", source="scheduler.yaml")),
+                queue=float(_require(weights_block, "lambda_4_queue", source="scheduler.yaml")),
                 status=str(_require(weights_block, "status", source="scheduler.yaml")),
                 provisional=bool(weights_block.get("provisional", True)),
             ),

@@ -129,14 +129,20 @@ def sync_nodes(nodes, authorized, *, vid: int = 1):
 # ===========================================================================
 # scheduler/aass.py — the request
 # ===========================================================================
-def test_request_reports_the_policy_count():
-    """C_j^auth = |P_Q| — the authorization policies involved in the query."""
+def test_request_reports_its_distinct_domains():
+    """`domains` drives `_candidates`; `|P_Q|` no longer enters the cost.
+
+    This asserted `request.policy_count == 2` as well, the input to the C^auth
+    term of the previous manuscript revision. eq:search-cost states four terms
+    and none of them is C^auth, so the property was removed with it on
+    2026-09-07 rather than left as dead code.
+    """
     request = aass_mod.SearchRequest(
         tokens=(b"t1",),
         authorized=(("dom0", "p0"), ("dom1", "p1"), ("dom2", "p1")),
         vid_u=0,
     )
-    assert request.policy_count == 2       # p0, p1 — distinct policies
+    assert not hasattr(request, "policy_count")
     assert request.domains == ("dom0", "dom1", "dom2")
 
 
@@ -156,8 +162,15 @@ def test_request_refuses_an_unauthorized_query():
 # ===========================================================================
 # scheduler/aass.py — the cost model
 # ===========================================================================
-def test_costs_are_the_five_published_terms():
-    """SC_j = L1*C^auth + L2*C^index + L3*C^verify + L4*C^sync + L5*C^queue."""
+def test_costs_are_the_four_published_terms():
+    """SC_j = L1*C^index + L2*C^verify + L3*C^sync + L4*C^queue.
+
+    FOUR, per eq:search-cost. This asserted five and named C^auth first,
+    carried from the previous manuscript revision; the current one states four
+    and the code was aligned to it on 2026-09-07. C^auth is gone entirely --
+    authorization now enters scheduling only through `_candidates`, which still
+    restricts selection to nodes serving an authorized domain.
+    """
     nodes, authorized, keywords = populated_federation()
     sync_nodes(nodes, authorized, vid=1)
     node = nodes[0]
@@ -165,12 +178,12 @@ def test_costs_are_the_five_published_terms():
     request = make_request(keywords[domain], authorized, vid_u=1)
 
     costs = aass_mod.estimate_costs(node, request)
-    assert costs.auth == float(request.policy_count)
+    assert not hasattr(costs, "auth"), "C^auth is not a term of eq:search-cost"
     assert costs.index == float(aass_mod.estimate_candidate_count(node, request))
     assert costs.sync == 0.0                    # VID_U == VID_j
     assert costs.queue == 0.0                   # empty queue
     assert costs.verify >= 0.0
-    assert len(costs.as_tuple()) == 5
+    assert len(costs.as_tuple()) == 4
 
 
 def test_cost_verify_scales_with_log_entry_count():
@@ -247,8 +260,8 @@ def test_result_estimate_bounds_the_true_count():
 def test_normalization_maps_terms_into_the_unit_interval():
     """Raw terms span orders of magnitude; unnormalized weights would be vacuous."""
     vectors = [
-        aass_mod.CostVector(auth=1, index=10000, verify=1000, sync=1, queue=5e6),
-        aass_mod.CostVector(auth=1, index=100, verify=10, sync=3, queue=1e6),
+        aass_mod.CostVector(index=10000, verify=1000, sync=1, queue=5e6),
+        aass_mod.CostVector(index=100, verify=10, sync=3, queue=1e6),
     ]
     normalized = aass_mod.normalize(vectors)
     for vector in normalized:
@@ -259,12 +272,12 @@ def test_normalization_maps_terms_into_the_unit_interval():
 def test_normalization_maps_a_degenerate_term_to_zero():
     """A term equal on every node cannot affect arg min, so it must not consume weight."""
     vectors = [
-        aass_mod.CostVector(auth=2, index=10, verify=0, sync=0, queue=0),
-        aass_mod.CostVector(auth=2, index=20, verify=0, sync=0, queue=0),
+        aass_mod.CostVector(index=10, verify=7, sync=0, queue=0),
+        aass_mod.CostVector(index=20, verify=7, sync=0, queue=0),
     ]
     normalized = aass_mod.normalize(vectors, degenerate_value=0.0)
-    # auth is identical across nodes -> 0.0 for both, despite being non-zero.
-    assert normalized[0].auth == normalized[1].auth == 0.0
+    # verify is identical across nodes -> 0.0 for both, despite being non-zero.
+    assert normalized[0].verify == normalized[1].verify == 0.0
     # index differs -> retained and scaled.
     assert normalized[0].index < normalized[1].index == 1.0
 
@@ -272,7 +285,7 @@ def test_normalization_maps_a_degenerate_term_to_zero():
 def test_normalization_preserves_the_ordering_of_a_varying_term():
     """arg min must be unchanged by normalization, or it changes the decision."""
     vectors = [
-        aass_mod.CostVector(auth=0, index=i * 10, verify=0, sync=0, queue=0)
+        aass_mod.CostVector(index=i * 10, verify=0, sync=0, queue=0)
         for i in (3, 1, 2)
     ]
     normalized = aass_mod.normalize(vectors)
@@ -289,8 +302,8 @@ def test_normalization_can_flip_arg_min_against_raw_scoring():
     node and normalized scoring picks the fresh one — the whole point of the rule.
     """
     weights = config_mod.load().scheduler.weights
-    fresh = aass_mod.CostVector(auth=1, index=10000, verify=0, sync=0, queue=0)
-    stale = aass_mod.CostVector(auth=1, index=9000, verify=0, sync=100, queue=0)
+    fresh = aass_mod.CostVector(index=10000, verify=0, sync=0, queue=0)
+    stale = aass_mod.CostVector(index=9000, verify=0, sync=100, queue=0)
 
     # Raw: C_index dominates, so the stale node scores lower and would be chosen.
     assert stale.score(weights) < fresh.score(weights)
@@ -335,9 +348,9 @@ def test_scheduler_scores_from_normalized_terms():
 
 
 def test_normalization_handles_all_zero_and_empty_inputs():
-    zeros = [aass_mod.CostVector(0, 0, 0, 0, 0)] * 2
+    zeros = [aass_mod.CostVector(0, 0, 0, 0)] * 2
     for vector in aass_mod.normalize(zeros):
-        assert vector.as_tuple() == (0.0, 0.0, 0.0, 0.0, 0.0)
+        assert vector.as_tuple() == (0.0, 0.0, 0.0, 0.0)
     assert aass_mod.normalize([]) == ()
 
 
@@ -582,7 +595,7 @@ def test_scheduler_retains_the_evidence_for_its_decision():
 
 def test_scheduler_score_is_the_weighted_sum():
     weights = config_mod.load().scheduler.weights
-    vector = aass_mod.CostVector(auth=0.1, index=0.2, verify=0.3, sync=0.4, queue=0.5)
+    vector = aass_mod.CostVector(index=0.2, verify=0.3, sync=0.4, queue=0.5)
     expected = sum(
         term * weight for term, weight in zip(vector.as_tuple(), weights.as_tuple())
     )

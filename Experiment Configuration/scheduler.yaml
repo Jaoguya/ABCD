@@ -86,11 +86,18 @@ weights:
   # Uniform starting point. Uniform is the honest prior: it encodes no belief
   # that any one cost term matters more, so the sweep has to earn every
   # deviation from it.
-  lambda_1_auth: 0.2
-  lambda_2_index: 0.4
-  lambda_3_verify: 0.1
-  lambda_4_sync: 0.2
-  lambda_5_queue: 0.1
+  # FOUR weights, matching eq:search-cost. A fifth on C^auth was carried from
+  # the previous manuscript revision and removed 2026-09-07; see
+  # scheduler/aass.py::CostVector. The surviving four keep the RATIO the
+  # 2026-08-28 held-out sweep chose (0.4 : 0.1 : 0.2 : 0.1), renormalised to
+  # sum to one. Renormalising rather than re-sweeping is the conservative
+  # move: it changes no relative preference the sweep expressed among these
+  # four, where a fresh sweep would also re-answer questions the sweep already
+  # settled. Recorded so it is not mistaken for a new sweep result.
+  lambda_1_index: 0.5
+  lambda_2_verify: 0.125
+  lambda_3_sync: 0.25
+  lambda_4_queue: 0.125
   sum_to_one: true                   # benchmark: with normalized terms, only
                                      # the direction of the vector matters
 

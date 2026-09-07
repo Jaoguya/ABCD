@@ -105,27 +105,40 @@ class SearchRequest:
             raise ValueError(f"VID_U must be non-negative, got {self.vid_u}")
 
     @property
-    def policy_count(self) -> int:
-        """``|P_Q|`` — the authorization policies involved in the query."""
-        return len({policy for _, policy in self.authorized})
-
-    @property
     def domains(self) -> Tuple[str, ...]:
         return tuple(sorted({domain for domain, _ in self.authorized}))
 
 
 @dataclass(frozen=True)
 class CostVector:
-    """The five published terms for one node, before weighting."""
+    """The four published terms for one node, before weighting.
 
-    auth: float
+    ``eq:search-cost`` of the manuscript reads
+
+        SC_j = lambda_1 C_j^index + lambda_2 C_j^verify
+             + lambda_3 C_j^sync  + lambda_4 C_j^queue
+
+    -- FOUR terms. A fifth, ``C_j^auth = |P_Q|``, was carried here and in
+    ``scheduler.yaml`` (labelled "published") from the previous manuscript
+    revision, which did include it. The current revision dropped it, so the
+    code carried a rule the paper does not state and the lambda indices did not
+    line up: a reader reproducing from eq:search-cost would have built a
+    different scheduler. Aligned to the paper on 2026-09-07.
+
+    **This is a real reduction in what AASS considers.** ``C^auth`` was the
+    authorization-awareness term; without it the rule weighs index size,
+    verification depth, synchronization staleness and queue depth, and the
+    authorization structure enters only through ``_candidates``, which still
+    restricts scheduling to nodes serving an authorized domain.
+    """
+
     index: float
     verify: float
     sync: float
     queue: float
 
-    def as_tuple(self) -> Tuple[float, float, float, float, float]:
-        return (self.auth, self.index, self.verify, self.sync, self.queue)
+    def as_tuple(self) -> Tuple[float, float, float, float]:
+        return (self.index, self.verify, self.sync, self.queue)
 
     def score(self, weights: scheme_config.SchedulerWeights) -> float:
         """``SC_j`` for this (normalized) vector."""
@@ -232,7 +245,6 @@ def estimate_costs(node: FogSearchNode, request: SearchRequest) -> CostVector:
     # (which is what the verification cost actually walks).
     log_entries = math.log2(entries) if entries > 1 else 0.0
     return CostVector(
-        auth=float(request.policy_count),
         index=float(estimate_candidate_count(node, request)),
         verify=float(estimate_result_count(node, request)) * log_entries,
         sync=float(abs(request.vid_u - synchronized_version(node, request))),
