@@ -198,7 +198,7 @@ class User:
 
     @property
     def authority_count(self) -> int:
-        """``N_U``. Not specified in §V — see ``PHASE_III_PLAN.md``."""
+        """``N_U``. Not specified in §VI — see ``PHASE_III_PLAN.md``."""
         return len(self.shares)
 
     def attribute_set(self) -> Tuple[str, ...]:

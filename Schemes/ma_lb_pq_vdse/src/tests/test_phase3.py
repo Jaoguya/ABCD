@@ -1399,7 +1399,7 @@ class UnmintableOperations(StubABEOperations):
 def test_phase_iii_end_to_end_for_a_data_user_and_a_data_owner():
     """Steps 1, 3 and 4 for both roles across 2 of 4 authorities.
 
-    N_U = 2 rather than 4: §V does not fix N_U, and partial enrolment is what
+    N_U = 2 rather than 4: §VI does not fix N_U, and partial enrolment is what
     exercises the multi-authority path — full enrolment would hide any bug that
     only appears when a user lacks an authority.
     """

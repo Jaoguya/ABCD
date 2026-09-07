@@ -2,7 +2,7 @@
 
 This drift is not hypothetical. On 2026-09-03 the campaign moved 30 -> 10 in
 ``global.yaml`` while sixteen docstrings, one ``ConfigError`` message and
-Section V of the manuscript still said 30 -- and the run_meta reportability
+Section VI of the manuscript still said 30 -- and the run_meta reportability
 gate in ``provenance.py`` still *enforced* 30, stamping correct numbers as not
 reportable. Fixing one gate did not fix the other, so the count is pinned here
 from all three sources at once rather than trusted to discipline.
@@ -24,7 +24,7 @@ import re
 # Every read below is explicitly utf-8. Without it Python picks the platform
 # default -- cp1252 on Windows -- and these tests die on the first non-ASCII
 # byte in README.md or the manuscript before they can assert anything. They
-# were failing that way silently, which is how the Section V repetition
+# were failing that way silently, which is how the Section VI repetition
 # count drifted from the config without anyone noticing.
 from pathlib import Path
 
@@ -61,11 +61,11 @@ def test_readme_failure_policy_matches_the_config():
 
 @pytest.mark.skipif(not MANUSCRIPT.exists(), reason="manuscript not checked out")
 def test_manuscript_section_v_matches_the_config():
-    """Section V's claimed replication count is the one a reviewer checks."""
+    """Section VI's claimed replication count is the one a reviewer checks."""
     match = re.search(r"experiment was repeated (\d+) times", MANUSCRIPT.read_text(encoding="utf-8"))
-    assert match, "Section V no longer states 'experiment was repeated N times'"
+    assert match, "Section VI no longer states 'experiment was repeated N times'"
     assert int(match.group(1)) == _configured_repetitions(), (
-        "Section V and global.yaml disagree on the replication count -- "
+        "Section VI and global.yaml disagree on the replication count -- "
         "the paper would state a count the data does not have"
     )
 

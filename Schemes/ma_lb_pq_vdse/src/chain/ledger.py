@@ -1,6 +1,6 @@
 """Consortium-blockchain adapter for MA-LB-PQ-VDSE.
 
-The manuscript's ledger is Hyperledger Fabric v2.5 (§V), storing "compact
+The manuscript's ledger is Hyperledger Fabric v2.5 (§VI), storing "compact
 metadata, including ciphertext commitments, Merkle roots, version-delta
 commitments, public parameters of multiple Attribute Authorities, revocation
 records, and audit logs" — never the encrypted data itself.

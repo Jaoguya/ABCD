@@ -39,7 +39,7 @@ D-G are the simplex corners: if even the corners fall inside the band, the
 insensitivity result is about as strong as this instrument can make it.
 
 Both concurrencies are run because they ask different questions. 100 is where
-AASS's throughput margin is thinnest; 5000 is where §V's surviving claim —
+AASS's throughput margin is thinnest; 5000 is where §VI's surviving claim —
 bounded peak queue depth — lives. A band that holds across the reported range
 is worth much more than one at a single corner.
 
@@ -199,7 +199,7 @@ def report_band(rows: List[Dict[str, Any]]) -> None:
               f"CI sum = {tol:.2f}")
         rel_b = tol / a["throughput_mean"] if a["throughput_mean"] else float("inf")
         if gap > tol:
-            print("  -> A and B SEPARATE: λ1 inertness is REFUTED — the §V "
+            print("  -> A and B SEPARATE: λ1 inertness is REFUTED — the §VI "
                   "disclosure built on it must be withdrawn")
         elif rel_b > PRECISION_TARGET:
             print(f"  -> INCONCLUSIVE: they agree, but the CI sum is "

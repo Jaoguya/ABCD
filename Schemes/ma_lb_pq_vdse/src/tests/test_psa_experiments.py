@@ -4,7 +4,7 @@ These pin the SHAPE of each experiment, not its latency: timings depend on the
 host, and the whole point of the track is to be run on the campaign host where
 the Option D numbers were taken. What is asserted here is what a number means —
 that ``|T_Q| = q·|P_U|`` really is the token count, that Exp. 6's arms differ in
-the way §V says they do, that non-interference actually excludes work.
+the way §VI says they do, that non-interference actually excludes work.
 """
 
 from __future__ import annotations
@@ -27,6 +27,18 @@ def config():
     return scheme_config.load()
 
 
+@pytest.fixture
+def source():
+    """The record source every corpus-backed PSA experiment needs.
+
+    Exp. 1 became corpus-backed when it stopped inventing `kw:00000` keywords
+    and `hospital/pol0` policies, so it now takes the same source Exp. 2 does.
+    """
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as option_d_mod
+
+    return option_d_mod.SyntheticRecordSource()
+
+
 def _run(experiment, value):
     return experiment.measure(experiment.prepare(value))
 
@@ -34,10 +46,10 @@ def _run(experiment, value):
 # ===========================================================================
 # D7 — |T_Q| = q·|P_U|
 # ===========================================================================
-def test_exp1_token_count_is_the_product(config):
+def test_exp1_token_count_is_the_product(config, source):
     """|T_Q| = q*|P_U| on every point of every arm."""
     for variant in psa.PSA_EXP1_VARIANTS:
-        experiment = psa.build(1, config, variant=variant)
+        experiment = psa.build(1, config, variant=variant, source=source)
         scope = psa.policy_scope_of(variant)
         for q in experiment.values:
             sample = _run(experiment, q)
@@ -46,14 +58,14 @@ def test_exp1_token_count_is_the_product(config):
             assert sample.secondaries["policies"] == scope
 
 
-def test_exp1_sweeps_both_manuscript_dimensions(config):
-    """§V: "q is varied as {1,5,10,15,20} while |P_U| is varied as {1,2,4,8}".
+def test_exp1_sweeps_both_manuscript_dimensions(config, source):
+    """§VI: "q is varied as {1,5,10,15,20} while |P_U| is varied as {1,2,4,8}".
 
     q is the sweep and |P_U| is the ARM, so the two dimensions are the sweep
     values and the variant list respectively -- one curve per scope, which is
     how a reader expects a two-variable sweep to be drawn.
     """
-    experiment = psa.PsaExp1TokenGeneration(config=config)
+    experiment = psa.PsaExp1TokenGeneration(config=config, source=source)
     assert experiment.variable == "keywords"
     assert set(experiment.values) == set(config.experiment("exp1").values)
     assert {psa.policy_scope_of(v) for v in psa.PSA_EXP1_VARIANTS} == set(
@@ -61,16 +73,16 @@ def test_exp1_sweeps_both_manuscript_dimensions(config):
     )
 
 
-def test_exp1_arms_scale_the_curve_by_exactly_their_scope(config):
+def test_exp1_arms_scale_the_curve_by_exactly_their_scope(config, source):
     """The identity, read across arms rather than along one.
 
     At a fixed q, doubling |P_U| must double |T_Q|. That is the whole content
     of |T_Q| = q|P_U|, and it is what makes the four curves parallel on the
     log axis instead of converging.
     """
-    baseline = psa.build(1, config, variant="pu1")
+    baseline = psa.build(1, config, variant="pu1", source=source)
     for variant in psa.PSA_EXP1_VARIANTS:
-        experiment = psa.build(1, config, variant=variant)
+        experiment = psa.build(1, config, variant=variant, source=source)
         scope = psa.policy_scope_of(variant)
         for q in experiment.values:
             one = _run(baseline, q).secondaries["tokens"]
@@ -78,14 +90,14 @@ def test_exp1_arms_scale_the_curve_by_exactly_their_scope(config):
             assert many == one * scope
 
 
-def test_exp1_default_arm_is_the_singleton_scope(config):
+def test_exp1_default_arm_is_the_singleton_scope(config, source):
     """An unparameterised build must not silently pick a scope."""
-    assert psa.PsaExp1TokenGeneration(config=config).policy_scope == 1
+    assert psa.PsaExp1TokenGeneration(config=config, source=source).policy_scope == 1
 
 
-def test_exp1_rejects_an_unknown_arm(config):
+def test_exp1_rejects_an_unknown_arm(config, source):
     with pytest.raises(ValueError, match="unknown PSA Exp. 1 variant"):
-        psa.build(1, config, variant="round_robin")
+        psa.build(1, config, variant="round_robin", source=source)
 
 
 def test_exp1_tokens_are_distinct(config):
@@ -211,7 +223,7 @@ def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(conf
 
 
 def test_exp6_dias_advantage_over_full_state_narrows_toward_one(config):
-    """§V: the advantage "narrows because a larger portion becomes dependency
+    """§VI: the advantage "narrows because a larger portion becomes dependency
     relevant". At 100% the two must coincide in work."""
     dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
     full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
@@ -243,8 +255,9 @@ def test_corpus_backed_experiments_refuse_to_run_without_a_source(config):
     corpus seam exists to close -- it would produce a plausible curve from
     data the paper never claims.
     """
-    with pytest.raises(ValueError, match="needs a record source"):
-        psa.build(2, config)
+    for number in (1, 2):
+        with pytest.raises(ValueError, match="needs a record source"):
+            psa.build(number, config)
 
 
 def test_build_refuses_an_experiment_with_no_psa_form(config):

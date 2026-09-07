@@ -20,7 +20,7 @@ consequences, each of which a test pins:
   (``PHASE_IV_PLAN.md`` §1.5 option D) the token does not encode the policy, so
   re-policying an entry touches no posting list. That is what keeps Exp. 5
   incremental instead of re-tokenizing.
-* **Authorization filtering precedes matching.** §V: "authorization-aware
+* **Authorization filtering precedes matching.** §VI: "authorization-aware
   bitmap filtering removes unauthorized ciphertexts **before** encrypted matching,
   so the online search cost depends mainly on the effective authorized candidate
   set ``n_eff``". ``n_eff`` is therefore measured here, not derived.
@@ -65,7 +65,7 @@ class DSIError(RuntimeError):
 class SearchStatistics:
     """The Exp. 2 secondary metrics, measured rather than derived.
 
-    ``n_eff`` is "the effective authorized candidate set" of §V — the
+    ``n_eff`` is "the effective authorized candidate set" of §VI — the
     entries that survive bitmap filtering AND match a query token.
     ``entries_traversed`` is what the search actually examined, and
     ``prune_ratio`` is the fraction of the shard the bitmap removed before
@@ -294,7 +294,7 @@ class DynamicSearchIndex:
         self._entries[ordinal] = updated
         return updated
 
-    # -- authorization filtering (§V :1892) ---------------------------------
+    # -- authorization filtering (§VI :1892) ---------------------------------
     def authorized_bitmap(
         self, authorized: Iterable[Tuple[str, str]]
     ) -> bitarray:
@@ -326,12 +326,12 @@ class DynamicSearchIndex:
     ) -> Tuple[Tuple[IndexEntry, ...], SearchStatistics]:
         """Match ``tokens`` against the authorized candidate set.
 
-        Filter-then-match, in that order, because §V claims the online
+        Filter-then-match, in that order, because §VI claims the online
         cost depends on ``n_eff`` rather than total index size — an
         implementation that matched first and filtered after would produce the
         same results and refute its own claim.
 
-        ``conjunctive=True`` implements the q-keyword conjunctive query of §V; the
+        ``conjunctive=True`` implements the q-keyword conjunctive query of §VI; the
         corpus's ``min_keywords_per_record: 5`` exists so that such a query can
         match at all.
         """
@@ -350,7 +350,7 @@ class DynamicSearchIndex:
         # 2026-09-06: one keyword returned 8 hits on a record's own shard, and
         # that record's own 5 keywords returned 0 after traversing 26 entries.
         #
-        # §V's search is a q-keyword conjunctive query over RECORDS, and this
+        # §VI's search is a q-keyword conjunctive query over RECORDS, and this
         # docstring already said `min_keywords_per_record: 5` exists "so that
         # such a query can match at all" -- which is only true of a per-record
         # reading. So the intersection is over CIDs, and the returned entries

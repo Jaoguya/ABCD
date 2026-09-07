@@ -639,9 +639,14 @@ def test_lifecycle_outsource_search_verify():
     assert decision.accepted
     authorized = decision.authorized_shards
 
-    # Phase VI Step 3.
+    # Phase VI Step 3. V_Q comes from the AIM's decision, which is where the
+    # manuscript puts it: the AIM holds the ledger-backed authority state that
+    # C_j^sync measures a node's lag against.
     request = aass_mod.SearchRequest(
-        tokens=token.tokens, authorized=authorized, vid_u=token.vid_u
+        tokens=token.tokens,
+        authorized=authorized,
+        vid_u=token.vid_u,
+        query_versions=decision.query_versions,
     )
     selection = aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(
         system.nodes, request
@@ -785,12 +790,18 @@ def test_lifecycle_revocation_invalidates_a_stale_profile_and_bundle():
     ).accepted
 
 
-def test_lifecycle_vid_namespaces_stay_coherent():
-    """The four VID counters must remain comparable where they are subtracted.
+def test_lifecycle_c_sync_counts_authorities_the_node_has_not_caught_up_on():
+    """C_j^sync = |{(ID_k, v_k) in V_Q : v_{j,k} < v_k}| — Phase VI Step 3.
 
-    VID_U (user) and VID_j (FSN) both aggregate as the minimum, so
-    C_j^sync = |VID_U - VID_j| subtracts like for like. The record's VID_i and the
-    authority's VID_k are separate counters and are not compared.
+    A COUNT over the query-relevant authorities, read per authority from the
+    Meta_i the node has applied. It replaces `|VID_U - VID_j|`, which belonged to
+    the previous manuscript revision and measured the USER's staleness rather
+    than the NODE's: the term exists so AASS avoids routing to a node that
+    cannot yet serve the query's authorization state, and a user's own profile
+    version says nothing about that.
+
+    The three states below are the ones the term must separate: the node is
+    current, the node is behind, and DIAS has brought it back up to date.
     """
     system = deployment(records_per_domain=1)
     domain = DOMAINS[0]
@@ -800,15 +811,29 @@ def test_lifecycle_vid_namespaces_stay_coherent():
         "DU-1", (domain,)
     )
 
-    # Fresh: user and node agree, so the sync term is zero.
+    # Current: the node has applied this authority's latest Meta_i, so nothing
+    # in V_Q lags.
     assert profile.vid == node.vid_for_domains([domain]) == authority.vid
     token = token_mod.generate_search_token(system.scheme, profile, ["cond:0:0"])
+    shards = ((domain, system.records_in(domain)[0]["record"].policy_id),)
+    current_vq = ((authority.authority_id, authority.vid),)
     request = aass_mod.SearchRequest(
         tokens=token.tokens,
-        authorized=((domain, system.records_in(domain)[0]["record"].policy_id),),
+        authorized=shards,
         vid_u=token.vid_u,
+        query_versions=current_vq,
     )
     assert aass_mod.estimate_costs(node, request).sync == 0.0
+
+    # Behind: an authority the query depends on has moved and this node has not
+    # received the delta yet. One authority in V_Q, one lag.
+    ahead = aass_mod.SearchRequest(
+        tokens=token.tokens,
+        authorized=shards,
+        vid_u=token.vid_u,
+        query_versions=((authority.authority_id, authority.vid + 1),),
+    )
+    assert aass_mod.estimate_costs(node, ahead).sync == 1.0
 
     # After a revocation the node advances; a user still on the old profile is
     # one version behind, which is exactly what C_j^sync should report.
@@ -826,7 +851,16 @@ def test_lifecycle_vid_namespaces_stay_coherent():
         aim=system.aim,
     )
     assert node.vid_for_domains([domain]) == authority.vid == profile.vid + 1
-    assert aass_mod.estimate_costs(node, request).sync == 1.0
+    # Caught up: DIAS delivered the new Meta_i, so the node no longer lags the
+    # authority's CURRENT version. The user's profile is now a version behind,
+    # and that is deliberately NOT what this term measures.
+    caught_up = aass_mod.SearchRequest(
+        tokens=token.tokens,
+        authorized=shards,
+        vid_u=token.vid_u,
+        query_versions=((authority.authority_id, authority.vid),),
+    )
+    assert aass_mod.estimate_costs(node, caught_up).sync == 0.0
 
 
 def test_lifecycle_nothing_is_reportable_on_a_stub_group():

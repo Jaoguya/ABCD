@@ -24,7 +24,7 @@ hold, and **Option D was chosen on 2026-08-10**:
 
 Policy, version and domain leave the lookup key and become (a) payload on the
 index entry, (b) the ``(domain, policy)`` bitmap key the FSN filters on, and
-(c) this compact tag. §V requires exactly this shape: "a single
+(c) this compact tag. §VI requires exactly this shape: "a single
 authorization-bound trapdoor… reused across participating domains, while each fog
 search node enforces domain-specific authorization locally… bitmap filtering
 removes unauthorized ciphertexts before encrypted matching".

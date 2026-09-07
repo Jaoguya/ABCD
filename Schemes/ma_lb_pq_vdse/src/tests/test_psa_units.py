@@ -107,7 +107,7 @@ def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, k):
 # Exp. 6 — what the PRIMARY metric can and cannot separate
 # ===========================================================================
 def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
-    """§V Exp. 6, as an ordering the figure must show.
+    """§VI Exp. 6, as an ordering the figure must show.
 
     The manuscript defines three configurations and claims a strict ranking:
     Full-State "processes substantially more state"; Incremental-All "reduces
@@ -144,7 +144,7 @@ def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
 
 
 def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config):
-    """§V: the advantage "narrows because a larger portion of the system
+    """§VI: the advantage "narrows because a larger portion of the system
     becomes dependency relevant". At 100% DIAS and Full-State evolve the same
     set, so the latency ratio must fall toward 1."""
     def ratio_at(affected):
@@ -192,7 +192,7 @@ def test_psa_exp6_fsns_touched_is_the_affected_node_set(config):
 
 
 def test_psa_exp6_full_state_redistributes_authority_state(config):
-    """§V: Full-State propagates the authorization/index state to ALL FSNs.
+    """§VI: Full-State propagates the authorization/index state to ALL FSNs.
 
     The index half is the policy loop. The authorization half is every OTHER
     authority recomputing C_k^auth and the AIM republishing it to every node --
@@ -330,7 +330,7 @@ def test_the_two_figure_families_never_share_a_filename():
 
 
 def test_psa_exp1_figure_draws_one_curve_per_scope(config):
-    """§V's second dimension must reach the figure as four series.
+    """§VI's second dimension must reach the figure as four series.
 
     `collect` takes the FIRST matching directory per scheme and stops, which is
     right for a cross-scheme figure and wrong for an arm sweep: without the
@@ -614,7 +614,7 @@ def test_psa_exp8_shares_the_ablation_and_its_metrics(config):
 
 
 def test_both_exp7_traces_use_the_published_q(config):
-    """README §6 fixes q=5 from §V; the trace used ONE keyword until 2026-09-06.
+    """README §6 fixes q=5 from §VI; the trace used ONE keyword until 2026-09-06.
 
     Asserted for BOTH constructions, because the moment they differ the Exp. 7
     comparison measures two workloads rather than two schemes.
@@ -633,7 +633,7 @@ def test_both_exp7_traces_use_the_published_q(config):
 
 
 # ===========================================================================
-# The conjunctive query — §V's q-keyword search must be answerable at all
+# The conjunctive query — §VI's q-keyword search must be answerable at all
 # ===========================================================================
 def test_a_multi_keyword_conjunctive_query_can_match(config):
     """It could not, before 2026-09-06, for ANY data.
@@ -641,7 +641,7 @@ def test_a_multi_keyword_conjunctive_query_can_match(config):
     `dsi.lookup` intersected ORDINALS. An ordinal is one index entry and an
     entry carries exactly one token, so two distinct keywords never shared one
     and a q-keyword conjunctive query returned the empty set by construction.
-    §V's central search claim is exactly such a query.
+    §VI's central search claim is exactly such a query.
     """
     from Schemes.ma_lb_pq_vdse.src.harness import experiments as od
 

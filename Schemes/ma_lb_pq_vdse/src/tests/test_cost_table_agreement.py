@@ -50,7 +50,7 @@ CONSTANT = "constant"
 #: The curve's own confidence intervals are wider than the effect any shape
 #: claim would produce, so neither confirming nor refuting the row is possible
 #: from it. Recorded rather than silently passed, because "we could not tell"
-#: is a different statement from "it matches" and §V must not cite a shape from
+#: is a different statement from "it matches" and §VI must not cite a shape from
 #: such a curve. The assertion is that the noise is really there: if the
 #: measurement is ever tightened, this fails and the row gets re-classified.
 NOT_DISCRIMINABLE = "not_discriminable"
@@ -63,7 +63,7 @@ MIN_NOISE_FRACTION = 0.20
 #:
 #: The rows below are the SUPERSEDED ``tab:cost`` -- the one the implemented
 #: Option D scheme satisfies and every banked results.csv was measured under.
-#: They are still asserted because that data is still what §V would cite today.
+#: They are still asserted because that data is still what §VI would cite today.
 #: The current manuscript's rows are different in all five cells; they are
 #: asserted separately in ``PSA_CLAIMS``, against the ``psa_*`` directories, so
 #: neither table is checked against the other's data. This is divergence D6 --
@@ -106,7 +106,7 @@ CLAIMS = [
     # [35]'s row is written in `t` (keywords in a record-level index), not in
     # the swept `k`. It is asserted linear in k because the per-keyword hash/PRF
     # and puncturable-PRF work the row names is applied once per updated pair,
-    # which is what §V's Exp. 5 paragraph says of it.
+    # which is what §VI's Exp. 5 paragraph says of it.
     ("guo_vdsse", "exp5_keyword_update",
      "[35] / Dynamic Update  O(t)(T_H+T_PRF)+T_Punc", "k", LINEAR),
 ]
@@ -119,7 +119,7 @@ CLAIMS = [
 #: O(|T|)T_L + O(n_cand)T_BF, ours O(|T_Q|)T_L -- none is a function of N. Under
 #: the constant-selectivity workload the match count rises with N, so the
 #: measured curves rise, but that growth is a property of the WORKLOAD, not a
-#: prediction any of these rows makes. §V says so itself for the proposed
+#: prediction any of these rows makes. §VI says so itself for the proposed
 #: scheme: "the main growth arises from output-sensitive result processing".
 #:
 #: Asserting a shape here would be inventing a claim the table does not make.
@@ -255,7 +255,7 @@ def test_cost_table_claim_matches_the_measurement(
 #: (scheme, dir, cell, symbol, shape, x column in results.csv)
 PSA_CLAIMS = [
     # The |P_U|=1 ARM. Exp. 1 writes one directory per authorization scope
-    # (`__pu1/2/4/8`) because §V sweeps q WHILE varying |P_U|; there is no
+    # (`__pu1/2/4/8`) because §VI sweeps q WHILE varying |P_U|; there is no
     # un-suffixed directory to read. Any arm would fit -- within an arm
     # |T_Q| = q*|P_U| is linear in q -- and pu1 is the one where |T_Q| IS q,
     # so the fitted slope is the per-token cost directly.

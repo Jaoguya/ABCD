@@ -20,12 +20,13 @@ from __future__ import annotations
 
 import json
 import platform
+import re
 import subprocess
 import sys
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
@@ -159,7 +160,7 @@ class RunMetadata:
     instance_type: str
     #: What the run ACTUALLY executed on, from the EC2 metadata service. Every
     #: baseline scheme has recorded this since c457e28; this scheme did not, so
-    #: with the pin dropped its results carried no recoverable host at all. §V
+    #: with the pin dropped its results carried no recoverable host at all. §VI
     #: discloses the host per scheme, which needs it recorded per run.
     experiment_host: Dict[str, Any]
     libraries: Dict[str, str]
@@ -175,6 +176,18 @@ class RunMetadata:
     reportable: bool
     not_reportable_because: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
+    #: The secondary metric names, IN THE ORDER results.csv writes them as
+    #: ``secondary_1_mean``, ``secondary_2_mean``, ...
+    #:
+    #: results.csv cannot carry them: this scheme's columns are positional
+    #: (``secondary_N_mean``) while the baselines write the metric's real name,
+    #: and the plotter reads the i-th column after primary for both. That made a
+    #: panel label a claim nothing checked — Exp. 8's Fig. 8(c) was labelled
+    #: "Cross-node forwards" while `cross_node_forwards` had been dropped from
+    #: the metric list, so the column at that position was peak queue depth.
+    #: Recording the names here lets Plots/generate_plots.py verify the label it
+    #: is about to draw, and refuse rather than mislabel.
+    secondary_metrics: List[str] = field(default_factory=list)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
@@ -273,6 +286,24 @@ def superseded_reason(experiment_number: int, git_commit: str) -> Optional[str]:
     return None
 
 
+def _experiment_number(experiment: str) -> Optional[int]:
+    """The sweep number an experiment directory belongs to, whatever its prefix.
+
+    Every experiment-specific gate below used to match an exact Option D name
+    (``"exp4_verification_overhead"``), so the policy-state-aware runs --
+    ``psa_exp4_verification_overhead`` and the rest -- matched NONE of them and
+    silently skipped the Fabric ledger check, the fixed-weights check and the
+    independent-FSN-processes check. They came back ``reportable: true`` with an
+    empty reason list because nothing had been asked of them.
+
+    That was harmless only while the PSA track was a side experiment. It stops
+    being harmless the moment those runs are the reported ones, so the gates key
+    on the NUMBER and accept either prefix.
+    """
+    match = re.match(r"^(?:psa_)?exp(\d+)", experiment)
+    return int(match.group(1)) if match else None
+
+
 def reportability(
     config: scheme_config.Configuration,
     *,
@@ -353,11 +384,11 @@ def reportability(
     # O(log d)T_MT with no chain term. Exp. 4 keeps the gate because §5 puts
     # "chain consistency" INSIDE its boundary in as many words.
     #
-    # §V must state the exclusion and report anchoring separately -- the treatment
+    # §VI must state the exclusion and report anchoring separately -- the treatment
     # README §5 already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 5
     # is ever brought inside the boundary, the runner must pass a ledger and
     # ``exp6_authorization_sync`` must come back into this tuple.
-    if experiment in ("exp4_verification_overhead",) and not ledger_faithful:
+    if _experiment_number(experiment) == 4 and not ledger_faithful:
         # README §1 states the ledger is Hyperledger Fabric v2.5, but the
         # harness runs chain.ledger.InProcessLedger -- whose OWN docstring says
         # it is "NOT a substitute for Fabric once Fog Search Nodes become
@@ -383,7 +414,7 @@ def reportability(
     elif token_scheme_keyed is None:
         reasons.append("no token scheme was resolved for this run")
 
-    if experiment in ("exp7_search_throughput", "exp8_load_balance"):
+    if _experiment_number(experiment) in (7, 8):
         if not config.scheduler.weights.is_fixed:
             reasons.append(
                 f"AASS weights are {config.scheduler.weights.status!r}; "
@@ -470,6 +501,7 @@ def build_metadata(
     runs: Optional[int] = None,
     warmups: Optional[int] = None,
     notes: Optional[List[str]] = None,
+    secondary_metrics: Optional[Sequence[str]] = None,
 ) -> RunMetadata:
     """Assemble ``run_meta.json`` at the start of a run."""
     reportable, reasons = reportability(
@@ -505,6 +537,7 @@ def build_metadata(
         reportable=reportable,
         not_reportable_because=reasons,
         notes=list(notes or ()),
+        secondary_metrics=list(secondary_metrics or ()),
     )
 
 

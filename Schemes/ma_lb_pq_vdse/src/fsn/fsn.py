@@ -11,11 +11,15 @@ queue.
 
 Everything here exists because Phase VI Step 3 reads it. The AASS score
 
-    SC_j = L1*C_j^auth + L2*C_j^index + L3*C_j^verify + L4*C_j^sync + L5*C_j^queue
+    SC_j = L1*C_j^index + L2*C_j^verify + L3*C_j^sync + L4*C_j^queue
 
 estimates its terms from ``|Cand_Q^(j)|`` (the shard's authorization bitmaps),
-``N_j`` (its entry count), ``|VID_U - VID_j|`` (version skew), and
-``T_j^queue`` (measured waiting time).
+``N_j`` (its entry count), the per-authority ``Meta_i`` this node has applied
+(``C_j^sync`` counts how many of ``V_Q`` it lags -- see
+``FogSearchNode.vid_for_authority``), and ``T_j^queue`` (measured waiting time).
+
+FOUR terms, per ``eq:search-cost``. A fifth, ``C_j^auth = |P_Q|``, belonged to
+the previous manuscript revision and was removed on 2026-09-07.
 
 **The node owns its shard.** An earlier revision had ``ShardState`` tracking a
 separate entry count alongside the index's own, which meant ``N_j`` had two
@@ -322,7 +326,7 @@ def assign_domains_to_fsns(
 
     ``index.yaml`` sets ``overflow_policy: pack_largest_first``, matching the rule
     ``Dataset/prepare_dataset.py`` uses to balance domains. With ``d == m`` (the
-    §V default of 4 and 4) this is one domain per node, which is what makes
+    §VI default of 4 and 4) this is one domain per node, which is what makes
     Phase VII's selective propagation observable: an update from one authority
     touches exactly one node. Exp. 3 sweeps ``d`` to 10 against ``m = 4``, where
     nodes take multiple domains.

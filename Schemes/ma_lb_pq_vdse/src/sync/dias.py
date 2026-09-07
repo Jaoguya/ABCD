@@ -45,7 +45,7 @@ is described as "the updated authority commitment" (a value, not a difference),
 and ``dRoot_i = Root_i' - Root_i`` is *written* as a subtraction but cannot be one
 — hash digests do not subtract. This module carries ``delta_vid`` as an integer
 and the other two as the updated values, which is the only reading that
-type-checks. Worth correcting in §V.
+type-checks. Worth correcting in §VI.
 """
 
 from __future__ import annotations
@@ -649,7 +649,7 @@ def affected_nodes(
 
     "Rather than broadcasting the complete index state, the AIM forwards ``IAS_i``
     **only** to FSNs that maintain the affected searchable-index shards".
-    With the §V defaults that is one node in four, and it is what Exp. 6 reports as
+    With the §VI defaults that is one node in four, and it is what Exp. 6 reports as
     FSNs touched.
     """
     targets = tuple(node for node in nodes if node.serves_domain(message.domain))

@@ -132,7 +132,7 @@ synthea:
     min_document_frequency: 5
     max_document_frequency_ratio: 0.5
     # A record with fewer keywords than the query size can never match a
-    # conjunctive q-keyword query. The manuscript fixes q=5 (§V, "each query
+    # conjunctive q-keyword query. The manuscript fixes q=5 (§VI, "each query
     # contains five keywords"), and the first corpus build had a median
     # |W_i| of 4 — 55% of records were structurally unmatchable at the
     # default query size, padding the index with entries that could never be
@@ -154,7 +154,7 @@ synthea:
   #
   # Hashing each organization independently was tried first and gave a
   # 34/21/23/22 split, because organization sizes are heavy-tailed. That
-  # contradicts §V ("uniformly distributed across four administrative
+  # contradicts §VI ("uniformly distributed across four administrative
   # healthcare domains") and would confound Exp. 8, which reports the standard
   # deviation of FSN utilization — corpus imbalance would read as scheduler
   # imbalance.
@@ -234,7 +234,7 @@ freeze:
   #
   # Supersedes SHA-256 d991c695... (1,206,159 records), which had a median
   # |W_i| of 4 against q=5 — 55% of its records could never match a default
-  # conjunctive query — and uneven domains (34/21/23/22) contradicting §V's
+  # conjunctive query — and uneven domains (34/21/23/22) contradicting §VI's
   # "uniformly distributed". Archived at ~/corpus_v1_archive/ on the
   # experiment host; never used for results.
   # RE-FROZEN 2026-08-28 onto corpus v3.

@@ -6,7 +6,7 @@ policy-relevant version state is ``V_{P_i} = {(ID_k, v_k) : AA_k ∈ AA(PID_i)}`
 ``AA_k ∉ AA(PID_i) ⟹ PV_i' = PV_i`` (eq:unaffected-policy), and DIAS's
 dependency closure starts from ``P_k^aff = {P_ℓ : AA_k ∈ AA(PID_ℓ)}``.
 
-**Section V never states how large that set is**, so its size is a `benchmark`
+**Section VI never states how large that set is**, so its size is a `benchmark`
 choice here, not a `published` one — the same provenance class as
 ``authorities.attributes_per_authority`` in ``global.yaml``, and recorded for
 the same reason.

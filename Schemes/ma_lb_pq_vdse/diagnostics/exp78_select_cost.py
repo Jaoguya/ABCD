@@ -20,9 +20,9 @@ def bench(fn, label, n=len(rs)):
 print("cost breakdown of one scheduler.select() over 4 nodes:")
 bench(lambda r: [A.estimate_candidate_count(n, r) for n in dep.nodes], "C_index  (bitmap union + popcount)")
 bench(lambda r: [A.estimate_result_count(n, r) for n in dep.nodes],    "C_verify (shortest posting list)")
-bench(lambda r: [A.synchronized_version(n, r) for n in dep.nodes],     "C_sync   (vid_for_domains)")
+bench(lambda r: [A.sync_lag(n, r) for n in dep.nodes],                 "C_sync   (V_Q lag count)")
 bench(lambda r: [n.queue_wait_ns() for n in dep.nodes],                "C_queue  (always 0)")
-bench(lambda r: [A.estimate_costs(n, r) for n in dep.nodes],           "estimate_costs (all five)")
+bench(lambda r: [A.estimate_costs(n, r) for n in dep.nodes],           "estimate_costs (all four)")
 sched = A.Scheduler('aass', config=cfg, reportable=False)
 bench(lambda r: sched.select(dep.nodes, r),                            "full select()")
 

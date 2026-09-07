@@ -179,7 +179,7 @@ class Measurement:
 class AuthorityTopology:
     """N_AA and the attribute universe — Phase I Step 2 / Phase II Step 2.
 
-    Both values are ``benchmark`` provenance: §V states neither. Fixed by team
+    Both values are ``benchmark`` provenance: §VI states neither. Fixed by team
     decision on 2026-08-08 (one authority per administrative domain).
     """
 
@@ -570,7 +570,7 @@ class Configuration:
             raise ConfigError(
                 f"index.yaml sharding.shards={self.index.shards} but there are "
                 f"{self.topology.fog_search_nodes} Fog Search Nodes; each FSN "
-                f"maintains one shard set (§V)"
+                f"maintains one shard set (§VI)"
             )
         # One authority per administrative domain (decision of 2026-08-08).
         if (
@@ -591,7 +591,7 @@ class Configuration:
         #
         # WAS `!= 30`. Reduced to 10 on the user's instruction, 2026-09-03. The
         # check is kept rather than deleted because its job is to stop the config
-        # and the MANUSCRIPT drifting apart: §V currently says "the average of 30
+        # and the MANUSCRIPT drifting apart: §VI currently says "the average of 30
         # independent runs" and must be changed to 10, or the paper states a
         # replication count the data does not have. Fewer runs also widen every
         # confidence interval -- with n=10 the t-multiplier is 2.26 against 2.05
@@ -599,7 +599,7 @@ class Configuration:
         if self.measurement.repetitions != 10:
             raise ConfigError(
                 f"measurement.repetitions is {self.measurement.repetitions}; the "
-                f"campaign is configured for 10 independent runs (§V must match)"
+                f"campaign is configured for 10 independent runs (§VI must match)"
             )
         if not 0.0 < self.measurement.confidence_interval < 1.0:
             raise ConfigError("measurement.confidence_interval must be in (0, 1)")
@@ -713,14 +713,14 @@ class Configuration:
                 f"index.yaml token_bits={self.index.token_bits} must be a whole "
                 f"number of bytes in 1..256"
             )
-        # §V names SHA-256 for both hashing and Merkle construction, and
+        # §VI names SHA-256 for both hashing and Merkle construction, and
         # crypto.yaml sets our digest width to 256 bits. Both must agree with
         # index.yaml, or a commitment would be built from a hash the manuscript
         # does not describe.
         if self.index.merkle_hash != "sha256" or self.index.token_hash != "sha256":
             raise ConfigError(
                 f"index.yaml specifies merkle.hash={self.index.merkle_hash!r} and "
-                f"dsi.token_hash={self.index.token_hash!r}; §V specifies sha256 "
+                f"dsi.token_hash={self.index.token_hash!r}; §VI specifies sha256 "
                 f"for both"
             )
         crypto_hash_bits = int(
@@ -770,13 +770,13 @@ class Configuration:
         dataset = load_dataset_config()
         dataset_corpus = dataset.get("corpus") or {}
         # These are two DIFFERENT quantities and equality was the wrong test.
-        # `global.yaml defaults.domains` is the published §V default (4,
+        # `global.yaml defaults.domains` is the published §VI default (4,
         # "four administrative healthcare domains") used by Exp. 1/2/4/5/6.
         # `dataset.yaml corpus.domains` is how many domains the corpus can
         # SUPPLY, which must cover the largest d that Exp. 3 sweeps (10). The
         # corpus was rebuilt with 10 domains on 2026-08-28 precisely so Exp. 3
         # could run its published range; requiring equality would have forced
-        # the §V default to 10 as well, contradicting the paper and changing
+        # the §VI default to 10 as well, contradicting the paper and changing
         # every other experiment's configuration.
         #
         # The real constraint is coverage: the corpus must supply at least the

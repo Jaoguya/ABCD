@@ -53,15 +53,15 @@ dsi:
 
 # -----------------------------------------------------------------------------
 # Authorization-aware bitmap filtering.
-# Source: §V Experimental Setup — "Search indexes are implemented using
+# Source: §VI Experimental Setup — "Search indexes are implemented using
 # bitmap-based authorization-aware filtering combined with authenticated Merkle
-# trees". §V states the MECHANISM but no sizes; the sizes below are benchmark.
+# trees". §VI states the MECHANISM but no sizes; the sizes below are benchmark.
 #
 # This is the structure that produces the n_eff secondary metric of Exp. 2 —
 # the only measurement that can demonstrate the PDSI claim (README §5).
 # -----------------------------------------------------------------------------
 bitmap:
-  enabled: true                 # published: §V names bitmap-based filtering
+  enabled: true                 # published: §VI names bitmap-based filtering
   # One bitmap per (domain, policy) pair over the shard's entry ordinals: the
   # AIM intersects the user's authorized (Dom, PID) bitmaps to obtain the
   # candidate set before any token comparison (Phase VI Step 2, "the request is
@@ -107,7 +107,7 @@ bloom:
 # reflects the partitioning rather than the scheduler.
 # -----------------------------------------------------------------------------
 sharding:
-  shards: 4                     # published: §V, one shard set per FSN (m=4)
+  shards: 4                     # published: §VI, one shard set per FSN (m=4)
   key: domain                   # benchmark: shard by administrative domain, so
                                 # authorization locality is real (it is an input
                                 # to C_j^auth in the AASS score) rather than
@@ -125,7 +125,7 @@ sharding:
 # Merkle commitment structure — Phase IV Step 4 / Phase VII Step 4.
 # -----------------------------------------------------------------------------
 merkle:
-  hash: sha256                  # published: §V "SHA-256 for hashing and
+  hash: sha256                  # published: §VI "SHA-256 for hashing and
                                 # Merkle-tree construction"
   batch_scope: per_record       # published: Phase IV Step 4 — "batches all
                                 # index entries associated with ONE IoMT record

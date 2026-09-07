@@ -138,6 +138,16 @@ class AuthorizationDecision:
     accepted: bool
     checks: Tuple[Check, ...]
     authorized_shards: Tuple[Tuple[str, str], ...] = ()
+    #: ``V_Q`` — the query-relevant authority state ``{(ID_k, v_k)}`` over the
+    #: authorities governing the policies of ``authorized_shards``, read from the
+    #: AIM's ledger-backed view at the moment the request was authorized.
+    #:
+    #: Phase VI Step 3's ``C_j^sync`` counts how many of these an FSN lags
+    #: behind, so the scheduler cannot evaluate ``eq:search-cost`` without it.
+    #: It is produced here, and only here, because the AIM is the party that
+    #: holds the current state: an FSN comparing against a version a *node*
+    #: supplied would be grading its own freshness.
+    query_versions: Tuple[Tuple[str, int], ...] = ()
 
     @property
     def failed_check(self) -> Optional[str]:
@@ -159,7 +169,12 @@ class AuthorizationDecision:
 
     @property
     def policy_count(self) -> int:
-        """``|P_Q|`` — what the AASS score's ``C_j^auth`` term counts."""
+        """``|P_Q|`` — the number of distinct authorized policies.
+
+        No longer a cost term: ``C_j^auth = |P_Q|`` belonged to the previous
+        manuscript revision and ``eq:search-cost`` has four terms without it.
+        Kept because Exp. 1 reports ``|T_Q| = q|P_U|`` and this is ``|P_U|``.
+        """
         return len({policy for _, policy in self.authorized_shards})
 
 
@@ -302,10 +317,18 @@ def verify_search_request(
         return AuthorizationDecision(accepted=False, checks=tuple(checks))
 
     checks.append(Check(name="permitted_domains", passed=True))
+    # V_Q, from the AIM's own view rather than from the profile: the profile's
+    # C_U was just checked equal to the AIM's latest, so the two agree here —
+    # but if they ever did not, the authoritative state is the one the ledger
+    # backs, and C_j^sync must be measured against that.
+    query_versions = tuple(
+        sorted((a, aim.meta_for_authority(a).vid) for a in set(authority_ids))
+    )
     return AuthorizationDecision(
         accepted=True,
         checks=tuple(checks),
         authorized_shards=tuple(sorted(set(shards))),
+        query_versions=query_versions,
     )
 
 

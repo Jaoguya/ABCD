@@ -110,7 +110,7 @@ class PropagationReceipt:
 def route(domain: str, nodes: Sequence[FogSearchNode]) -> Tuple[FogSearchNode, ...]:
     """The nodes authorized for ``domain`` — Step 4's "authorized FSNs".
 
-    With the §V defaults (``d = 4`` domains over ``m = 4`` nodes) this is exactly
+    With the §VI defaults (``d = 4`` domains over ``m = 4`` nodes) this is exactly
     one node, which is what makes Phase VII's selective propagation observable: an
     update reaches one node in four.
     """

@@ -188,7 +188,7 @@ class AuthorizationIndexManager:
     ) -> Tuple[FogSearchNode, ...]:
         """The nodes maintaining shards for this authority's domain.
 
-        Phase VII Step 4 forwards only to these. With the §V default of ``d = 4``
+        Phase VII Step 4 forwards only to these. With the §VI default of ``d = 4``
         domains over ``m = 4`` nodes this is one node in four, which is what makes
         the selectivity visible in Exp. 6.
         """

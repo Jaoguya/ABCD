@@ -322,10 +322,10 @@ def test_exp6_runner_passes_no_ledger():
 
 
 # ===========================================================================
-# Exp. 4 — r must count RETURNED RECORDS, the way §V and the baselines do
+# Exp. 4 — r must count RETURNED RECORDS, the way §VI and the baselines do
 # ===========================================================================
 def test_exp4_sweeps_records_not_index_entries():
-    """§V: "the number of returned encrypted RECORDS r".
+    """§VI: "the number of returned encrypted RECORDS r".
 
     prepare() used to size the deployment as ceil(r / keywords_per_record) and
     take r BUNDLES from it, so r=1000 meant 32 records carrying 1000 index

@@ -38,7 +38,7 @@ REPORTABILITY
 Every run here is built on ``SyntheticRecordSource``-style in-process data with
 no corpus behind it, so ``provenance.reportability()`` refuses it for the same
 reason it refuses any ``corpus_type: synthetic`` run. These numbers are for
-deciding whether to adopt D1-D5, not for quoting in §V.
+deciding whether to adopt D1-D5, not for quoting in §VI.
 """
 
 from __future__ import annotations
@@ -52,6 +52,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from Common.crypto import hashes, merkle  # noqa: E402
+from Common.crypto.rng import DeterministicRNG  # noqa: E402
 from Common.timing import gc_quiesced  # noqa: E402
 
 from ..index import dsi as dsi_mod  # noqa: E402
@@ -79,6 +80,10 @@ BYTES = "B"
 #: Domains, matching ``global.yaml: defaults.domains``. One AA each, as
 #: ``authority_to_domain: one_to_one`` requires.
 DOMAIN_NAMES = ("emergency", "hospital", "laboratory", "research")
+
+#: Seed for Exp. 1's keyword draw. Separate from the corpus seed so re-drawing
+#: query keywords cannot change which records exist.
+EXP1_KEYWORD_SEED = 20260907
 
 #: Fixed so a sweep is reproducible and independent of the corpus seed.
 PSA_SEARCH_KEY = b"psa-harness-search-key-32-bytes!"
@@ -166,7 +171,7 @@ class PsaDeployment:
     numbers price the CONSTRUCTION and nothing else, which is why
     ``psa_in_process`` is refused by the reportability gate.
 
-    A number for §V has to come from the frozen corpus, with its real keyword
+    A number for §VI has to come from the frozen corpus, with its real keyword
     co-occurrence and its real ``|W_i|`` (~32, not the hardcoded 6). This
     builder therefore takes the same ``source`` object ``build_deployment``
     takes, so both constructions index the identical records and a difference
@@ -270,6 +275,63 @@ def psa_build_deployment(
     return deployment
 
 
+
+#: Records read to discover the corpus's real policies and keyword vocabulary.
+#:
+#: Exp. 1 times token DERIVATION, so it needs no index -- only the real strings
+#: that go into the hash and the real ``AA(PID)`` behind each ``PV_ell``. Reading
+#: a sample rather than building a deployment keeps `prepare` cheap while making
+#: the measured inputs genuinely corpus-derived: keyword length feeds the HMAC,
+#: and the policy set fixes how many distinct ``PV`` digests exist.
+#:
+#: 4,000 is well above what is needed to see every policy (there are
+#: ``policies_per_domain x domains``) and yields a vocabulary in the thousands.
+EXP1_SAMPLE_RECORDS = 4000
+
+
+def corpus_world(source, *, records: int, domains: Optional[int] = None):
+    """A ``_World`` whose policies come from the corpus, plus its vocabulary.
+
+    The policy ids ``extract`` produces are already ``<domain>/polN``, which is
+    exactly what :class:`~..psa.governance.PolicyGovernance` parses, so every
+    governing set -- and therefore every ``PV_ell`` -- is derived from the real
+    corpus rather than stipulated.
+
+    Returns ``(world, vocabulary)`` with the vocabulary sorted for determinism.
+    """
+    domain_count = len(source.domains) if domains is None else domains
+    names = tuple(source.domains[:domain_count])
+    if len(names) < domain_count:
+        names = tuple(f"dom{i}" for i in range(domain_count))
+
+    authorities = _authorities(names)
+    roster = sorted(authorities.values())
+    seen_policies: set = set()
+    vocabulary: set = set()
+    for record in source.records(records, domains=domain_count):
+        seen_policies.add(record.policy_id)
+        vocabulary.update(record.keywords)
+    if not seen_policies:
+        raise RuntimeError(
+            f"no policy found in {records} corpus records; PV_ell cannot be derived"
+        )
+
+    world = _World(
+        domains=names,
+        authorities=authorities,
+        governance=psa_gov.PolicyGovernance.from_domains(
+            authorities,
+            authorities_per_policy=min(
+                psa_gov.DEFAULT_AUTHORITIES_PER_POLICY, len(names)
+            ),
+        ),
+        versions={a: 1 for a in roster},
+        commitments={a: bytes([i + 1]) * 32 for i, a in enumerate(roster)},
+        policies=tuple(sorted(seen_policies)),
+    )
+    return world, tuple(sorted(vocabulary))
+
+
 # ===========================================================================
 # D7 — Exp. 1 over q AND |P_U|
 # ===========================================================================
@@ -277,8 +339,8 @@ def psa_build_deployment(
 POLICY_SCOPES: Tuple[int, ...] = (1, 2, 4, 8)
 
 
-#: One arm per ``|P_U|``, so the figure renders §V's two-variable sweep the way
-#: §V states it: "q is varied as {1,5,10,15,20}, WHILE |P_U| is varied as
+#: One arm per ``|P_U|``, so the figure renders §VI's two-variable sweep the way
+#: §VI states it: "q is varied as {1,5,10,15,20}, WHILE |P_U| is varied as
 #: {1,2,4,8}" -- q on the x-axis, one curve per authorization scope.
 #:
 #: This replaced a single sweep over an INDEX into the 20 (q, |P_U|) pairs. That
@@ -304,7 +366,7 @@ def policy_scope_of(variant: str) -> int:
 class PsaExp1TokenGeneration:
     """"the number of generated tokens is ``|T_Q| = q|P_U|``" — manuscript Exp. 1.
 
-    §V varies ``q ∈ {1,5,10,15,20}`` while varying ``|P_U| ∈ {1,2,4,8}``. The
+    §VI varies ``q ∈ {1,5,10,15,20}`` while varying ``|P_U| ∈ {1,2,4,8}``. The
     runner sweeps one variable, so ``q`` is the sweep and ``|P_U|`` is the ARM:
     one run per scope, written to ``psa_exp1_token_generation__pu<N>/``, drawn
     as one curve each. ``|T_Q| = q·|P_U|`` is checked on every sample rather
@@ -314,18 +376,22 @@ class PsaExp1TokenGeneration:
     ----------------------------------------------
     ``index/tokens.py``'s ``generate_trapdoor(scheme, keywords)`` takes no
     policy argument at all: Option D's token is ``H(w)``, so ``|T_Q| = q``
-    whatever ``|P_U|`` is and the second dimension is structurally inert. §V's
+    whatever ``|P_U|`` is and the second dimension is structurally inert. §VI's
     Exp. 1 is a measurement OF the policy-bound token (D1), which is why it is
     here and not in ``experiments.py``. That is divergence D7.
     """
 
     config: scheme_config.Configuration
+    source: Any = None
     name: str = "psa_exp1_token_generation"
     number: int = 1
     variable: str = "keywords"
     values: Tuple[Any, ...] = ()
     #: ``|P_U|`` — how many authorized policies this arm derives tokens under.
     policy_scope: int = 1
+    #: Reads the corpus for its policies and keywords, so it inherits the
+    #: corpus provenance and can be reportable. See `corpus_world`.
+    CORPUS_BACKED: ClassVar[bool] = True
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("tokens", COUNT),
@@ -337,25 +403,49 @@ class PsaExp1TokenGeneration:
     def __post_init__(self) -> None:
         if self.policy_scope < 1:
             raise ValueError(f"|P_U| must be >= 1, got {self.policy_scope}")
+        if self.source is None:
+            raise ValueError(
+                "PsaExp1TokenGeneration reads the corpus for its policies and "
+                "keywords; pass the same source build_deployment is given"
+            )
         if not self.values:
             self.values = tuple(self.config.experiment("exp1").values)
 
     def prepare(self, value: Any) -> Any:
         q = int(value)
-        # Enough domains and policies to supply |P_U| DISTINCT authorized
-        # policies. Repeating one would collapse distinct tokens and understate
-        # |T_Q| -- the identity this experiment exists to check.
-        per_domain = max(1, -(-self.policy_scope // len(DOMAIN_NAMES)))
-        world = build_world(policies_per_domain=per_domain)
-        scopes = [world.scope(p) for p in world.policies[: self.policy_scope]]
-        if len(scopes) != self.policy_scope:
+        # REAL policies and REAL keywords. Both reach the measured hash: the
+        # keyword string is hashed directly, and the policy fixes PID and the
+        # PV digest derived from AA(PID). Synthetic `kw:00000` strings and
+        # stipulated `hospital/pol0` policies were what made this experiment
+        # `psa_in_process` and therefore unquotable.
+        world, vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS
+        )
+        if len(world.policies) < self.policy_scope:
             raise RuntimeError(
-                f"needed {self.policy_scope} distinct policies, "
-                f"built {len(scopes)}"
+                f"|P_U| = {self.policy_scope} needs that many DISTINCT policies, "
+                f"but the corpus yields {len(world.policies)} "
+                f"({len(world.domains)} domains x policies_per_domain). Raise "
+                f"`policies_per_domain` in index/extract.py or lower |P_U|; "
+                f"repeating a policy would collapse distinct tokens and "
+                f"understate |T_Q|, the identity this experiment checks."
             )
+        scopes = [world.scope(p) for p in world.policies[: self.policy_scope]]
+        if len(vocabulary) < q:
+            raise RuntimeError(
+                f"q = {q} distinct keywords requested, corpus sample has "
+                f"{len(vocabulary)}"
+            )
+        # A representative draw rather than the alphabetically-first q: keyword
+        # LENGTH is what the HMAC costs, and the short end of a sorted
+        # vocabulary is not representative of it.
+        rng = DeterministicRNG(EXP1_KEYWORD_SEED).spawn(
+            f"psa_exp1/q={q}/pu={self.policy_scope}"
+        )
+        keywords = list(rng.choice(list(vocabulary), size=q, replace=False))
         return dict(
             scheme=_keyed_scheme(),
-            keywords=[f"kw:{i:05d}" for i in range(q)],
+            keywords=keywords,
             scopes=scopes,
             q=q,
             policies=self.policy_scope,
@@ -674,14 +764,14 @@ class PsaExp6AffectedRatio:
     data cannot be plotted on this axis at all — that is divergence D8. Here the
     ratio is dialled directly, by stating which policies the mutated authority
     governs (``PolicyGovernance.with_overrides``), and the three arms are the
-    ones §V names:
+    ones §VI names:
 
     ``dias``            evolve only dependent policies and deliver only to FSNs
                         holding an affected shard.
     ``incremental_all`` evolve only dependent policies, deliver to every FSN.
     ``full_state``      re-evolve every policy and deliver to every FSN.
 
-    The prediction the figure is meant to test is in §V: the DIAS advantage
+    The prediction the figure is meant to test is in §VI: the DIAS advantage
     "narrows" as the ratio approaches 100%, because at 100% every policy is
     dependency-relevant and the first two arms coincide.
     """
@@ -784,7 +874,7 @@ class PsaExp6AffectedRatio:
         nodes = prepared["nodes"]
         others = tuple(a for a in sorted(world.authorities.values()) if a != moved)
 
-        # AUTHORIZATION-STATE REDISTRIBUTION, the other half of what §V calls
+        # AUTHORIZATION-STATE REDISTRIBUTION, the other half of what §VI calls
         # Full-State: "reconstructs and propagates the relevant
         # authorization/index state to all FSNs". The index half is the policy
         # loop below; this is the authorization half, and without it this arm
@@ -921,7 +1011,7 @@ class PsaExp2SearchLatency:
     and performs that many posting-list lookups where Option D performs ``q``.
     The same binding also stops two records under different policies from
     sharing a posting list for the same keyword, so the index fragments. Both
-    follow from D1 and both belong in §V.
+    follow from D1 and both belong in §VI.
 
     Corpus-backed: it reads the source ``build_deployment`` reads, so a
     difference between the two curves is a difference between constructions
@@ -1236,9 +1326,10 @@ class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
     * ``FogSearchNode`` holds a ``PolicyStateIndexEntry`` without modification,
       because ``DynamicSearchIndex`` keys on token/cid/policy_id and stores the
       entry opaquely.
-    * ``C_j^sync`` still resolves. ``PolicyVersionState`` carries a per-authority
-      INTEGER version; only the ``PV`` digest is unordered, so
-      ``vid_for_domains`` and AASS's five-term cost vector are unaffected.
+    * ``C_j^sync`` still resolves. It is the count of query-relevant authorities
+      the node lags (``|{(ID_k,v_k) in V_Q : v_{j,k} < v_k}|``), and ``V_Q``
+      comes from the AIM decision the trace already carries, so the four terms of
+      eq:search-cost are unaffected by the construction swap.
     * Entries and a loaded index both pickle, so the fork boundary is safe.
       Pinned by ``test_psa_exp2_survives_the_multiprocess_replay_boundary``.
 
@@ -1410,6 +1501,15 @@ def build(
                 f"psa experiment {number} reads the corpus and needs a record "
                 f"source; pass the same one build_deployment is given"
             )
+        # Exp. 1 is corpus-backed AND has an arm: |P_U| is the variant. This
+        # branch used to drop `variant` on the floor, so every arm would have
+        # been built at the default |P_U| = 1 and four identical curves written
+        # to four directories.
+        if number == 1 and variant:
+            return cls(
+                config=config, source=source,
+                policy_scope=policy_scope_of(variant),
+            )
         return cls(config=config, source=source)
     if number == 1 and variant:
         return cls(config=config, policy_scope=policy_scope_of(variant))
@@ -1436,6 +1536,8 @@ __all__ = [
     "VARIANT_INCREMENTAL_ALL",
     "build",
     "build_world",
+    "corpus_world",
+    "EXP1_SAMPLE_RECORDS",
     "psa_build_deployment",
     "PsaDeployment",
 ]

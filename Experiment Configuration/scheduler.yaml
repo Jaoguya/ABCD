@@ -16,10 +16,16 @@
 # sweep on a held-out workload), commit that output, and leave them alone."
 # README §14 open issue #5 records them as blocking Exp. 7-8.
 #
-# THE WEIGHTS BELOW ARE NOT YET DETERMINED. `weights.status` is
-# `pending_sweep`, and code MUST refuse to produce reportable Exp. 7-8 results
-# while it holds that value (see `enforcement` at the bottom). The listed
-# values are a starting point for the sweep, not a result of it.
+# STATUS OF THE WEIGHTS. `weights.status` is `fixed`, so `require_fixed()`
+# returns them and reportable Exp. 7-8 runs are NOT refused. This block used to
+# say `pending_sweep` and contradicted line ~85 of this same file.
+#
+# The vector below was NOT produced by a sweep in its current form. The
+# 2026-08-28 hold-out sweep chose FIVE weights (0.2, 0.4, 0.1, 0.2, 0.1) over a
+# cost function including C^auth; when C^auth was removed on 2026-09-07 the
+# surviving four were renormalised, preserving their ratio. That is why
+# `determined_on` and `determined_by` are null. Re-run the sweep over the
+# four-term cost to make `fixed` mean what it says.
 #
 # AGENT_RULES "Bias Detection": no per-figure lambda retuning. One sweep, one
 # committed vector, identical across Exp. 7 and Exp. 8.

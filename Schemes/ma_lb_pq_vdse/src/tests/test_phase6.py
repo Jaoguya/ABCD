@@ -22,7 +22,7 @@ from __future__ import annotations
 import sys
 import traceback
 from pathlib import Path
-from typing import Callable, List, Tuple
+from typing import Callable, List, Optional, Tuple
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT))
@@ -105,13 +105,39 @@ def populated_federation(records_per_domain: int = 3, keywords: int = 6):
     return nodes, tuple(authorized), keyword_by_domain
 
 
+def query_versions_for(
+    authorized: Tuple[Tuple[str, str], ...], version: int
+) -> Tuple[Tuple[str, int], ...]:
+    """``V_Q`` over the authorities governing the authorized shards.
+
+    ``sync_nodes`` synchronises each node under the authority id ``AA-<domain>``,
+    so the query-relevant authority set is one per authorized domain. This is the
+    AIM's view in Phase VI Step 2; ``C_j^sync`` counts how many of these a node
+    is behind on.
+    """
+    domains = sorted({domain for domain, _ in authorized})
+    return tuple((f"AA-{domain}", version) for domain in domains)
+
+
 def make_request(
-    keyword: str, authorized: Tuple[Tuple[str, str], ...], *, vid_u: int = 1
+    keyword: str,
+    authorized: Tuple[Tuple[str, str], ...],
+    *,
+    vid_u: int = 1,
+    query_version: Optional[int] = None,
 ) -> aass_mod.SearchRequest:
+    """A request carrying ``V_Q``, without which AASS refuses to schedule.
+
+    ``query_version`` is the version every query-relevant authority is at
+    according to the AIM; it defaults to ``vid_u`` so a test that says nothing
+    about freshness gets a node-matching state rather than an accidental lag.
+    """
+    version = vid_u if query_version is None else query_version
     return aass_mod.SearchRequest(
         tokens=(scheme().query_token(keyword),),
         authorized=authorized,
         vid_u=vid_u,
+        query_versions=query_versions_for(authorized, version),
     )
 
 
@@ -141,6 +167,7 @@ def test_request_reports_its_distinct_domains():
         tokens=(b"t1",),
         authorized=(("dom0", "p0"), ("dom1", "p1"), ("dom2", "p1")),
         vid_u=0,
+        query_versions=query_versions_for((("dom0", "p0"), ("dom1", "p1"), ("dom2", "p1")), 0),
     )
     assert not hasattr(request, "policy_count")
     assert request.domains == ("dom0", "dom1", "dom2")
@@ -201,15 +228,53 @@ def test_cost_verify_scales_with_log_entry_count():
     assert abs(costs.verify - expected) < 1e-9
 
 
-def test_cost_sync_is_the_version_gap():
-    """C_j^sync = |VID_U - VID_j| — the term that makes AASS prefer fresh nodes."""
+def test_cost_sync_counts_lagging_authorities():
+    """C_j^sync = |{(ID_k, v_k) in V_Q : v_{j,k} < v_k}|.
+
+    A COUNT of query-relevant authorities the node is behind on, not the scalar
+    gap |VID_U - VID_j| of the previous manuscript revision. The distinction is
+    the point: the count cannot confuse "one authority three versions stale"
+    with "three authorities one version stale", and Phase VII Step 5's staleness
+    gate is stated over the per-authority vector.
+
+    Each node here serves one domain, so exactly one entry of V_Q is its own and
+    every other entry names an authority it holds no Meta_i for. An
+    unsynchronised authority counts as lagging, so a node's floor is |V_Q| - 1.
+    """
     nodes, authorized, keywords = populated_federation()
     sync_nodes(nodes, authorized, vid=2)
     node = nodes[0]
     domain = sorted(node.domains)[0]
-    for vid_u, expected in ((2, 0.0), (5, 3.0), (0, 2.0)):
-        request = make_request(keywords[domain], authorized, vid_u=vid_u)
-        assert aass_mod.estimate_costs(node, request).sync == expected
+    total = len(query_versions_for(authorized, 2))
+    others = total - 1          # authorities this node was never given
+    for version, expected in ((2, others), (5, others + 1), (0, others)):
+        request = make_request(
+            keywords[domain], authorized, vid_u=2, query_version=version
+        )
+        assert aass_mod.estimate_costs(node, request).sync == float(expected)
+
+
+def test_cost_sync_is_zero_only_when_every_relevant_authority_is_current():
+    """The term is a freshness signal, so a fully synchronised node scores 0."""
+    nodes, authorized, keywords = populated_federation()
+    sync_nodes(nodes, authorized, vid=2)
+    node = nodes[0]
+    domain = sorted(node.domains)[0]
+    # Give this node EVERY authority's state, not only its own domain's.
+    for other_domain in sorted({d for d, _ in authorized}):
+        node.apply_meta(
+            f"AA-{other_domain}",
+            types.AuthorizationMeta(other_domain, 2, bytes(32)),
+        )
+    request = make_request(
+        keywords[domain], authorized, vid_u=2, query_version=2
+    )
+    assert aass_mod.estimate_costs(node, request).sync == 0.0
+    request = make_request(
+        keywords[domain], authorized, vid_u=2, query_version=3
+    )
+    expected = float(len(query_versions_for(authorized, 3)))
+    assert aass_mod.estimate_costs(node, request).sync == expected
 
 
 def test_cost_queue_is_a_measured_wait():
@@ -329,6 +394,7 @@ def test_scheduler_scores_from_normalized_terms():
         tokens=(scheme().query_token(keywords[DOMAINS[0]]),),
         authorized=authorized,
         vid_u=3,
+        query_versions=query_versions_for(authorized, 3),
     )
     selection = aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(nodes, request)
     weights = selection.costs[0]  # placeholder to keep the name in scope
@@ -434,6 +500,7 @@ def test_scheduler_no_lb_pins_one_node():
         tokens=(scheme().query_token(keywords[DOMAINS[0]]),),
         authorized=authorized,
         vid_u=1,
+        query_versions=query_versions_for(authorized, 1),
     )
     chosen = {scheduler.select(nodes, request).node_id for _ in range(5)}
     assert len(chosen) == 1
@@ -447,6 +514,7 @@ def test_scheduler_round_robin_cycles():
         tokens=(scheme().query_token(keywords[DOMAINS[0]]),),
         authorized=authorized,
         vid_u=1,
+        query_versions=query_versions_for(authorized, 1),
     )
     picked = [scheduler.select(nodes, request).node_id for _ in range(8)]
     assert len(set(picked)) == 4                 # every candidate used
@@ -464,6 +532,7 @@ def test_scheduler_least_loaded_picks_the_shortest_queue():
         tokens=(scheme().query_token(keywords[DOMAINS[0]]),),
         authorized=authorized,
         vid_u=1,
+        query_versions=query_versions_for(authorized, 1),
     )
     selection = scheduler.select(nodes, request)
     shortest = min(node.queue_length for node in nodes)
@@ -498,7 +567,12 @@ def test_scheduler_aass_prefers_the_fresher_node():
     nodes[1].apply_meta("AA1", types.AuthorizationMeta("dom0", 1, bytes(32)))
 
     request = aass_mod.SearchRequest(
-        tokens=(scheme().query_token("kw"),), authorized=authorized, vid_u=5
+        tokens=(scheme().query_token("kw"),),
+        authorized=authorized,
+        vid_u=5,
+        # V_Q names the one authority governing dom0/p0, at the version the AIM
+        # holds. FSNA is at 5 and lags nothing; FSNB is at 1 and lags it.
+        query_versions=(("AA1", 5),),
     )
     selection = aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(nodes, request)
     assert selection.node_id == nodes[0].node_id       # the fresh node
@@ -528,7 +602,12 @@ def test_scheduler_aass_avoids_a_congested_node():
     nodes[0].enqueue("waiting", now_ns=0)          # a long-waiting request
 
     request = aass_mod.SearchRequest(
-        tokens=(scheme().query_token("kw"),), authorized=(("dom0", "p0"),), vid_u=1
+        tokens=(scheme().query_token("kw"),),
+        authorized=(("dom0", "p0"),),
+        vid_u=1,
+        # Both nodes hold AA1 at 1, so C_j^sync is degenerate and the queue term
+        # is the only one that can move the decision -- which is the point.
+        query_versions=(("AA1", 1),),
     )
     selection = aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(nodes, request)
     assert selection.node_id == nodes[1].node_id   # the idle node
@@ -543,6 +622,7 @@ def test_scheduler_only_costs_nodes_holding_an_authorized_shard():
         tokens=(scheme().query_token(keywords[one_domain[0][0]]),),
         authorized=one_domain,
         vid_u=1,
+        query_versions=query_versions_for(one_domain, 1),
     )
     selection = aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(nodes, request)
     assert len(selection.costs) == 1
@@ -552,7 +632,10 @@ def test_scheduler_only_costs_nodes_holding_an_authorized_shard():
 def test_scheduler_refuses_when_no_node_serves_the_domain():
     nodes, authorized, _ = populated_federation()
     request = aass_mod.SearchRequest(
-        tokens=(b"t",), authorized=(("atlantis", "p0"),), vid_u=0
+        tokens=(b"t",),
+        authorized=(("atlantis", "p0"),),
+        vid_u=0,
+        query_versions=(("AA-atlantis", 0),),
     )
     try:
         aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(nodes, request)
@@ -570,6 +653,7 @@ def test_scheduler_selection_is_deterministic():
         tokens=(scheme().query_token(keywords[DOMAINS[0]]),),
         authorized=authorized,
         vid_u=1,
+        query_versions=query_versions_for(authorized, 1),
     )
     picked = {
         aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(nodes, request).node_id
@@ -586,6 +670,7 @@ def test_scheduler_retains_the_evidence_for_its_decision():
         tokens=(scheme().query_token(keywords[DOMAINS[0]]),),
         authorized=authorized,
         vid_u=1,
+        query_versions=query_versions_for(authorized, 1),
     )
     selection = aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(nodes, request)
     assert len(selection.costs) == len(nodes)
@@ -684,7 +769,7 @@ def test_search_scopes_authorization_to_the_nodes_own_domains():
 
 
 def test_search_filters_before_matching():
-    """§V :1892 — cost tracks n_eff, not total index size."""
+    """§VI :1892 — cost tracks n_eff, not total index size."""
     nodes, authorized, keywords = populated_federation(records_per_domain=6)
     domain, policy = authorized[0]
     node = [n for n in nodes if n.serves_domain(domain)][0]
@@ -850,6 +935,7 @@ def test_phase_vi_all_four_variants_run_the_same_workload():
         tokens=(scheme().query_token(keywords[DOMAINS[0]]),),
         authorized=authorized,
         vid_u=1,
+        query_versions=query_versions_for(authorized, 1),
     )
     chosen = {}
     for variant in aass_mod.VARIANTS:

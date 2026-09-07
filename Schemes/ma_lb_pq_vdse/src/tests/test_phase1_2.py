@@ -596,10 +596,10 @@ def test_ledger_four_authorities_one_per_domain():
 def test_config_loads_and_validates():
     """The committed configuration must be self-consistent as it stands."""
     config = config_mod.load(reload=True)
-    assert config.defaults.keywords_per_query == 5      # §V
-    assert config.defaults.domains == 4                 # §V
-    assert config.topology.fog_search_nodes == 4        # §V
-    assert config.measurement.repetitions == 10         # §V (was 30, 2026-09-03)
+    assert config.defaults.keywords_per_query == 5      # §VI
+    assert config.defaults.domains == 4                 # §VI
+    assert config.topology.fog_search_nodes == 4        # §VI
+    assert config.measurement.repetitions == 10         # §VI (was 30, 2026-09-03)
     assert config.measurement.confidence_interval == 0.95
 
 
@@ -1658,7 +1658,7 @@ DOMAINS = ("emergency", "hospital", "insurance", "laboratory")
 
 
 def test_fsn_set_is_built_with_one_domain_per_node_at_the_defaults():
-    """§V: d=4 domains over m=4 nodes. One domain each makes selectivity visible."""
+    """§VI: d=4 domains over m=4 nodes. One domain each makes selectivity visible."""
     config = config_mod.load()
     nodes = fsn_mod.build_fsn_set(DOMAINS, config.topology.fog_search_nodes)
     assert len(nodes) == 4

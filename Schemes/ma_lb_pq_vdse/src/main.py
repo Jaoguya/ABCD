@@ -167,7 +167,7 @@ def build_parser() -> argparse.ArgumentParser:
             "ablation variant, or 'all' to run each in turn. Exp. 7-8 take the "
             "SCHEDULER variants (no_lb, round_robin, least_loaded, aass; "
             "default aass). Exp. 6 takes the DIAS PROPAGATION variants (ias, "
-            "broadcast, full_rebuild; default ias) -- Section V calls these "
+            "broadcast, full_rebuild; default ias) -- Section VI calls these "
             "DIAS, Incremental-All and Full-State Synchronization respectively; "
             "the slugs are kept because they name the results directories. "
             "Ignored for Exp. 1-5. The "
@@ -275,7 +275,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         produced -- within 3% of the main run at every point.
         """
         if number == 1 and args.construction == "psa":
-            # §V varies q AND |P_U|; the runner sweeps one variable, so |P_U|
+            # §VI varies q AND |P_U|; the runner sweeps one variable, so |P_U|
             # is the arm. Defaults to every scope, because a single-arm run
             # would silently reproduce the D7 defect it exists to fix.
             if args.variant in (None, "") or args.variant.lower() == "all":
@@ -398,6 +398,12 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                 number, variant,
                 construction=args.construction, experiment=experiment,
             ),
+            # The secondary column ORDER, so a figure panel can verify the
+            # metric it is about to draw against the name that produced it
+            # rather than trusting a position. See RunMetadata.secondary_metrics.
+            secondary_metrics=[
+                spec.name for spec in getattr(experiment, "secondaries", ())
+            ],
         )
         if args.require_reportable and not metadata.reportable:
             log(f"REFUSED {experiment.name}: not reportable")

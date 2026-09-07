@@ -33,7 +33,7 @@ WHAT THIS SCRIPT DELIBERATELY DOES NOT DO
 -----------------------------------------
 It does not aggregate, derive, interpolate or smooth. Every plotted value is
 read verbatim from a ``results.csv`` cell, so that README §15's "every numeric
-claim in §V traces to a results.csv cell" stays literally true. A missing or
+claim in §VI traces to a results.csv cell" stays literally true. A missing or
 malformed row is reported and skipped, never filled in.
 
 It also does not read ``run_meta.json``'s ``reportable`` flag to *exclude*
@@ -74,6 +74,13 @@ class PanelSpec:
     metric: int
     ylabel: str
     tag: str
+    #: The metric name this panel MUST be drawing, checked against
+    #: run_meta.json's `secondary_metrics` before the panel is rendered. Set it
+    #: on any secondary panel whose label names a specific quantity; a mismatch
+    #: raises rather than drawing the wrong column under the right label. Left
+    #: unset (None) the panel is drawn unverified, which is what a pre-2026-09-07
+    #: run_meta without the field forces anyway.
+    metric_name: Optional[str] = None
     #: Opt a SECONDARY panel into a log y-axis. Off by default because a
     #: secondary is a different quantity from the primary and may be zero or
     #: narrow-ranging; set it only where the panel's own values are positive
@@ -89,7 +96,7 @@ class PanelSpec:
     #: Per-panel x label and x scale, used only when `folder` is set.
     xlabel: Optional[str] = None
     log_x: bool = False
-    #: Divide the metric by the x value before plotting. Section V reports
+    #: Divide the metric by the x value before plotting. Section VI reports
     #: Exp. 4's latency as T_avg = T_verify / r, the per-returned-ciphertext
     #: cost, so the panel must show that rather than the total the CSV holds.
     #: Derived here rather than in the runner so `results.csv` keeps the raw
@@ -135,12 +142,51 @@ class ExperimentSpec:
     prefix: str = ""
     #: Override the ablation vocabulary. Empty means `variants_for()` decides.
     variants: Tuple[Tuple[str, str], ...] = ()
+    #: Directory prefix used for the PROPOSED scheme only, leaving the baselines
+    #: on their own `exp<N>_*` folders. §VI Exp. 1 compares the proposed
+    #: construction against four baselines AND sweeps |P_U|, so its figure needs
+    #: the proposed curves from `psa_exp1_*__pu<N>/` and the baseline curves from
+    #: `<scheme>/exp1_*/` in ONE plot. A single `prefix` cannot express that: it
+    #: applies to every scheme, and the baselines have no `psa_` directories.
+    proposed_prefix: str = ""
+    #: Arms of the PROPOSED scheme drawn as separate curves alongside the
+    #: baselines. Set together with `proposed_prefix`; empty means the proposed
+    #: scheme contributes one curve like everyone else.
+    proposed_variants: Tuple[Tuple[str, str], ...] = ()
+    #: Draw only these sweep values, whatever a results.csv holds. §VI Exp. 1
+    #: states q in {1,5,10,15,20} -- five points -- but the four baselines were
+    #: measured at every integer 1..20, so the figure would otherwise show four
+    #: 20-point curves against a 5-point proposed one. The extra points are a
+    #: superset, not different data: 1, 5, 10, 15 and 20 are all present in
+    #: every baseline's results.csv, and nothing measured is discarded from the
+    #: file -- only from the plot.
+    restrict_x: Tuple[float, ...] = ()
+
+
+#: §VI Exp. 1's second sweep dimension: "|P_U| is varied as {1,2,4,8}".
+#: Defined here rather than in the PSA block below because the MANUSCRIPT
+#: Exp. 1 figure needs it -- the proposed curves are one per scope.
+PSA_EXP1_VARIANTS: Tuple[Tuple[str, str], ...] = (
+    ("pu1", "$|P_U| = 1$"),
+    ("pu2", "$|P_U| = 2$"),
+    ("pu4", "$|P_U| = 4$"),
+    ("pu8", "$|P_U| = 8$"),
+)
 
 
 EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
+    # §VI Exp. 1 sweeps q AND |P_U| and compares against four baselines, all in
+    # ONE figure: "Increasing q enlarges the keyword dimension of the query,
+    # while increasing |P_U| expands the number of policy states under which
+    # those keywords must be encoded." So the proposed scheme contributes FOUR
+    # curves (one per scope, from psa_exp1_token_generation__pu<N>/) and each
+    # baseline one (from its own exp1_trapdoor_generation/). See collect_mixed.
     ExperimentSpec(1, "exp1_trapdoor_generation", "fig_exp1_trapdoor.pdf",
                    "Queried keywords $q$", "Token generation latency (ms)",
-                   log_y=True),   # 4.82 decades — see LOG_Y_DECADES
+                   log_y=True,   # 4.82 decades — see LOG_Y_DECADES
+                   proposed_prefix="psa_",
+                   proposed_variants=PSA_EXP1_VARIANTS,
+                   restrict_x=(1, 5, 10, 15, 20)),
     ExperimentSpec(2, "exp2_search_latency", "fig_exp2_search.pdf",
                    "Index size $N$ (records)", "Search latency (ms)",
                    log_x=True, log_y=True),
@@ -150,11 +196,11 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # TWO PANELS. Exp. 4 asks what verification COSTS and what it BUYS, and the
     # second question is a different sweep: `r` returned ciphertexts against `t`
     # tampered ones. Merged 2026-09-05 -- panel (b) was a standalone Exp. 9
-    # figure, but Section V makes one claim out of the pair (a moderate
+    # figure, but Section VI makes one claim out of the pair (a moderate
     # per-result cost bought with per-result localization), so splitting them
     # across two figures asked the reader to join them up.
     #
-    # Panel (a) is T_avg = T_verify / r, which is what Section V reports.
+    # Panel (a) is T_avg = T_verify / r, which is what Section VI reports.
     # Panel (b) is records discarded, NOT records retained: retention is 0 for
     # both baselines and a log axis cannot draw a zero, so the complement is
     # what stays plottable. It carries the same fact -- discarding exactly `t`
@@ -196,7 +242,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # because the quantity the selective claim is about is network load, and
     # "4 nodes" only becomes a cost once multiplied by what each node is sent.
     #
-    # Section V must state that the selective saving is in DELIVERY VOLUME, not
+    # Section VI must state that the selective saving is in DELIVERY VOLUME, not
     # in sender-side latency, and why: an in-process harness models no network.
     ExperimentSpec(6, "exp6_authorization_sync", "fig_exp6_sync.pdf",
                    "Authorization updates $\\delta$", "Synchronization latency (ms)",
@@ -216,12 +262,19 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # Exp. 9 what it BUYS. Log-log because the gap is the story -- ours tracks
     # t exactly while the accumulator schemes sit flat at the full result-set
     # size, so at t=1 the two are ~4 orders apart and at t=1000 ~1.
+    # `metric_name` on every secondary panel: the index says WHERE to read and
+    # the name says WHAT must be there, checked against run_meta.json before the
+    # panel is drawn. Panel (c) is why -- it carried this label for runs whose
+    # secondary_2 was peak queue depth, because `cross_node_forwards` had been
+    # dropped from the metric list and nothing tied the label to the column.
     ExperimentSpec(8, "exp8_load_balance", "fig_exp8_balance.pdf",
                    "Concurrent queries", "FSN utilization std. dev.",
                    panels=(
                        PanelSpec(0, "Utilization std. dev.", "a"),
-                       PanelSpec(1, "Max node utilization", "b"),
-                       PanelSpec(2, "Cross-node forwards", "c"),
+                       PanelSpec(1, "Max node utilization", "b",
+                                 metric_name="max_node_utilization"),
+                       PanelSpec(2, "Cross-node forwards", "c",
+                                 metric_name="cross_node_forwards"),
                    )),
 )
 
@@ -251,22 +304,16 @@ PSA_EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
 #:   (10%-100%), not an update count -- which is divergence D8.
 #: * Every psa run is built on in-process synthetic data, so `reportable` is
 #:   false by construction. These figures are for deciding whether to adopt
-#:   D1-D5; README §4 admits only `synthea` for anything quoted in §V, and
+#:   D1-D5; README §4 admits only `synthea` for anything quoted in §VI, and
 #:   `--require-reportable` drops the whole family accordingly.
 #:
 #: Filenames carry `psa_` for the same reason the directories do: a figure
 #: dropped into the manuscript's `images/` must not be able to shadow
 #: `fig_exp1_trapdoor.pdf`.
-#: One curve per |P_U|, which is how §V states Exp. 1: "q is varied as
+#: One curve per |P_U|, which is how §VI states Exp. 1: "q is varied as
 #: {1,5,10,15,20}, WHILE |P_U| is varied as {1,2,4,8}". A family of curves over
 #: a real x-axis, not a sweep over an index into the 20 pairs -- that reads
 #: directly and puts q=5 at |P_U|=2 and at |P_U|=8 on the same vertical.
-PSA_EXP1_VARIANTS: Tuple[Tuple[str, str], ...] = (
-    ("pu1", "$|P_U| = 1$"),
-    ("pu2", "$|P_U| = 2$"),
-    ("pu4", "$|P_U| = 4$"),
-    ("pu8", "$|P_U| = 8$"),
-)
 
 PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     ExperimentSpec(1, "psa_exp1_token_generation", "fig_psa_exp1_tokens.pdf",
@@ -311,7 +358,7 @@ PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # Exp. 4 under Commit_i of D3. Same measured boundary as the Option D
     # figure -- Merkle proof, commitment recomputation, chain consistency, with
     # IPFS fetch and decryption excluded -- so the two are comparable at the
-    # same r. Panel (a) is T_avg = T_verify / r, which is what §V reports.
+    # same r. Panel (a) is T_avg = T_verify / r, which is what §VI reports.
     ExperimentSpec(4, "psa_exp4_verification_overhead",
                    "fig_psa_exp4_verify.pdf",
                    "Returned results $r$", "Verification latency (ms)",
@@ -333,14 +380,14 @@ PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # affected state but still propagates to all; DIAS updates only dependent
     # state and propagates only to FSNs maintaining affected shards.
     #
-    # BOTH panels are required -- Section V says "synchronization latency and
+    # BOTH panels are required -- Section VI says "synchronization latency and
     # transferred synchronization data are measured", and the two halves of the
     # claim land in different places. Panel (a) carries the INCREMENTAL half:
     # Full-State is flat and 9.7x DIAS at a 10% ratio, narrowing to 1.09x at
-    # 100% as Section V predicts. Panel (b) carries the SELECTIVE half, where
+    # 100% as Section VI predicts. Panel (b) carries the SELECTIVE half, where
     # Incremental-All's unnecessary propagation is a clean 4x: in an in-process
     # harness a delivery is a function call, so the same fan-out costs only
-    # 2-11% of latency. Section V should therefore attribute the selective
+    # 2-11% of latency. Section VI should therefore attribute the selective
     # saving primarily to DELIVERY VOLUME, and say why.
     #
     # Linear x: the ratio sweep is 0.1-1.0, a single decade with a zero-ish
@@ -357,8 +404,10 @@ PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                    prefix="psa_",
                    panels=(
                        PanelSpec(0, "Utilization std. dev.", "a"),
-                       PanelSpec(1, "Max node utilization", "b"),
-                       PanelSpec(2, "Cross-node forwards", "c"),
+                       PanelSpec(1, "Max node utilization", "b",
+                                 metric_name="max_node_utilization"),
+                       PanelSpec(2, "Cross-node forwards", "c",
+                                 metric_name="cross_node_forwards"),
                    )),
     ExperimentSpec(6, "psa_exp6_affected_ratio", "fig_psa_exp6_sync.pdf",
                    "Affected-policy ratio", "Synchronization latency (ms)",
@@ -432,6 +481,9 @@ LOG_Y_DECADES = 2.0
 # "Enabling Puncturable Encrypted Search Over Lattice" (IEEE TMC 2026) -- a
 # different paper. Ge et al. is ref30, cited 17 times in the manuscript against
 # ref55's 2. Every figure has been pointing readers at the wrong citation.
+#: The scheme whose folders `proposed_prefix`/`proposed_variants` redirect.
+PROPOSED_SCHEME = "ma_lb_pq_vdse"
+
 SCHEME_LABELS: Dict[str, str] = {
     "ma_lb_pq_vdse": "Proposed",
     "yue_ge": "Scheme [30]",
@@ -456,7 +508,12 @@ COLORS = ("#0072B2", "#D55E00", "#009E73", "#CC79A7", "#56B4E9", "#E69F00", "#00
 # pinned by STYLE_ORDER's index and must stay fixed across every figure).
 # Proposed first, then baselines by citation number: [30], [35], [41], [54].
 LEGEND_ORDER: Tuple[str, ...] = (
-    "ma_lb_pq_vdse", "yue_ge", "guo_vdsse", "thingom_pq_abse",
+    "ma_lb_pq_vdse",
+    # Exp. 1's proposed curves are |P_U| arms rather than the scheme key, so
+    # without these four they all sorted to the fallback slot and trailed the
+    # baselines. Listed ascending so the family reads in scope order.
+    "$|P_U| = 1$", "$|P_U| = 2$", "$|P_U| = 4$", "$|P_U| = 8$",
+    "yue_ge", "guo_vdsse", "thingom_pq_abse",
     "perera_lv_pqabse",
 )
 
@@ -490,15 +547,29 @@ ABLATION_STYLE_SLOT: Dict[str, int] = {
 }
 
 
+#: Exp. 1's proposed curves are ONE scheme at four authorization scopes, not
+#: four schemes. Given four different colours they read as eight unrelated
+#: curves against four baselines; sharing the proposed colour and varying only
+#: marker and linestyle makes them read as a family, which is what they are.
+PROPOSED_FAMILY: Tuple[str, ...] = (
+    "$|P_U| = 1$", "$|P_U| = 2$", "$|P_U| = 4$", "$|P_U| = 8$",
+)
+
+
 def style_for(scheme: str) -> Dict[str, object]:
     if scheme in ABLATION_STYLE_SLOT:
         idx = ABLATION_STYLE_SLOT[scheme]
     else:
         idx = STYLE_ORDER.index(scheme) if scheme in STYLE_ORDER else len(STYLE_ORDER)
+    color = COLORS[idx % len(COLORS)]
+    if scheme in PROPOSED_FAMILY:
+        # Marker and linestyle still step with the slot, so the family stays
+        # separable in grayscale (README §10).
+        color = COLORS[0]
     return {
         "marker": MARKERS[idx % len(MARKERS)],
         "linestyle": LINESTYLES[idx % len(LINESTYLES)],
-        "color": COLORS[idx % len(COLORS)],
+        "color": color,
     }
 
 
@@ -519,9 +590,13 @@ class Series:
     #: is the ONLY reliable signal that a point was computed -- it writes
     #: n_runs=1, not 0, so the n_runs==0 rule below never fired for it and
     #: extrapolated points were drawn solid, indistinguishable from measured
-    #: ones, while §V's caption claimed they were hollow.
+    #: ones, while §VI's caption claimed they were hollow.
     measurement: List[str] = field(default_factory=list)
     reportable: Optional[bool] = None
+    #: run_meta.json's `secondary_metrics`: the names behind `secondary_1_mean`,
+    #: `secondary_2_mean`, ... in file order. Empty for a run written before the
+    #: field existed, in which case a panel cannot be verified and says so.
+    secondary_metrics: List[str] = field(default_factory=list)
     problems: List[str] = field(default_factory=list)
 
 
@@ -619,8 +694,16 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
     meta = path.with_name("run_meta.json")
     if meta.is_file():
         try:
-            series.reportable = bool(json.loads(meta.read_text(encoding="utf-8"))
-                                     .get("reportable", False))
+            parsed = json.loads(meta.read_text(encoding="utf-8"))
+            series.reportable = bool(parsed.get("reportable", False))
+            # The secondary column ORDER the run actually wrote. This scheme's
+            # results.csv columns are positional (`secondary_N_mean`), so a
+            # panel's `metric` index is a claim about which metric sits there
+            # and nothing used to check it. Fig. 8(c) was labelled "Cross-node
+            # forwards" while that column held peak queue depth.
+            names = parsed.get("secondary_metrics")
+            if isinstance(names, list):
+                series.secondary_metrics = [str(n) for n in names]
         except (OSError, json.JSONDecodeError, AttributeError) as exc:
             series.problems.append(f"{meta}: unreadable ({type(exc).__name__})")
     else:
@@ -756,6 +839,88 @@ def collect_folder(input_root: Path, folder: str) -> List[Series]:
     return found
 
 
+def _restrict_to(series: Series, allowed: Sequence[float]) -> Series:
+    """Keep only the sweep points a figure is meant to show.
+
+    Filters the parallel arrays TOGETHER -- x, y, yerr, n_runs, measurement and
+    every secondary in `extra` -- because they are indexed positionally and
+    dropping a point from one alone would silently shift a curve against its own
+    error bars.
+    """
+    if not allowed:
+        return series
+    keep = [i for i, x in enumerate(series.x) if x in set(allowed)]
+    if len(keep) == len(series.x):
+        return series
+    series.x = [series.x[i] for i in keep]
+    series.y = [series.y[i] for i in keep]
+    series.yerr = [series.yerr[i] for i in keep]
+    series.n_runs = [series.n_runs[i] for i in keep]
+    if series.measurement:
+        series.measurement = [series.measurement[i] for i in keep]
+    for metric, (vals, errs) in list(series.extra.items()):
+        series.extra[metric] = (
+            [vals[i] for i in keep if i < len(vals)],
+            [errs[i] for i in keep if i < len(errs)],
+        )
+    return series
+
+
+def collect_mixed(input_root: Path, spec: ExperimentSpec) -> List[Series]:
+    """Baselines from `exp<N>_*`, the proposed scheme from its own arm folders.
+
+    §VI Exp. 1 makes one figure do two jobs: compare the proposed construction
+    against four baselines over `q`, AND show how the curve moves with
+    `|P_U|`. The proposed arms live in `psa_exp1_token_generation__pu<N>/`
+    while every baseline has a single `exp1_trapdoor_generation/`, so neither
+    `collect` (one directory per scheme) nor `collect_ablation` (arms only, no
+    baselines) can assemble it -- `collect_ablation` in particular would have
+    silently produced a four-curve figure with no baseline on it at all.
+
+    Baseline series keep the scheme KEY as their label so `style_for` and
+    `SCHEME_LABELS` resolve as they do on every other figure; the proposed arms
+    carry their `|P_U|` label, which `ABLATION_STYLE_SLOT` already styles.
+    """
+    found: List[Series] = []
+    if not input_root.is_dir():
+        return found
+
+    for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
+        if scheme_dir.name == PROPOSED_SCHEME:
+            continue
+        for exp_dir in sorted(scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*")):
+            if not exp_dir.is_dir() or "__" in exp_dir.name:
+                continue          # skip point shards and variant folders
+            series = read_results(exp_dir / "results.csv", scheme_dir.name)
+            if series is not None:
+                found.append(_restrict_to(series, spec.restrict_x))
+                break
+
+    proposed_dir = input_root / PROPOSED_SCHEME
+    if proposed_dir.is_dir():
+        by_variant: Dict[str, Path] = {}
+        pattern = f"{spec.proposed_prefix}exp{spec.number}_*__*"
+        for exp_dir in sorted(proposed_dir.glob(pattern)):
+            if not exp_dir.is_dir():
+                continue
+            variant = _variant_of(exp_dir)
+            if variant in dict(spec.proposed_variants):
+                by_variant.setdefault(variant, exp_dir)
+        for variant, label in spec.proposed_variants:
+            exp_dir = by_variant.get(variant)
+            if exp_dir is None:
+                print(f"  NOTE exp{spec.number}: no directory for proposed arm "
+                      f"{variant!r}; the figure will be missing a curve")
+                continue
+            series = read_results(exp_dir / "results.csv", label)
+            if series is None:
+                print(f"  NOTE exp{spec.number}: {exp_dir.name} has no usable "
+                      f"results.csv; arm {variant!r} omitted")
+                continue
+            found.append(_restrict_to(series, spec.restrict_x))
+    return found
+
+
 def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     """Find every scheme's results for one experiment.
 
@@ -764,6 +929,10 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     silently contributing nothing.
     """
     found: List[Series] = []
+    # Checked FIRST: a mixed spec also sets `variants` in some cases, and the
+    # ablation branch below would then drop every baseline.
+    if spec.proposed_variants:
+        return collect_mixed(input_root, spec)
     if spec.number in (7, 8):
         return collect_ablation(input_root, spec)
     if spec.variants:
@@ -884,6 +1053,46 @@ def _panel_values(
     return scaled_v, scaled_e
 
 
+def _panel_metric_agrees(spec, panel, panel_series, warnings) -> bool:
+    """Refuse to draw a panel whose label does not name the column it reads.
+
+    ``PanelSpec.metric`` is a POSITION in results.csv and ``ylabel`` is a claim
+    about what sits there. Nothing connected the two until run_meta.json began
+    recording ``secondary_metrics``, and the gap produced a real defect: Exp. 8's
+    panel (c) was labelled "Cross-node forwards" after ``cross_node_forwards``
+    had been dropped from the metric list, so the column at index 2 was peak
+    queue depth and the figure said otherwise.
+
+    Skipping the panel is the right failure. A figure with a missing panel is
+    obviously incomplete; a figure with a mislabelled one is not.
+    """
+    if panel.metric == 0 or not panel.metric_name:
+        return True                       # primary, or an unverified panel
+    ok = True
+    for series in panel_series:
+        names = series.secondary_metrics
+        if not names:
+            # A run written before the field existed. Say so once, and draw:
+            # refusing would blank every panel of every banked result.
+            warnings.append(
+                f"exp{spec.number}: panel ({panel.tag}) cannot be verified — "
+                f"{series.scheme}'s run_meta.json records no "
+                f"secondary_metrics; the label {panel.ylabel!r} is unchecked"
+            )
+            continue
+        index = panel.metric - 1          # metric 1 is the first secondary
+        actual = names[index] if 0 <= index < len(names) else None
+        if actual != panel.metric_name:
+            warnings.append(
+                f"exp{spec.number}: panel ({panel.tag}) claims "
+                f"{panel.metric_name!r} at secondary_{panel.metric} but "
+                f"{series.scheme} recorded {actual!r} there; panel skipped "
+                f"rather than mislabelled"
+            )
+            ok = False
+    return ok
+
+
 def render(spec: ExperimentSpec, series_list: Sequence[Series],
            out_path: Path, dpi: Optional[int] = None,
            input_root: Optional[Path] = None) -> Tuple[bool, List[str]]:
@@ -928,6 +1137,10 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
                         f"incomplete"
                     )
                     continue
+            if not _panel_metric_agrees(
+                spec, panel, panel_series, warnings
+            ):
+                continue
             _draw_panel(
                 ax, spec, panel_series, warnings,
                 metric=panel.metric, ylabel=panel.ylabel,

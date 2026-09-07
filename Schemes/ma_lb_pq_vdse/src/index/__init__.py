@@ -6,7 +6,7 @@
 
 Step 2 (``T_j``, the policy-bound keyword encoding) is absent: the matching
 relation between the index token and the query token is an open author decision.
-``PHASE_IV_PLAN.md`` §1 sets out the discrepancy, the five options, and why §V
+``PHASE_IV_PLAN.md`` §1 sets out the discrepancy, the five options, and why §VI
  rules out the exact-match reading. ``dsi.py`` therefore takes tokens as
 opaque bytes and never builds one, so the decision changes one module that does
 not exist yet rather than this whole phase.

@@ -7,7 +7,7 @@
 # schemes use identical global.yaml defaults").
 #
 # Provenance key for every entry below:
-#   published  — stated in the proposed paper's §V (cite the line)
+#   published  — stated in the proposed paper's §VI (cite the line)
 #   fips       — fixed by a standard
 #   benchmark  — a benchmark choice; NOT specified in any paper (README §6)
 #
@@ -25,9 +25,9 @@ meta:
 # holds the rest at the values below (README §5).
 # -----------------------------------------------------------------------------
 defaults:
-  keywords_per_query: 5         # published: §V "each query contains five keywords"
-  domains: 4                    # published: §V "four administrative healthcare domains"
-  fog_search_nodes: 4           # published: §V "Four Fog Search Nodes and one cloud server"
+  keywords_per_query: 5         # published: §VI "each query contains five keywords"
+  domains: 4                    # published: §VI "four administrative healthcare domains"
+  fog_search_nodes: 4           # published: §VI "Four Fog Search Nodes and one cloud server"
   index_size: 100000            # benchmark: 10^5, mid-point of the Exp. 2 sweep 10^4-10^6
   returned_results: 100         # benchmark: mid-point of the Exp. 4 sweep 10-1000
 
@@ -35,12 +35,12 @@ defaults:
 # Measurement methodology — README §7.
 # -----------------------------------------------------------------------------
 measurement:
-  # REDUCED 30 -> 10 on the user's instruction, 2026-09-03. Section V was
+  # REDUCED 30 -> 10 on the user's instruction, 2026-09-03. Section VI was
   # updated to match on the same day and now reads "repeated 10 times"; this
   # value and that sentence must be changed together or the manuscript states
   # a replication count the data does not have.
-  repetitions: 10               # published: §V "repeated 10 times"
-  confidence_interval: 0.95     # published: §V "95% confidence intervals"
+  repetitions: 10               # published: §VI "repeated 10 times"
+  confidence_interval: 0.95     # published: §VI "95% confidence intervals"
   warmup_runs: 5                # benchmark: discarded, not counted in the 10
   clock:
     latency: perf_counter_ns    # benchmark: monotonic, ns resolution (README §7)
@@ -60,19 +60,24 @@ measurement:
 experiments:
   exp1_trapdoor_generation:
     variable: keywords_per_query
-    values: [1, 5, 10, 15, 20]                    # published: §V "1 to 20"
+    # published: §VI Exp. 1 "q\in\{1,5,10,15,20\}" -- a SET of five values, not
+    # the range 1..20. The old comment paraphrased it as "1 to 20", which reads
+    # as every integer and is how the four baselines came to be measured at all
+    # 20. Their extra points are a superset and stay in results.csv; the figure
+    # draws these five (generate_plots.py: ExperimentSpec.restrict_x).
+    values: [1, 5, 10, 15, 20]
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp2_search_latency:
     variable: index_size
-    values: [10000, 50000, 100000, 500000, 1000000]   # published: §V "10^4-10^6"
+    values: [10000, 50000, 100000, 500000, 1000000]   # published: §VI "10^4-10^6"
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp3_crossdomain_scalability:
     variable: domains
-    values: [2, 4, 6, 8, 10]                      # published: §V "2 to 10"
+    values: [2, 4, 6, 8, 10]                      # published: §VI "2 to 10"
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp4_verification_overhead:
     variable: returned_results
-    values: [10, 50, 100, 500, 1000]              # published: §V "10 to 1000"
+    values: [10, 50, 100, 500, 1000]              # published: §VI "10 to 1000"
     # yue_ge (Ref[55]) added 2026-08-28 -- Peony++ has a scheme-native Verify
     # (SS VI-A), so Exp. 4 finally has a third participant.
     #
@@ -112,7 +117,7 @@ experiments:
     schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
   exp5_keyword_update:
     variable: keyword_document_pairs
-    values: [100, 1000, 10000, 100000]            # published: §V "10^2-10^5"
+    values: [100, 1000, 10000, 100000]            # published: §VI "10^2-10^5"
     # perera_lv_pqabse (Ref[54]) excluded 2026-08-27: no incremental-update
     # primitive in the paper -- indexes are (re)built at Phase 3, no
     # standalone update algorithm to measure. Was zhuang's slot; not carried
@@ -122,7 +127,7 @@ experiments:
     schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
   exp6_authorization_sync:
     variable: authorization_updates
-    values: [100, 1000, 10000, 100000]            # published: §V "10^2-10^5"
+    values: [100, 1000, 10000, 100000]            # published: §VI "10^2-10^5"
     # perera_lv_pqabse (Ref[54]) excluded 2026-08-27: the paper explicitly
     # self-discloses NO fine-grained/immediate revocation, only coarse
     # epoch-based key evolution (whole-epoch invalidation, not per-update
@@ -142,7 +147,7 @@ experiments:
     # The AASS advantage on cross-node forwards only opens up above ~500
     # concurrent queries, and the low end is where it is weakest -- dropping
     # those points would turn a scalability result into a cherry-picked one.
-    # Section V must be updated to state the full 100-10000 range.
+    # Section VI must be updated to state the full 100-10000 range.
     values: [100, 500, 1000, 2500, 5000, 10000]
     schemes: [ma_lb_pq_vdse]                      # scheduler ablation, see scheduler.yaml
   exp8_load_balance:
@@ -153,14 +158,20 @@ experiments:
     # README §5: Exp. 7 and Exp. 8 are DERIVED FROM THE SAME RUNS. Run the
     # trace once per variant and emit both metric sets.
     shares_runs_with: exp7_search_throughput
-    secondaries: [max_node_utilization, max_queue_depth]
-    # `cross_node_forwards` was the second secondary and was dropped 2026-08-30.
-    # At d = m = 4 each FSN holds one domain and the scheduler only considers
-    # nodes serving an authorized domain, so the chosen node serves exactly one
-    # of a request's k domains whichever node it is -- the count is k-1 under
-    # every variant (measured 600 for all four arms over 400 requests). Peak
-    # queue depth replaces it: it measures congestion, which is what the Exp. 8
-    # claim is about, and the FSN queue is now fed by the dispatch path.
+    secondaries: [max_node_utilization, cross_node_forwards, max_queue_depth]
+    # THE ORDER IS THE PANEL ORDER. Section VI's Fig. 8 is (a) utilization std.
+    # dev. = primary, (b) max FSN utilization = secondary_1, (c) cross-node
+    # forwards = secondary_2, and Plots/generate_plots.py indexes panels
+    # positionally. Reordering this list silently relabels a panel.
+    #
+    # `cross_node_forwards` was dropped 2026-08-30 as invariant -- the scheduler
+    # returned ONE node per request and forwards were counted per authorized
+    # domain, giving k-1 under every variant (600 for all four arms over 400
+    # requests). Restored 2026-09-07 with Algorithm 1 implemented per SHARD:
+    # `aass` applies the published `S notin S_j -> continue` guard and scores 0
+    # by construction, the three oblivious variants do not. RESULTS-AFFECTING:
+    # every banked exp8_load_balance/ result predates this and has only two
+    # secondary columns, so its secondary_2 is max_queue_depth, NOT forwards.
     # Exp. 7-8 ramp, README §7 "warm after a 30 s ramp" -- applied once per
     # sweep point in setup, which run_point() excludes from every timing.
     ramp_seconds: 30
@@ -171,8 +182,8 @@ experiments:
 # request queue. No runtime state is shared between FSNs (README §13).
 # -----------------------------------------------------------------------------
 topology:
-  fog_search_nodes: 4           # published: §V; must equal defaults.fog_search_nodes
-  cloud_servers: 1              # published: §V "one cloud server"
+  fog_search_nodes: 4           # published: §VI; must equal defaults.fog_search_nodes
+  cloud_servers: 1              # published: §VI "one cloud server"
   independent_processes: true   # benchmark: README §1 requires process isolation
   # Phases I-II create FSNs as in-process objects (untimed setup). The process
   # split lands with Phase VI, before any Exp. 2/7/8 measurement.
@@ -180,12 +191,12 @@ topology:
 
 # -----------------------------------------------------------------------------
 # Multi-authority topology — proposed scheme only.
-# NOT IN THE PAPER: §V fixes d=4 domains, m=4 FSNs and q=5 but never states
+# NOT IN THE PAPER: §VI fixes d=4 domains, m=4 FSNs and q=5 but never states
 # N_AA or |A_i|. Fixed here by team decision on 2026-08-08 so that Phase I/II
 # is reproducible; both values are `benchmark`, not `published`.
 # -----------------------------------------------------------------------------
 authorities:
-  count: 4                      # benchmark: one AA per administrative domain (§V's d=4)
+  count: 4                      # benchmark: one AA per administrative domain (§VI's d=4)
   attributes_per_authority: 10  # benchmark: NOT from our paper. Matches the only
                                 # attribute count present in the configs
                                 # (Ref[52] published l=10, crypto.yaml), so the
@@ -205,7 +216,7 @@ environment:
   # instance_type: DROPPED on the user's instruction, 2026-08-30. It pinned
   # m6i.xlarge, which guo's Exp. 2 cannot satisfy -- its forward index needs
   # ~52 GB at N=10^6 against a 16 GiB host -- and which caps thingom's Exp. 2
-  # at 4 vCPU. Both now run on hosts sized for the work, and §V discloses the
+  # at 4 vCPU. Both now run on hosts sized for the work, and §VI discloses the
   # host per scheme instead of claiming one type for all five.
   #
   # Absence is a supported STATE, not a missing key: verify_experiment_host()

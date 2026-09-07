@@ -12,11 +12,38 @@ Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 
     FOUR terms, per ``eq:search-cost``. A fifth, ``C_j^auth = |P_Q|``, belonged
     to the previous manuscript revision and was removed here on 2026-09-07; see
-    :class:`CostVector`. ``C_j^sync`` is implemented as the SCALAR
-    ``|VID_U - VID_j|`` rather than the lag count above -- divergence D2, whose
-    scalar ``vid`` runs through the whole Option D construction.
+    :class:`CostVector`.
 
-    FSN* = arg min_j SC_j                                      (Alg. 1)
+    M_Q[S] = arg min_{j : S in S_j} SC_j                       (Alg. 1)
+
+ALGORITHM 1 IS PER SHARD, NOT PER REQUEST
+-----------------------------------------
+``alg:aass`` loops over the required shard set ``S_Q``, restricts each shard to
+the FSNs that *maintain* it (``S notin S_j -> continue``), and returns a
+shard-to-FSN map ``M_Q``. :meth:`Scheduler.assign` is that loop. A shard here is
+a ``(domain, policy)`` pair -- the key ``DynamicSearchIndex`` already keeps its
+authorization bitmaps under, so ``S_j`` is ``node.index.policy_pairs`` and
+``S_Q`` is the authorized pair set the AIM returns from Phase VI Step 2.
+
+:meth:`Scheduler.select` remains, and returns the node carrying the largest
+share of ``M_Q``. It is a *reduction* of the assignment for callers that must
+name one node (the Exp. 7-8 replay dispatches one request to one process); it is
+not the published rule, and it never decides anything ``assign`` did not.
+
+``C_j^sync`` IS A LAG COUNT
+---------------------------
+``|{(ID_k,v_k) in V_Q : v_{j,k} < v_k}|`` -- how many of the query-relevant
+authorities this node is BEHIND on, read from the per-authority ``Meta_i`` the
+node holds (``FogSearchNode.vid_for_authority``). It is not ``|VID_U - VID_j|``:
+that scalar was the previous revision's form, it cannot distinguish "one
+authority two versions stale" from "two authorities one version stale", and
+Phase VII Step 5's staleness gate is stated over the per-authority vector.
+
+A request that carries no ``V_Q`` cannot be costed on this term at all, so
+:func:`sync_lag` returns 0 rather than inventing a scalar -- and
+:meth:`Scheduler.assign` refuses such a request when the variant is ``aass``,
+because silently scoring three of four published terms is how a scheduler comes
+to be reported as AASS while implementing something else.
 
 "Unlike conventional load balancing algorithms that rely solely on processor
 utilization or memory consumption, AASS **predicts** the expected cryptographic
@@ -31,8 +58,8 @@ it was scheduling, and Exp. 7's throughput would measure the scheduler.
 **Normalization is ours, and it is load-bearing** (``scheduler.yaml →
 normalization``). The four published estimators have incommensurable units and
 magnitudes: at the §6 defaults ``|Cand_Q^(j)|`` is O(10^4), ``|R|*log N`` is
-O(10^3), ``|VID_U - VID_j|`` is O(1), and ``T_j^queue`` is a time
-in nanoseconds. Applying raw weights would let ``C_index`` dominate by orders of
+O(10^3), the ``V_Q`` lag count is O(1) (bounded by ``|V_Q|``, i.e. ``N_AA``),
+and ``T_j^queue`` is a time in nanoseconds. Applying raw weights would let ``C_index`` dominate by orders of
 magnitude regardless of the lambdas, making the weight vector — and with it the
 AASS claim — vacuous. Each term is mapped to [0,1] by dividing by the maximum
 across the candidate nodes, which is scale-free and needs no calibration
@@ -42,12 +69,23 @@ A term equal across all nodes is mapped to **0**, not 1: it cannot affect
 ``arg min``, so giving it a value would silently consume weight that belongs to
 the terms that do differ.
 
-**The weights are not yet fixed.** ``scheduler.yaml`` carries
-``weights.status: pending_sweep`` with a provisional uniform vector (README §14
-issue #5). :class:`Scheduler` constructed with ``reportable=True`` calls
-``config.scheduler.require_fixed()`` and therefore **raises** until the
-documented hold-out sweep has run. That is the gate, live rather than
-documented.
+**The weights are fixed, but they were never swept in this form.**
+``scheduler.yaml`` carries ``weights.status: fixed``, so
+``config.scheduler.require_fixed()`` returns them and the ``reportable=True``
+gate does NOT raise -- this paragraph previously said it did, which stopped
+being true when the status was set. What IS true is narrower and worth stating
+plainly: the 2026-08-28 hold-out sweep chose a FIVE-weight vector
+``(0.2, 0.4, 0.1, 0.2, 0.1)`` over a cost function that included ``C^auth``.
+When ``C^auth`` was removed on 2026-09-07 the surviving four were RENORMALISED
+to ``(0.5, 0.125, 0.25, 0.125)`` rather than re-swept, so no sweep has ever
+produced the vector in use. ``determined_on`` and ``determined_by`` are null in
+``scheduler.yaml`` for the same reason.
+
+Renormalising preserves the ratio the sweep chose among the four surviving
+terms, which is the most defensible thing to do without re-running it -- but it
+is an inference from a sweep over a different objective, not a result of one.
+Re-running ``harness/lambda_sweep.py`` over the four-term cost is what would
+make ``status: fixed`` mean what it says.
 """
 
 from __future__ import annotations
@@ -56,7 +94,7 @@ import math
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
@@ -89,14 +127,25 @@ class SchedulerError(RuntimeError):
 class SearchRequest:
     """What the scheduler needs to know about a query, before running it.
 
-    ``authorized`` is the ``(domain, policy)`` set the AIM resolved in Phase VI
-    Step 2 — scheduling happens after authorization, never before, so an
-    unauthorized request is rejected without any node being costed.
+    ``authorized`` is ``S_Q``: the ``(domain, policy)`` shard set the AIM
+    resolved in Phase VI Step 2 — scheduling happens after authorization, never
+    before, so an unauthorized request is rejected without any node being costed.
+
+    ``query_versions`` is ``V_Q``, the query-relevant authority state
+    ``{(ID_k, v_k)}`` over the authorities governing the policies of ``S_Q``.
+    It is what ``C_j^sync`` counts a node's lag against. Empty is allowed at the
+    type level so the three authorization-oblivious variants — which never read
+    the term — need not manufacture one; ``aass`` refuses it.
+
+    ``vid_u`` is the scalar profile version, retained because the Option D
+    profile and the Exp. 7-8 replay both carry it. It is NOT an input to any
+    published cost term any more.
     """
 
     tokens: Tuple[bytes, ...]
     authorized: Tuple[Tuple[str, str], ...]
-    vid_u: int
+    vid_u: int = 0
+    query_versions: Tuple[Tuple[str, int], ...] = ()
 
     def __post_init__(self) -> None:
         if not self.tokens:
@@ -109,6 +158,24 @@ class SearchRequest:
             )
         if self.vid_u < 0:
             raise ValueError(f"VID_U must be non-negative, got {self.vid_u}")
+        ids = [authority for authority, _ in self.query_versions]
+        if len(set(ids)) != len(ids):
+            raise SchedulerError(
+                f"duplicate authority in V_Q: {sorted(ids)}. V_Q is a state per "
+                f"authority, so a repeated id would let one authority be counted "
+                f"twice in C_j^sync"
+            )
+        for authority, version in self.query_versions:
+            if version < 0:
+                raise ValueError(
+                    f"V_Q version for {authority!r} must be non-negative, "
+                    f"got {version}"
+                )
+
+    @property
+    def shards(self) -> Tuple[Tuple[str, str], ...]:
+        """``S_Q`` — the required shard set Algorithm 1 iterates over."""
+        return self.authorized
 
     @property
     def domains(self) -> Tuple[str, ...]:
@@ -180,6 +247,9 @@ class Selection:
     node: FogSearchNode
     variant: str
     costs: Tuple[NodeCost, ...]
+    #: The full ``M_Q`` this selection reduces. Empty only for a caller that
+    #: built a ``Selection`` directly rather than through :meth:`Scheduler.select`.
+    assignment: Optional["ShardAssignment"] = None
 
     @property
     def node_id(self) -> str:
@@ -190,6 +260,78 @@ class Selection:
             if cost.node_id == node_id:
                 return cost
         raise KeyError(node_id)
+
+
+@dataclass(frozen=True)
+class ShardAssignment:
+    """``M_Q`` — what Algorithm 1 returns.
+
+    ``mapping`` is ``S -> FSN_j`` for every required shard the variant could
+    place. ``forwards`` counts the shards a variant assigned to a node that does
+    **not** maintain them: §VI's Exp. 8(c) defines a cross-node forward as exactly
+    that, "a scheduler assigns a required shard to an FSN that does not maintain
+    it, requiring redirection to an eligible node". Under ``aass`` it is 0 by
+    construction — the ``S notin S_j -> continue`` guard of Algorithm 1 makes it
+    so — and under the three oblivious variants it is whatever their rule
+    produces. A metric that is 0 for one arm and positive for the others is the
+    locality claim; measuring it needs the per-shard loop, which is why it could
+    not be measured while the scheduler returned one node per request.
+
+    ``unplaceable`` names shards no node in the pool maintains. Those are a
+    deployment fault, not a scheduling decision, and they are excluded from
+    ``forwards`` so a gap in the shard map cannot be read as a scheduler defect.
+    """
+
+    mapping: Tuple[Tuple[Tuple[str, str], FogSearchNode], ...]
+    variant: str
+    costs: Tuple[NodeCost, ...]
+    forwards: int
+    unplaceable: Tuple[Tuple[str, str], ...]
+
+    @property
+    def shards(self) -> Tuple[Tuple[str, str], ...]:
+        return tuple(shard for shard, _ in self.mapping)
+
+    @property
+    def nodes(self) -> Tuple[FogSearchNode, ...]:
+        """The distinct FSNs this query touches, in first-assigned order."""
+        seen: List[str] = []
+        out: List[FogSearchNode] = []
+        for _shard, node in self.mapping:
+            if node.node_id not in seen:
+                seen.append(node.node_id)
+                out.append(node)
+        return tuple(out)
+
+    def shards_for(self, node_id: str) -> Tuple[Tuple[str, str], ...]:
+        return tuple(s for s, n in self.mapping if n.node_id == node_id)
+
+    def busiest(self) -> Optional[FogSearchNode]:
+        """The node carrying the most shards; FIRST-ASSIGNED breaks ties.
+
+        The reduction :meth:`Scheduler.select` performs. Deterministic, so a
+        replayed trace makes the same dispatch.
+
+        The tie-break is assignment order, not ``node_id``. Under ``round_robin``
+        with ``|S_Q|`` a multiple of the pool size every node carries an equal
+        share, and a ``node_id`` tie-break would then return the alphabetically
+        first node for *every* request — silently collapsing round-robin into
+        no-load-balancing and erasing the arm Exp. 7-8 compare against. Assignment
+        order rotates with the cursor, which is the rotation itself.
+        """
+        if not self.mapping:
+            return None
+        counts: Dict[str, int] = {}
+        for _shard, node in self.mapping:
+            counts[node.node_id] = counts.get(node.node_id, 0) + 1
+        best_node: Optional[FogSearchNode] = None
+        best_count = -1
+        for _shard, node in self.mapping:
+            count = counts[node.node_id]
+            if count > best_count:
+                best_count = count
+                best_node = node
+        return best_node
 
 
 def estimate_result_count(node: FogSearchNode, request: SearchRequest) -> int:
@@ -207,53 +349,73 @@ def estimate_result_count(node: FogSearchNode, request: SearchRequest) -> int:
     return min(lengths) if lengths else 0
 
 
-def estimate_candidate_count(node: FogSearchNode, request: SearchRequest) -> int:
+def estimate_candidate_count(
+    node: FogSearchNode, request: SearchRequest
+) -> int:
     """``|Cand_Q^(j)|`` — authorized candidates, from the shard's bitmaps.
 
     Exact rather than estimated, because the bitmap union already answers it in
     one popcount over the shard — cheaper than any approximation would be.
+
+    PER NODE, NOT PER SHARD, and the distinction was got wrong once. All four
+    estimators of ``eq:search-cost`` carry the superscript ``(j)`` and nothing
+    else: they are functions of the node and ``T_Q``. Algorithm 1's
+    ``EstimateSearchCost(FSN_j, T_Q, S)`` does pass ``S``, but ``S`` is what
+    decides ELIGIBILITY (``S notin S_j -> continue``); it does not appear in any
+    of the four term definitions. An earlier revision here scoped this one term
+    to the shard and left the other three per node, which is neither reading.
+
+    The union is over ``S_Q``, not over everything the node holds, so a node is
+    already charged only for pairs the query is authorized for.
     """
     return node.index.authorized_bitmap(request.authorized).count(1)
 
 
-def synchronized_version(node: FogSearchNode, request: SearchRequest) -> int:
-    """``VID_j`` for this request — scoped to the domains it actually touches.
+def sync_lag(node: FogSearchNode, request: SearchRequest) -> int:
+    """``C_j^sync = |{(ID_k, v_k) ∈ V_Q : v_{j,k} < v_k}|``.
 
-    Not ``node.vid()``. Phase II Step 4's initial synchronisation pushes *every*
-    authority's ``Meta_i`` to *every* node, so ``node.vid()`` — the minimum across
-    all synchronised authorities — is dominated by the stalest authority anywhere
-    in the federation. A revocation in one domain would then leave ``C_j^sync``
-    unchanged at nodes serving it, because unrelated domains' authorities are still
-    at their old versions: the freshness signal AASS is built on would be diluted
-    by domains the query never touches.
+    The count of query-relevant authorities this node has NOT caught up on. An
+    authority in ``V_Q`` that the node holds no ``Meta_i`` for counts as lagging:
+    an unsynchronised node cannot serve that authority's state at all, and
+    treating "never synchronised" as "version 0, therefore only behind if
+    ``v_k > 0``" would make a node that received nothing look fresher than one
+    that received an older delta.
 
-    Scoping to ``request.domains ∩ node.domains`` is the accurate form
-    ``FogSearchNode.vid_for_domains`` exists for. Falls back to ``node.vid()`` only
-    when the intersection is empty or unsynchronised, where there is nothing more
-    precise to say.
+    Returns 0 for an empty ``V_Q``. That is not a fresh node — it is a request
+    that did not state which authorities its query depends on, and
+    :meth:`Scheduler.assign` rejects that case for ``aass`` rather than letting
+    the term silently vanish.
     """
-    domains = set(request.domains) & set(node.domains)
-    if not domains:
-        return node.vid()
-    try:
-        return node.vid_for_domains(sorted(domains))
-    except Exception:
-        # The node holds no state for one of those domains — an unsynchronised
-        # node, which node.vid() floors at 0.
-        return node.vid()
+    lagging = 0
+    for authority, version in request.query_versions:
+        try:
+            held = node.vid_for_authority(authority)
+        except Exception:
+            lagging += 1
+            continue
+        if held < version:
+            lagging += 1
+    return lagging
 
 
 def estimate_costs(node: FogSearchNode, request: SearchRequest) -> CostVector:
-    """The four raw terms of Phase VI Step 3 for one node."""
+    """The four raw terms of ``eq:search-cost`` for one node.
+
+    Independent of which shard is being assigned — see
+    :func:`estimate_candidate_count`. :meth:`Scheduler.assign` therefore
+    evaluates this ONCE per node per request and reuses it across the shard
+    loop, which is both what the equations say and what keeps the scheduler
+    from costing the same node ``|S_Q|`` times inside a timed region.
+    """
     entries = node.entry_count
-    # log N_j: the base is a constant factor that normalization and lambda_3
+    # log N_j: the base is a constant factor that normalization and lambda_2
     # absorb, so log2 is chosen for being the natural unit of a binary tree
     # (which is what the verification cost actually walks).
     log_entries = math.log2(entries) if entries > 1 else 0.0
     return CostVector(
         index=float(estimate_candidate_count(node, request)),
         verify=float(estimate_result_count(node, request)) * log_entries,
-        sync=float(abs(request.vid_u - synchronized_version(node, request))),
+        sync=float(sync_lag(node, request)),
         queue=float(node.queue_wait_ns()),
     )
 
@@ -337,72 +499,174 @@ class Scheduler:
     def is_authorization_aware(self) -> bool:
         return self.variant in AUTHORIZATION_AWARE
 
-    def _candidates(
+    @staticmethod
+    def eligible(
+        nodes: Sequence[FogSearchNode], shard: Tuple[str, str]
+    ) -> Tuple[FogSearchNode, ...]:
+        """``{FSN_j : S ∈ S_j}`` — Algorithm 1's ``if S ∉ S_j: continue``.
+
+        Membership is by the node's own bitmap keys, not by domain: a node can
+        serve a domain and still hold no entries under a particular policy of
+        it, and Algorithm 1 asks whether the node maintains the SHARD.
+        """
+        return tuple(node for node in nodes if shard in node.index.policy_pairs)
+
+    def _reachable(
         self, nodes: Sequence[FogSearchNode], request: SearchRequest
     ) -> Tuple[FogSearchNode, ...]:
-        """Nodes that serve at least one domain the request is authorized for.
+        """Nodes serving at least one domain the request is authorized for.
 
-        Phase VI Step 4: "The selected Fog Search Node performs encrypted search
-        only over the authorized searchable-index shards." Costing a node that
-        holds none of them would let the scheduler pick a node guaranteed to
-        return nothing.
+        The pool the three oblivious variants pick from. They do not consult
+        ``S_j``, which is exactly why they can produce a cross-node forward;
+        restricting them to a domain keeps them from being weakened below their
+        published construction, which routes within the federation the query
+        addresses.
         """
         wanted = set(request.domains)
-        candidates = tuple(
-            node for node in nodes if wanted & set(node.domains)
-        )
-        if not candidates:
+        reachable = tuple(node for node in nodes if wanted & set(node.domains))
+        if not reachable:
             raise SchedulerError(
                 f"no Fog Search Node serves any of the authorized domains "
                 f"{sorted(wanted)}"
             )
-        return candidates
+        return reachable
+
+    def assign(
+        self, nodes: Sequence[FogSearchNode], request: SearchRequest
+    ) -> ShardAssignment:
+        """Algorithm 1 — ``M_Q``, one FSN per required shard.
+
+        ``aass`` follows the published loop exactly: eligible nodes only, then
+        ``arg min SC_j`` among them. The three oblivious variants place each
+        shard by their own rule over the reachable pool, without the eligibility
+        guard — which is what makes their cross-node forwards non-zero and the
+        Exp. 8(c) comparison meaningful.
+        """
+        if not nodes:
+            raise SchedulerError("no Fog Search Nodes to schedule across")
+        if self.variant == VARIANT_AASS and not request.query_versions:
+            raise SchedulerError(
+                "AASS requires V_Q (the query-relevant authority state) to "
+                "evaluate C_j^sync; a request without it can only be scored on "
+                "three of eq:search-cost's four terms, which is not AASS"
+            )
+        reachable = self._reachable(nodes, request)
+
+        mapping: List[Tuple[Tuple[str, str], FogSearchNode]] = []
+        unplaceable: List[Tuple[str, str]] = []
+        forwards = 0
+        all_costs: List[NodeCost] = []
+        seen_costs: set = set()
+        # Raw vectors are a function of (node, T_Q) alone, so one per node for
+        # the whole request. Normalization still happens per shard, over that
+        # shard's eligible set -- it is scale-free and depends on which nodes
+        # are being compared, which is exactly what changes shard to shard.
+        raw_cache: Dict[str, CostVector] = {}
+
+        for shard in request.shards:
+            holders = self.eligible(nodes, shard)
+            if self.variant == VARIANT_AASS:
+                if not holders:
+                    # `S ∉ S_j` for every j: no eligible node exists. Algorithm 1
+                    # writes `M_Q[S] <- ⊥` here; the entry is recorded in
+                    # `unplaceable` instead of stored as a null, so callers
+                    # iterating `mapping` cannot dispatch to ⊥ by accident.
+                    unplaceable.append(shard)
+                    continue
+                costs = self.score(holders, request, cache=raw_cache)
+                chosen = min(
+                    zip(holders, costs),
+                    key=lambda pair: (pair[1].score, pair[1].node_id),
+                )[0]
+                for cost in costs:
+                    key = (shard, cost.node_id)
+                    if key not in seen_costs:
+                        seen_costs.add(key)
+                        all_costs.append(cost)
+            else:
+                # The REQUEST-level pool, deliberately not filtered by S_j or
+                # even by the shard's domain. §VI defines these arms that way:
+                # "Least Loaded, which considers current workload but not shard
+                # locality or synchronization state", and "Conventional
+                # strategies may assign work to an FSN that does not maintain
+                # the required shard, causing cross-node forwarding." Filtering
+                # the pool per shard would hand them the locality AASS is
+                # claimed to provide and flatten Exp. 8(c) to zero everywhere.
+                pool = reachable
+                if not holders:
+                    unplaceable.append(shard)
+                    continue
+                if self.variant == VARIANT_NO_LB:
+                    chosen = pool[0]
+                elif self.variant == VARIANT_ROUND_ROBIN:
+                    chosen = pool[self._cursor % len(pool)]
+                    self._cursor += 1
+                else:  # VARIANT_LEAST_LOADED
+                    chosen = min(
+                        pool, key=lambda node: (node.queue_length, node.node_id)
+                    )
+                if shard not in chosen.index.policy_pairs:
+                    forwards += 1
+            mapping.append((shard, chosen))
+
+        return ShardAssignment(
+            mapping=tuple(mapping),
+            variant=self.variant,
+            costs=tuple(all_costs),
+            forwards=forwards,
+            unplaceable=tuple(unplaceable),
+        )
 
     def select(
         self, nodes: Sequence[FogSearchNode], request: SearchRequest
     ) -> Selection:
-        """``FSN* = arg min_j SC_j``, or the variant's own rule."""
-        if not nodes:
-            raise SchedulerError("no Fog Search Nodes to schedule across")
-        candidates = self._candidates(nodes, request)
+        """One node for the whole request — the reduction of ``M_Q``.
 
-        # Each variant pays for its OWN rule and nothing else. Costing every
-        # node before the branch charged `no_lb` 22.42us/query against `aass`'s
-        # 23.26us (measured, 4 nodes) for a cost vector it never reads: a
-        # constant overhead common to all four arms, 4x the 5.34us
-        # execute_search() being scheduled, which swamped the very difference
-        # Exp. 7-8 exist to measure. It also weakened three baselines below
-        # their published construction, which is forbidden.
-        if self.variant == VARIANT_NO_LB:
-            chosen = candidates[0]
-        elif self.variant == VARIANT_ROUND_ROBIN:
-            chosen = candidates[self._cursor % len(candidates)]
-            self._cursor += 1
-        elif self.variant == VARIANT_LEAST_LOADED:
-            chosen = min(
-                candidates, key=lambda node: (node.queue_length, node.node_id)
+        Callers that must dispatch a request to a single process (the Exp. 7-8
+        replay, and Exp. 2's single-shard query) use this. It runs Algorithm 1
+        and then takes the node carrying the most shards; it never decides
+        anything :meth:`assign` did not.
+        """
+        assignment = self.assign(nodes, request)
+        chosen = assignment.busiest()
+        if chosen is None:
+            raise SchedulerError(
+                f"no Fog Search Node maintains any required shard of "
+                f"{sorted(request.shards)}"
             )
-        else:
-            costs = self.score(candidates, request)
-            # arg min SC_j, node_id breaking ties so the choice is deterministic
-            # and a rerun of one trace reproduces it.
-            chosen = min(
-                zip(candidates, costs),
-                key=lambda pair: (pair[1].score, pair[1].node_id),
-            )[0]
-            return Selection(node=chosen, variant=self.variant, costs=costs)
-
         # The three authorization-oblivious arms have no cost vector to show:
         # their rule reads a cursor or a queue depth, not SC_j. An empty tuple
         # says that honestly; a populated one would imply they consulted costs
         # they are defined not to consult.
-        return Selection(node=chosen, variant=self.variant, costs=())
+        return Selection(
+            node=chosen,
+            variant=self.variant,
+            costs=assignment.costs,
+            assignment=assignment,
+        )
 
     def score(
-        self, candidates: Sequence[FogSearchNode], request: SearchRequest
+        self,
+        candidates: Sequence[FogSearchNode],
+        request: SearchRequest,
+        *,
+        cache: Optional[Dict[str, CostVector]] = None,
     ) -> Tuple[NodeCost, ...]:
-        """The four weighted terms for each candidate — AASS's rule, alone."""
-        raw = tuple(estimate_costs(node, request) for node in candidates)
+        """The four weighted terms for each candidate — AASS's rule, alone.
+
+        ``cache`` memoises the raw vectors by node id across one request's shard
+        loop. Sound because the four terms do not depend on the shard (see
+        :func:`estimate_candidate_count`), and load-bearing because without it a
+        query authorized for ``|S_Q|`` shards would cost every eligible node
+        ``|S_Q|`` times inside Exp. 2's and Exp. 7's timed regions.
+        """
+        if cache is None:
+            raw = tuple(estimate_costs(node, request) for node in candidates)
+        else:
+            raw = tuple(
+                cache.setdefault(node.node_id, estimate_costs(node, request))
+                for node in candidates
+            )
         normalized = normalize(
             raw,
             degenerate_value=self.config.scheduler.degenerate_term_value,
@@ -459,10 +723,12 @@ __all__ = [
     "CostVector",
     "NodeCost",
     "Selection",
+    "ShardAssignment",
     "Scheduler",
     "estimate_costs",
     "estimate_candidate_count",
     "estimate_result_count",
+    "sync_lag",
     "normalize",
     "score_nodes",
 ]

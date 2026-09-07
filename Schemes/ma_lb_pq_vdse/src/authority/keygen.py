@@ -58,7 +58,7 @@ through an unfaithful group belongs to a context whose ``assert_reportable()``
 refuses. **Nothing here has been verified against real group algebra**; that
 needs the charm backend on the experiment host.
 
-Consequence for §V, unchanged by this module: the ABE layer is on no measured
+Consequence for §VI, unchanged by this module: the ABE layer is on no measured
 path. Exp. 1 times ``T_Q = {H(w_i || VID_U)}`` (pure hashing), Exp. 4 excludes
 decryption, and Phases III and V are untimed.
 """

@@ -112,9 +112,9 @@ ma_lb_pq_vdse:
 
   # Hash H used for the authorization-state commitment C_i^auth (Phase II
   # Step 3), the policy-bound keyword token T_j (Phase IV Step 2), and
-  # AuthRoot_U (Phase III Step 4). §V: "SHA-256 for hashing and Merkle-tree
+  # AuthRoot_U (Phase III Step 4). §VI: "SHA-256 for hashing and Merkle-tree
   # construction".
-  hash_output_bits: 256                    # published: §V
+  hash_output_bits: 256                    # published: §VI
   # Every || in the published equations is realised as a length-prefixed join
   # (Common/crypto/hashes.py::_join), so H(a||b) cannot collide with H(a'||b')
   # under a different field split. No measurable cost; removes a real ambiguity.
@@ -181,7 +181,7 @@ guo_vdsse:
     # At our density even the paper's own 112 GB machine could not have held
     # N = 10^6 at 128 bits (141 GB).
     #
-    # DISCLOSE IN §V: guo's punctured-PRF domain is sized to the keyword
+    # DISCLOSE IN §VI: guo's punctured-PRF domain is sized to the keyword
     # universe rather than to lambda, as Ref[55]'s is; this makes guo FASTER on
     # Exp. 2/4/5 than a 128-bit domain would. The decision was taken on the
     # grounds above, before any cross-scheme result was known.
@@ -226,7 +226,7 @@ thingom_pq_abse:
   attributes:
     # benchmark: NOT published for this evaluation. Ref[41] fixes u=30 only
     # for its own figure captions (Ref[41].md:472, "we fix the number of
-    # attributes (l = 30)"), and the manuscript's §V never sets one despite
+    # attributes (l = 30)"), and the manuscript's §VI never sets one despite
     # declaring u, l and e in its cost-notation table.
     #
     # 10 was chosen to match zhuang_lattice_mabse.attributes.l, which WAS
@@ -424,7 +424,7 @@ yue_ge:
                                       # compared at equal security.
   update_batches_c: 4                 # benchmark: the paper says only "we
                                       # implement batch updating; thus c is
-                                      # relatively small" (§V-D) and never fixes
+                                      # relatively small" (§VI-D) and never fixes
                                       # it. Search is O(c) PRF evaluations, so
                                       # this is DIRECTLY RESULTS-AFFECTING.
                                       # 4 matches the repo's default domain count

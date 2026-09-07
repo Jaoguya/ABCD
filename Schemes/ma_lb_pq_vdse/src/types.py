@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
 
 from Common.crypto import hashes  # noqa: E402
 
-# Digest width for every commitment in the scheme: §V specifies SHA-256 for
+# Digest width for every commitment in the scheme: §VI specifies SHA-256 for
 # hashing and Merkle-tree construction (crypto.yaml -> ma_lb_pq_vdse
 # .hash_output_bits: 256). Records validate against this rather than accepting
 # any byte string, so a truncated or wrong-algorithm digest fails at

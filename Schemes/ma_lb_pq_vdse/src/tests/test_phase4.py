@@ -410,7 +410,7 @@ def test_dsi_unauthorized_query_returns_nothing():
 
 
 def test_dsi_reports_n_eff_and_prune_ratio_as_measurements():
-    """§V :1892 — cost tracks n_eff, so n_eff must be measured, not derived."""
+    """§VI :1892 — cost tracks n_eff, so n_eff must be measured, not derived."""
     shard, extracted = indexed_shard(records=8, keywords=5, policies_per_domain=4)
     record = extracted[0]
     authorized = [(record.domain, record.policy_id)]
@@ -459,13 +459,13 @@ def test_dsi_filters_before_matching():
 
 
 def test_dsi_conjunctive_query_requires_every_keyword():
-    """§V's q-keyword conjunctive query — matched PER RECORD.
+    """§VI's q-keyword conjunctive query — matched PER RECORD.
 
     This test used to assert ``found == ()`` with the comment "no single entry
     carries three different tokens", which codified the defect as intended
     behaviour: an ordinal is one entry and an entry holds one token, so
     intersecting ordinals made a q-keyword query unanswerable for ANY data,
-    while the docstring claimed it implemented §V's central search. The
+    while the docstring claimed it implemented §VI's central search. The
     assertion and the docstring contradicted each other and the assertion won
     for months.
 
@@ -1149,7 +1149,7 @@ def test_trapdoor_rejects_empty_and_duplicate_queries():
 
 
 def test_trapdoor_default_query_size_matches_the_paper():
-    """§V fixes q = 5 ("each query contains five keywords")."""
+    """§VI fixes q = 5 ("each query contains five keywords")."""
     config = config_mod.load()
     scheme = tokens_mod.TokenScheme.from_config(config, SEARCH_KEY)
     trapdoor = tokens_mod.generate_trapdoor(

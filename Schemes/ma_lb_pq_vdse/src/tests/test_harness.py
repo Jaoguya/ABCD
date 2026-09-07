@@ -608,7 +608,7 @@ def test_all_experiments_are_defined():
 
 
 def test_experiment_sweeps_match_global_yaml():
-    """The harness must not carry its own copy of the §V ranges."""
+    """The harness must not carry its own copy of the §VI ranges."""
     for number, key in (
         (1, "exp1"), (2, "exp2"), (3, "exp3"), (4, "exp4"),
         (5, "exp5"), (6, "exp6"), (7, "exp7"), (8, "exp8"),
@@ -891,7 +891,7 @@ def test_exp7_and_exp8_record_the_same_arrival_trace():
         )
         assert first7 == trace_digest(8, concurrency), (
             f"exp7 and exp8 recorded different traces at "
-            f"concurrency={concurrency}; §V pairs their metrics as one workload"
+            f"concurrency={concurrency}; §VI pairs their metrics as one workload"
         )
 
 
@@ -955,18 +955,20 @@ def test_scheduler_ablation_ramps_before_measuring(monkeypatch):
     assert len(calls) == ramped + 1, "measure() must replay once, never ramp"
 
 
-def test_cross_node_forwards_is_scheduler_invariant_at_one_domain_per_node():
-    """A flat metric must be known to be flat before it is ever plotted.
+def test_aass_forwards_no_shard_and_the_oblivious_variants_do():
+    """§VI Fig. 8(c): AASS "reduces unnecessary forwarding".
 
-    README §1's default topology is d = m = 4, and assign_domains_to_fsns then
-    gives each FSN exactly one domain. _candidates() already restricts the
-    choice to nodes serving an authorized domain, so the chosen node serves
-    exactly ONE of the k domains a request is authorized for, whichever node
-    that is -- and the forward count is k-1 under every variant. No scheduler
-    can move it. §V's "minimizes unnecessary cross-node communication" is
-    therefore not testable on this topology, and this test exists so that fact
-    fails loudly if the topology or the candidate rule ever changes to make it
-    testable.
+    A cross-node forward is a required shard assigned to an FSN that does not
+    maintain it. Algorithm 1 makes that impossible for AASS -- the loop skips
+    every node with `S notin S_j` -- so its count must be exactly 0, while the
+    three arms that do not consult `S_j` must produce some.
+
+    This test replaces one asserting the metric was INVARIANT across variants.
+    It was, while the scheduler returned one node per request and forwards were
+    counted per authorized domain: at d = m = 4 the answer was k-1 for every
+    arm. The per-shard assignment of Algorithm 1 is what makes it evidence
+    again, and a regression to a request-level rule would show up here as AASS
+    scoring non-zero or the oblivious arms collapsing to zero.
     """
     from Schemes.ma_lb_pq_vdse.src.scheduler import aass as aass_mod
 
@@ -975,7 +977,7 @@ def test_cross_node_forwards_is_scheduler_invariant_at_one_domain_per_node():
     deployment, requests = prepared["deployment"], prepared["requests"]
     assert all(len(node.domains) == 1 for node in deployment.nodes)
 
-    counts = set()
+    counts = {}
     for variant in aass_mod.VARIANTS:
         scheduler = aass_mod.Scheduler(variant, config=CONFIG, reportable=False)
         forwards = 0
@@ -984,16 +986,20 @@ def test_cross_node_forwards_is_scheduler_invariant_at_one_domain_per_node():
                 tokens=token.tokens,
                 authorized=decision.authorized_shards,
                 vid_u=token.vid_u,
+                query_versions=decision.query_versions,
             )
-            node = scheduler.select(deployment.nodes, request).node
-            served = sum(1 for d in request.domains if node.serves_domain(d))
-            assert served == 1
-            forwards += len(request.domains) - served
-        counts.add(forwards)
-    assert len(counts) == 1, (
-        f"cross_node_forwards differed across variants ({counts}); the topology "
-        f"now permits a scheduling choice, so the metric has become meaningful "
-        f"and Exp. 8 should report it"
+            forwards += scheduler.assign(deployment.nodes, request).forwards
+        counts[variant] = forwards
+
+    assert counts[aass_mod.VARIANT_AASS] == 0, (
+        f"AASS forwarded {counts[aass_mod.VARIANT_AASS]} shards; Algorithm 1's "
+        f"`S notin S_j -> continue` guard makes that impossible, so the "
+        f"eligibility filter has been lost"
+    )
+    oblivious = [v for v in aass_mod.VARIANTS if v != aass_mod.VARIANT_AASS]
+    assert any(counts[v] > 0 for v in oblivious), (
+        f"no oblivious variant forwarded a shard ({counts}); the metric is flat "
+        f"again and Fig. 8(c) would have nothing to show"
     )
 
 

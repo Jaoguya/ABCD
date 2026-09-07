@@ -136,7 +136,7 @@ def verify_merkle_membership(bundle: PsaVerificationBundle) -> StepResult:
     both unconditionally. The two Exp. 4 curves share an axis, so the tampered
     record has to cost the same work in both or the comparison is not
     like-for-like. Short-circuiting BETWEEN steps is a different matter and is
-    kept: §V rejects the ciphertext at the first failed step.
+    kept: §VI rejects the ciphertext at the first failed step.
     """
     expected_leaf = merkle.hash_leaf(bundle.entry.leaf())
     leaf_matches = hashes.constant_time_equal(expected_leaf, bundle.proof.leaf_hash)

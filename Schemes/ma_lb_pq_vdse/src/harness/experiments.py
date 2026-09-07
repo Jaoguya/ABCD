@@ -18,7 +18,7 @@ The boundaries, from README §5 and ``SCHEME.md``:
   same runs.
 
 **Titles here follow the manuscript; class names and ``name`` slugs do not.**
-Section V renamed four experiments (Exp. 1 "Policy-State-Aware Token
+Section VI renamed four experiments (Exp. 1 "Policy-State-Aware Token
 Generation", Exp. 4 "Fine-Grained Verification Effectiveness", Exp. 5 "Dynamic
 Index Update", Exp. 6 "DIAS Synchronization Ablation", Exp. 7 "AASS Search
 Throughput"). The ``name`` field of each class is the on-disk results directory
@@ -232,7 +232,7 @@ class CorpusRecordSource:
                 f"README §13 forbids. This needs a recorded benchmark decision: "
                 f"either cap Exp. 3 at d<={self._available_domains}, or "
                 f"regenerate the corpus with more domains and re-freeze "
-                f"(results-affecting), or state in §V that d>"
+                f"(results-affecting), or state in §VI that d>"
                 f"{self._available_domains} uses a sub-partitioned corpus."
             )
 
@@ -777,6 +777,7 @@ class Exp2SearchLatency:
             tokens=token.tokens,
             authorized=decision.authorized_shards,
             vid_u=token.vid_u,
+            query_versions=decision.query_versions,
         )
         selection = aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(  # AASS
             d.nodes, request
@@ -922,7 +923,7 @@ class Exp4Verification:
         and then take ``r`` BUNDLES from it. With the frozen corpus's
         ``|W_i| ~= 32`` that made r=1000 into 32 records carrying 1000 index
         entries, so the per-record half of Phase VIII -- the commitment
-        recomputation and the chain-consistency check -- ran 32 times where §V
+        recomputation and the chain-consistency check -- ran 32 times where §VI
         says it runs once per returned ciphertext, and the figure's x-axis
         counted index entries under a caption reading "returned results".
 
@@ -932,7 +933,7 @@ class Exp4Verification:
         same x, Scheme [54] verified 1000 signatures while we checked 32
         commitments. That is not a like-for-like point on a shared axis.
 
-        Now r records produce r bundles, one per record, which is what §V
+        Now r records produce r bundles, one per record, which is what §VI
         describes and what the baselines measure.
         """
         wanted = int(value)
@@ -1145,7 +1146,7 @@ class Exp6AuthorizationSync:
     all affected FSNs report the new ``VID``", and ``tab:cost``'s authorization-
     synchronization row ``O(delta)T_H + O(log d)T_MT``, which carries no chain
     term. Anchoring is also identical across all three variants, so including it
-    could not change which one wins — only add a constant. §V must state the
+    could not change which one wins — only add a constant. §VI must state the
     exclusion and report the anchor cost separately, the way README §5 already
     handles ML-KEM encapsulation for Exp. 1.
 
@@ -1370,6 +1371,7 @@ class SchedulerAblation:
                     tokens=token.tokens,
                     authorized=decision.authorized_shards,
                     vid_u=token.vid_u,
+                    query_versions=decision.query_versions,
                 )
                 try:
                     selection = scheduler.select(deployment.nodes, request)
@@ -1386,7 +1388,16 @@ class SchedulerAblation:
                     peak_depth = depth
                 pool.dispatch(
                     dispatched, selection.node.node_id,
-                    token.tokens, decision.authorized_shards,
+                    token.tokens,
+                    # The shards M_Q gave THIS node, not the whole of S_Q.
+                    # Phase VI Step 4: "Each selected FSN searches only its
+                    # assigned authorized shard". Handing it S_Q would have it
+                    # filter on pairs another node was assigned -- harmless to
+                    # the result (its bitmaps for those pairs are empty) and
+                    # wrong as a measurement, since the bitmap union it walks is
+                    # the C_j^index the scheduler costed it for.
+                    selection.assignment.shards_for(selection.node.node_id)
+                    or decision.authorized_shards,
                     # Empty for Option D, whose H(w) token carries no policy
                     # and so has nothing to group by.
                     groups=getattr(token, "groups", None) or None,
@@ -1396,17 +1407,18 @@ class SchedulerAblation:
                 for outcome in pool.drain():
                     by_id[outcome.node_id].dequeue()
                     collected.append(outcome)
-                # A forward per authorized domain the chosen node does NOT hold:
-                # those shards are served from another node, which is the
-                # cross-node communication §V claims AASS minimizes. The former
-                # test -- serves_domain(request.domains[0]) -- compared against
-                # the alphabetically FIRST authorized domain, so with every
-                # request authorized for all four domains it only ever asked
-                # "did you pick the dom0 node?".
-                forwards += sum(
-                    1 for domain in request.domains
-                    if not selection.node.serves_domain(domain)
-                )
+                # §VI Exp. 8(c): "a cross-node forward occurs when a scheduler
+                # assigns a required shard to an FSN that does not maintain it".
+                # That is a property of M_Q, so it is counted where M_Q is
+                # built -- Algorithm 1's `S notin S_j -> continue` makes it 0 for
+                # `aass` by construction, while the three oblivious variants
+                # place shards without consulting S_j and pay for it.
+                #
+                # It was previously counted per authorized DOMAIN against the one
+                # node the scheduler returned, which at d = m = 4 gave k-1 for
+                # every variant -- a constant, and the reason the metric was
+                # dropped. The per-shard assignment restores it as evidence.
+                forwards += selection.assignment.forwards
             tail = pool.collect(dispatched - len(collected))
             # Retire the tail too. Every enqueue must have its dequeue or the
             # depth carries over into the next replay, and prepare()'s ramp plus
@@ -1453,6 +1465,7 @@ class SchedulerAblation:
                 tokens=token.tokens,
                 authorized=decision.authorized_shards,
                 vid_u=token.vid_u,
+                query_versions=decision.query_versions,
             )
             try:
                 selection = scheduler.select(deployment.nodes, request)
@@ -1465,7 +1478,11 @@ class SchedulerAblation:
                 peak_depth = depth
             try:
                 search_mod.execute_search(
-                    selection.node, token.tokens, decision.authorized_shards
+                    selection.node,
+                    token.tokens,
+                    # M_Q's shards for this node — see the multiprocess path.
+                    selection.assignment.shards_for(selection.node.node_id)
+                    or decision.authorized_shards,
                 )
             except search_mod.SearchRejected:
                 selection.node.dequeue()
@@ -1473,12 +1490,8 @@ class SchedulerAblation:
                 continue
             selection.node.dequeue()
             latencies.append((time.perf_counter_ns() - began) / 1e6)
-            # Same forward count as the multiprocess path -- see there for why
-            # the previous single serves_domain(domains[0]) test was wrong.
-            forwards += sum(
-                1 for domain in request.domains
-                if not selection.node.serves_domain(domain)
-            )
+            # Same forward count as the multiprocess path -- see there.
+            forwards += selection.assignment.forwards
         wall = time.perf_counter() - started
 
         window_ns = max(1, int(wall * 1e9))
@@ -1501,16 +1514,17 @@ class SchedulerAblation:
         """Data Users spanning 1..d authorized domains, no domain favoured.
 
         A single user authorized across every domain — which is what this was —
-        makes two of AASS's five terms constant by construction: ``C_j^auth``
-        (``|P_Q|``) is the same for every request, and ``cross_node_forwards`` is
-        pinned at ``d-1`` per request for EVERY variant, because each FSN serves
-        one domain and a request needing all four must forward to three of them
-        whichever node is chosen. §V's claim that AASS "minimizes unnecessary
-        cross-node communication" is untestable on such a workload: there is no
-        unnecessary communication to remove.
+        makes the workload degenerate: every request carries the same authorized
+        shard set, so the arms differ only in queue state. Varying the scope is
+        what lets ``cross_node_forwards`` separate them, now that Algorithm 1
+        assigns per shard and only AASS applies the ``S notin S_j`` guard.
 
-        **Benchmark choice, not published.** Neither §V nor README fixes how many
-        domains one query spans; §V fixes only d=4. Uniform over subset sizes
+        (This paragraph previously blamed ``C_j^auth = |P_Q|``, a fifth cost
+        term of the previous manuscript revision. ``eq:search-cost`` has four
+        and the code was aligned to it on 2026-09-07.)
+
+        **Benchmark choice, not published.** Neither §VI nor README fixes how many
+        domains one query spans; §VI fixes only d=4. Uniform over subset sizes
         1..d with the starting domain rotated is the neutral choice — it spans
         the range from single-domain queries (where authorization locality
         decides everything) to all-domain queries (where it cannot matter), and
@@ -1615,7 +1629,7 @@ class SchedulerAblation:
             if not pool_for_domain:
                 continue
             record = pool_for_domain[index % len(pool_for_domain)]
-            # q KEYWORDS, per README §6 and §V's "each query contains five
+            # q KEYWORDS, per README §6 and §VI's "each query contains five
             # keywords". This was `[keywords[0]]` -- one keyword, uncommented --
             # so Exp. 7's throughput and Exp. 8's spread were both measured on a
             # q=1 workload and reported against a paper that says 5. Same class
@@ -1685,20 +1699,22 @@ class Exp8LoadBalance(SchedulerAblation):
     primary: MetricSpec = MetricSpec("utilization_stddev", COUNT)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("max_node_utilization", COUNT),
-        # `cross_node_forwards` was here and is deliberately NOT reported.
-        # At the §V default d = m = 4, assign_domains_to_fsns gives each FSN one
-        # domain and _candidates() already restricts the choice to nodes serving
-        # an authorized domain, so the chosen node serves exactly one of the k
-        # authorized domains WHICHEVER node it is: the count is k-1 under every
-        # variant. Measured over 400 requests it was 600 for all four arms.
-        # A secondary that cannot vary is not evidence, and putting it in an
-        # ablation table invites the reviewer to check it and find it flat.
-        # `test_cross_node_forwards_is_scheduler_invariant_at_one_domain_per_node`
-        # fails if the topology ever makes it meaningful again.
+        # §VI's Fig. 8 is THREE panels: (a) utilization std. dev., (b) max FSN
+        # utilization, (c) cross-node forwards. The order here IS the panel
+        # order, because Plots/generate_plots.py indexes panels positionally
+        # (metric 0 = primary, 1 = first secondary, 2 = second).
         #
-        # Peak queue depth replaces it because it measures the thing §V actually
-        # claims for Exp. 8 -- "prevents node congestion" -- and it is only
-        # measurable at all now that the enqueue/dequeue loop is wired.
+        # `cross_node_forwards` was dropped on 2026-08-30 as invariant: the
+        # scheduler returned one node per request and the count was measured per
+        # authorized DOMAIN, so at d = m = 4 it was k-1 under every variant (600
+        # for all four arms over 400 requests). It is restored because Algorithm
+        # 1 is now implemented per SHARD: `aass` skips ineligible nodes and
+        # scores 0 by construction, while `no_lb`, `round_robin` and
+        # `least_loaded` place shards without consulting S_j. The metric varies
+        # across arms again, which is what §VI claims for it.
+        MetricSpec("cross_node_forwards", COUNT),
+        # Peak queue depth measures "prevents node congestion". Kept as a third
+        # secondary, past the panels the figure draws.
         MetricSpec("max_queue_depth", COUNT),
     )
 
@@ -1714,6 +1730,7 @@ class Exp8LoadBalance(SchedulerAblation):
             primary=outcome.utilization_stddev,
             secondaries={
                 "max_node_utilization": outcome.max_utilization,
+                "cross_node_forwards": float(outcome.cross_node_forwards),
                 "max_queue_depth": float(outcome.max_queue_depth),
             },
         )
@@ -1722,7 +1739,7 @@ class Exp8LoadBalance(SchedulerAblation):
 # ===========================================================================
 # Exp. 9 — Verification Granularity under Tampering
 # ===========================================================================
-# NOT AN EXPERIMENT IN THE MANUSCRIPT. Section V has eight experiments and no
+# NOT AN EXPERIMENT IN THE MANUSCRIPT. Section VI has eight experiments and no
 # Exp. 9: this arm's numbers are panel (b) of the manuscript's Exp. 4 figure
 # ("invalid-result localization and valid-result retention"), while Exp4Verification
 # supplies panel (a). The split is a HARNESS split, kept because the two halves
@@ -1735,7 +1752,7 @@ class Exp8LoadBalance(SchedulerAblation):
 class Exp9VerificationGranularity:
     """What verification BUYS, where Exp. 4 measures what it COSTS.
 
-    Feeds Fig. 4(b) of the manuscript; there is no Experiment 9 in Section V.
+    Feeds Fig. 4(b) of the manuscript; there is no Experiment 9 in Section VI.
 
     The result-set size is PINNED (``global.yaml``: ``returned_results: 20000``)
     and the number of tampered records is swept. The question is not how fast a
@@ -1750,7 +1767,7 @@ class Exp9VerificationGranularity:
     cancel". So neither construction can bisect its way to the bad record
     without the server issuing fresh proofs per sub-batch, which neither paper
     defines. The all-or-nothing outcome is a property of the published designs,
-    not of this implementation, and §V must say so in those terms.
+    not of this implementation, and §VI must say so in those terms.
 
     **The tamper.** One byte of an index entry's ``T_j``, leaving ``CID_i``
     intact so the bundle stays well-formed. ``entry_leaf`` covers every field, so

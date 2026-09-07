@@ -13,7 +13,7 @@ The matching relation ``T_Q → I_i`` is Option D's equality (``index/tokens.py`
 ``T_j = T_Q = H(w)``, so a token presented by a query is the token stored in the
 index, and one trapdoor serves every domain.
 
-**Filter, then match — in that order.** §V: "authorization-aware bitmap
+**Filter, then match — in that order.** §VI: "authorization-aware bitmap
 filtering removes unauthorized ciphertexts **before** encrypted matching, so the
 online search cost depends mainly on the effective authorized candidate set
 ``n_eff`` rather than the total encrypted index size". An implementation that
