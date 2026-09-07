@@ -239,8 +239,8 @@ NEW 2026-09-07 (after the Fabric run) — one addition and one correction
 ==========================================================================
 9.  §V Exp. 4 — the policy-state-aware commitment costs nothing measurable
     -------------------------------------------------------------------
-    NOT YET APPLIED. Needs the author's decision on whether Exp. 4 reports the
-    construction at all.
+    APPLIED 2026-09-07 on the author's instruction ("put in manuscript").
+    Exp. 4 now reports the construction.
 
     psa Exp. 4 has now been measured against the SAME real Hyperledger Fabric
     network as the cross-scheme Exp. 4, so the two are finally on one axis:

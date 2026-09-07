@@ -2413,6 +2413,13 @@ already verifies each record individually rather than through an
 aggregate check, so the all-or-nothing behaviour this panel measures does
 not describe it.
 
+The policy-state-aware commitment of Section~IV was evaluated against the
+same ledger deployment. Binding the ciphertext reference and the governing
+authorities' state into $Commit_i$ leaves per-result verification cost
+unchanged within measurement error -- within 2\% at every $r$ -- because the
+cost is dominated by the per-record ledger lookup rather than by the fields
+the commitment covers.
+
 Overall, MA-LB-PQ-VDSE introduces additional per-result verification
 overhead in exchange for fine-grained integrity and freshness checking.
 This enables corrupted or stale results to be isolated without

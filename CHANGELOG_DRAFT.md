@@ -1,7 +1,7 @@
-# README §16 change-log — draft for 2026-09-06 / 07
+# README §16 change-log — MERGED 2026-09-07
 
-Not merged into `README.md`. Paste the two rows below into §16's table when you
-are happy with them, or tell me to do it.
+**All three rows below are now IN `README.md` §16.** This file is kept as the
+working note that produced them; do not paste them again.
 
 Two rows rather than one: they invalidate different things and a reader
 tracking down a superseded number needs to know which.
