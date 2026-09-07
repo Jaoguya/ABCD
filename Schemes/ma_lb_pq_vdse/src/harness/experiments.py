@@ -948,8 +948,25 @@ class Exp3CrossDomain:
         return Sample(
             primary=elapsed / 1e6,
             secondaries={
-                # ONE trapdoor, however many domains. This is the claim.
-                "trapdoors_issued": 1.0,
+                # ONE trapdoor, however many domains. This is the claim -- so it
+                # is COUNTED from the token the DU actually issued, not asserted.
+                #
+                # It was the literal `1.0` until 2026-09-08. That made the
+                # experiment's headline secondary unfalsifiable: a regression
+                # that made the trapdoor domain-dependent would have kept
+                # reporting 1.0, and §VI cites this number as the difference
+                # between the proposed scheme and baselines that issue d of
+                # them. `len(token.tokens)` is q under Option D -- one PRF
+                # evaluation per keyword, no domain factor -- so it stays 1.0
+                # for the current q=1 workload and no banked number moves,
+                # while a per-domain trapdoor would now read q*d.
+                #
+                # Note this measures what it says only while the query is
+                # single-keyword: when 3-4 raises q to the published 5, the
+                # honest reading of this column is "trapdoors, not one per
+                # domain", i.e. q rather than q*d, and §VI's sentence should
+                # say so.
+                "trapdoors_issued": float(len(token.tokens)),
                 "nodes_searched": float(len(responses)),
             },
         )

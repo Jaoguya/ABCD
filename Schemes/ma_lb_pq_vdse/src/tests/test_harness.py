@@ -716,12 +716,34 @@ def test_exp2_sweeps_records_not_index_entries():
         )
 
 
-def test_exp3_issues_exactly_one_trapdoor_at_every_d():
-    """The Exp. 3 claim, across the sweep."""
-    for domains in (2, 4):
+def test_exp3_trapdoor_count_does_not_scale_with_domains():
+    """The Exp. 3 claim, across the sweep.
+
+    The claim is **d-independence**, not the literal 1: §VI's point is that the
+    proposed scheme issues one trapdoor where a baseline issues one per domain.
+    So the assertion is that the count is CONSTANT as d grows, and equals the
+    keyword count -- which is what makes it fail if a trapdoor ever becomes
+    domain-bound (it would read q*d).
+
+    This asserted `== 1.0` until 2026-09-08, against a `measure` that returned
+    the literal `1.0`. Both sides were hardcoded, so the experiment's headline
+    secondary was unfalsifiable in exactly the place a regression would show.
+    `measure` now counts `len(token.tokens)`; this now reads it.
+    """
+    counts = {}
+    for domains in (2, 4, 6):
         _, sample = measure_once(3, domains)
-        assert sample.secondaries["trapdoors_issued"] == 1.0
+        counts[domains] = sample.secondaries["trapdoors_issued"]
         assert sample.secondaries["nodes_searched"] >= 1
+    assert len(set(counts.values())) == 1, (
+        f"trapdoors_issued must not depend on d, got {counts} -- a trapdoor "
+        f"that scales with domains refutes the Exp. 3 claim outright"
+    )
+    # And it is the keyword count, so raising q to §VI's five (item 3-4) moves
+    # this to 5 rather than silently leaving a stale 1.
+    assert set(counts.values()) == {1.0}, (
+        f"expected one trapdoor per keyword at q=1, got {counts}"
+    )
 
 
 def test_exp4_reports_proof_size_in_kb_and_path_length():
