@@ -719,3 +719,398 @@ The literal `2006` in `psa_experiments.py:512` is left alone deliberately: it
 sizes the PSA track's **synthetic** vocabulary, which has no corpus behind it,
 and is self-consistent. `experiments.py:104`'s `vocabulary: int = 2006` is a
 dataclass default that line 203 overwrites from the manifest on every real run.
+
+---
+
+## 2026-09-07 — Exp. 2's workload is not the one §VI describes (four findings)
+
+**RESOLVED (partly): Found 1 and 2 fixed in code; 3 and 4 still need an
+author's call, and the banked Exp. 2 numbers are superseded either way.**
+
+Found 2 was decided by precedent, not by me: Exp. 4 carried the identical
+`// keywords_per_record` defect and had already been fixed, with the reasoning
+spelled out in `Exp4VerificationOverhead.prepare` ("the figure's x-axis counted
+index entries under a caption reading *returned results*... Every baseline
+sweeps r as RECORDS"). Exp. 2 fixed the same way: `record_count = int(value)`,
+in both `Exp2SearchLatency` and `PsaExp2SearchLatency` so the two constructions
+stay comparable.
+
+Found 1 fixed by following the Exp. 7/8 precedent, with one addition. Five
+INDEPENDENTLY drawn keywords match nothing over `|W_i| ~= 32`, so the query is
+now built as: the anchor is drawn by `select_query_keywords` at the baselines'
+selectivity (unchanged, still matching `yue_ge`), and the remaining `q-1` come
+from a record that CARRIES the anchor. The anchor sets selectivity; the
+completion makes the conjunction answerable. Verified `n_eff = 15.0`, not 0.
+
+Exp. 3 carries the same `q=1` shape but its construction indexes ONE shared
+keyword across every domain deliberately -- that is the property it measures --
+so it is not a like-for-like change and is left for its own pass.
+
+Tests added: query carries `q`; query keywords co-occur in a real record; the
+query changes run to run; `n_eff > 0` (was `>= 0`, which passes on the empty
+result); `N` builds `N` records. `test_psa_exp2_shares_fewer_posting_lists_than_
+option_d` hardcoded the old sizing and was comparing a 50,000-record PSA index
+against an 8,333-record Option D one; aligned, and it passes like-for-like.
+
+**Still open:** Found 3 (drop §VI's constant-selectivity sentences, or build a
+relative band) and Found 4 (does §VI's Exp. 2 report `option_d` or `psa`). Found
+4 decides what gets re-run; both arms are fixed identically so neither blocks
+the other. The banked `exp2_search_latency/` numbers are not quotable until the
+re-run — they were measured at `q=1` over a 32x-small corpus.
+
+
+Audit of Exp. 2 against `Overleaf/MA-LB-PQ-VDSE.tex` §VI, the banked
+`exp2_search_latency/`, and the code that produced it. All four change a number
+already in `results.csv` and in `fig:exp2`, so none is taken unilaterally.
+
+**Found 1 — `q = 1`, against §VI's five.** `experiments.py:765`:
+
+    token = token_mod.generate_search_token(
+        d.scheme, prepared["profile"], [keyword]
+    )
+
+Verified by running it: `len(token.tokens) == 1`, against
+`global.yaml defaults.keywords_per_query: 5` ("published: §VI *each query
+contains five keywords*"). This is the SAME defect the 2026-09-06 entry
+("Exp. 7 and 8 measure a `q=1` workload") fixed for Exp. 7/8 at
+`experiments.py:1641`. That entry states *"every other experiment honours it"* —
+that sentence is wrong. Exp. 2 was never fixed, and neither was Exp. 3
+(`experiments.py:863`, same single-keyword shape). `PsaExp2SearchLatency`
+DOES use `q=5` (`psa_experiments.py:1063`), so the two constructions plotted at
+experiment 2 do not share a query size.
+
+**Found 2 — the axis lies: entries against records.** `experiments.py:718` sizes
+the deployment as `record_count = int(value) // self.source.keywords_per_record`
+— with the frozen corpus's `keywords_per_record.mean = 31.70` (→ 32), the
+`N = 10^6` point indexes **31,250 records**. All four baselines index `records[:n]`
+= **1,000,000** (`guo_vdsse/src/exp2_search.py`, `yue_ge/.../runner.py:130`,
+`perera_lv_pqabse/.../runner.py:87`). `generate_plots.py:191` labels the shared
+x-axis **"Index size $N$ (records)"**, and §VI reads "from $10^4$ to $10^6$
+encrypted records". So the proposed scheme is drawn at ~32x less corpus than
+every baseline at the same plotted x, under a label that says otherwise. This is
+the sweep-value-is-not-the-work-done class the bug-sweep rule calls mine, but it
+has banked reportable data and a manuscript sentence behind it, so it is here.
+
+**Found 3 — "query selectivity is kept constant" is contradicted by the data.**
+§VI: *"query selectivity is kept constant. Hence, the number of matching records
+increases proportionally with the index size."* From the banked
+`raw_runs.csv`, N grew **100x** and `n_eff` grew **23.2x** (9.5 -> 220.1).
+Cause: `select_query_keywords` (`experiments.py:665`) draws uniformly from an
+ABSOLUTE frequency band (`QUERY_MIN_FREQUENCY = 5`, `QUERY_MAX_SHARE = 0.5`),
+so the floor of 5 binds hard at small N and loosens as N grows — relative
+selectivity drifts down instead of holding. Constant selectivity needs a
+RELATIVE band. `test_cost_table_agreement.py:120` records the same assumption
+("Under the constant-selectivity workload the match count rises with N") as the
+reason Exp. 2 is exempt from the shape assertions, so the exemption rests on a
+premise the data does not support. The bounds themselves are a faithful copy of
+`yue_ge/src/workload.py::select_keywords` and are pinned by
+`test_bounds_match_the_baselines` — the copy is correct; what it implements is
+not what §VI claims.
+
+**Found 4 — `fig:exp2` draws `option_d`, §VI's Exp. 2 prose describes `psa`.**
+The figure is `images/fig_exp2_search.pdf`, built by
+`ExperimentSpec(2, "exp2_search_latency", ...)` with no `proposed_prefix`, so
+the proposed curve is Option D. The §VI paragraph describes the AIM deriving
+"the policy-state-aware token set $\mathcal{T}_Q$" — the PSA construction.
+`psa_exp2_search_latency/` is banked, reportable, and never plotted: 13.400 ms
+against Option D's 6.040 ms at `N=10^6`, **2.2x**. Exp. 1 was moved onto the PSA
+track by 5143ee7 (`proposed_prefix="psa_"`); Exp. 2 was not, so the two figures
+now describe different constructions of "the proposed scheme".
+
+**Costs:** `fig:exp2` and every §VI sentence about it. Fixing 1 raises the
+proposed curve (five posting-list lookups per query, not one). Fixing 2 raises it
+again and by far the most (32x the records). Both move it toward the baselines,
+and the "slower latency growth" claim is what rests on the gap. Fixing 3 changes
+the shape, not just the level. Fixing 4 swaps the curve for one 2.2x higher.
+Re-running Exp. 2 for all five schemes is an AWS campaign, and Scheme [41] stays
+extrapolated above 10^4 per the 2026-09-07 entry.
+
+**Options:**
+- **A (would take)** — fix 1 and 2 together (`keywords[:q]` from
+  `config.defaults`; size the deployment as `records = N` like the baselines),
+  re-run Exp. 2 for all five schemes, and settle 4 by deciding which
+  construction §VI's Exp. 2 is about. For 3, either implement a relative
+  selectivity band or drop the "kept constant / proportionally" sentences from
+  §VI — the sentences are the cheaper half and the workload is already shared
+  with two baselines.
+- **B** — change §VI to describe what was measured: a single-keyword query over
+  an index of N ENTRIES. Costs no compute, but contradicts §VI's own "five
+  keywords" sentence and README §6, and leaves the proposed scheme measured on a
+  32x smaller corpus than its baselines, which is not defensible as a comparison.
+
+**Blocked:** nothing else. Exps. 1, 3-9 proceed; Exp. 3 carries Found 1's
+single-keyword shape and should be settled in the same decision.
+
+---
+
+## 2026-09-07 — Fig. 2's six runs used four different `global.yaml` files
+
+**RESOLVED: A was done. The drift is benign for Exp. 2, and the check that
+would have said so now exists.**
+
+Diffed all four revisions plus HEAD over every key Exp. 2 reads. `defaults`
+(`keywords_per_query`, `domains`, `fog_search_nodes`, `index_size`,
+`returned_results`) and `experiments.exp2_search_latency` are IDENTICAL across
+all five. The only difference in `measurement` is `repetitions`: perera's
+revision carried 30 where every other carried 10 — and perera's banked
+`raw_runs.csv` has exactly 10 rows per point, so the data is comparable.
+
+Why it agreed anyway is its own small finding: perera never reads `global.yaml`.
+`--runs` is an argparse default hardcoded to 10 (`perera_lv_pqabse/src/main.py:76`),
+and `yue_ge/src/main.py:63` does the same. They happened to match the config.
+Not fixed here — it is four CLIs and changes no banked number — but it is why
+the config hash drifted without the data drifting.
+
+`generate_plots.py` now warns when the schemes drawn in one figure carry
+different `global.yaml` hashes, or when one carries none. It fires today on
+**exp1, exp2, exp3 and exp5**; the other three have not been diffed yet.
+
+
+**Found:** the `config_hashes["global.yaml"]` recorded by the six runs that make
+up `fig:exp2` are four distinct values, and none is the file at HEAD:
+
+    ma_lb_pq_vdse  exp2       ac5568611661bda2   79a5739
+    ma_lb_pq_vdse  psa_exp2   1b8f581994c3a145   2e98705
+    guo / yue_ge / thingom    032de0d9dcaf5b48   ad6486f
+    perera_lv_pqabse          8172f55ef8baffc1   6c97ee9
+    (HEAD, after 5143ee7)     bf22f61f9d2cebc3
+
+`global.yaml`'s own header: *"CHANGING ANY VALUE HERE IS RESULTS-AFFECTING and
+invalidates every existing results.csv."* It fixes `keywords_per_query`,
+`repetitions`, `warmup_runs` and the Exp. 2 sweep values — the parameters that
+make the five curves comparable. The hashes are recorded faithfully in every
+`run_meta.json`; nothing checks that they AGREE across the schemes sharing a
+figure, so the drift is invisible at plot time.
+
+`ad6486f` is the "10 repetitions" commit, so the guo/yue/thingom runs are at
+least on the reduced count; the ma_lb and perera hashes predate or postdate it
+and were not audited value-by-value here.
+
+**Costs:** unknown until the four files are diffed. If they differ only in
+sections Exp. 2 does not read, nothing moves and the fix is a provenance check.
+If `defaults` or `measurement` differ, `fig:exp2` compares schemes run under
+different parameters.
+
+**Options:**
+- **A (would take)** — diff the four `global.yaml` revisions over the keys Exp. 2
+  reads (`defaults`, `measurement`, `experiments.exp2_search_latency`) and report
+  before deciding anything. Cheap, and it converts an unknown into a fact.
+- **B** — re-run everything at HEAD's `global.yaml` regardless. Correct by
+  construction, but pays for a full campaign to answer a question a diff answers.
+
+Then add a plot-time check that every scheme in one figure carries the same
+`global.yaml` hash, and name the mismatch instead of drawing it.
+
+**Blocked:** the Exp. 2 re-run above should not be launched until this is
+answered, or it will be launched against a config that has not been reconciled.
+
+---
+
+## 2026-09-07 — `5143ee7` collapsed round_robin into `no_lb`, and two stale tests
+
+**RESOLVED: all three fixed. No banked number moves — the regression existed
+only in code, since nothing has been re-run against `5143ee7` yet.**
+
+The pull brought three failures. `test_phase6.py` and `test_psa_experiments.py`
+were fully green at `a6cba3f` (71 passed, verified in a throwaway worktree), so
+all three arrived with the commit.
+
+**1. round_robin became no-load-balancing (a real regression, code fixed).**
+`select()` used to advance the cursor ONCE PER REQUEST. `5143ee7` made it
+`assign()` + `busiest()`, and `assign()` advances the cursor once per SHARD --
+so whenever `|S_Q|` is a multiple of the pool size the cursor lands back on the
+same offset every request, the first shard always goes to `pool[0]`, and
+`busiest()`'s first-assigned tie-break returns that same node forever.
+Measured: 8 consecutive `select()` calls over a 4-node, 4-shard federation
+returned `FSN1` eight times.
+
+`busiest()`'s own docstring warns about exactly this collapse ("silently
+collapsing round-robin into no-load-balancing and erasing the arm Exp. 7-8
+compare against") and says the tie-break is assignment order because that
+"rotates with the cursor". It does not rotate, in precisely the case the
+docstring names. Fixed by offsetting the rotation by a per-REQUEST counter as
+well as the per-shard cursor: shards still rotate across the pool within a
+request, and where that rotation starts now advances between requests. That
+restores the pre-`5143ee7` request-level rotation while keeping per-shard
+placement.
+
+**2. `test_costs_are_the_four_published_terms` was stale (test fixed).** It
+asserted `costs.sync == 0.0` commented "VID_U == VID_j" -- the previous
+revision's scalar. `C_j^sync` is now a lag count over `V_Q` and the code
+matches eq:search-cost. The fixture gives each FSN one of four domains and
+`sync_nodes` only syncs domains a node serves, so against a four-domain `V_Q`
+every node lags on three; `sync == 3.0` is correct. Now pinned both ways: 3.0
+cross-domain, and 0.0 when `V_Q` is scoped to the node's own domain, which is
+the per-shard case `eligible` actually presents.
+
+**3. `test_exp1_tokens_are_distinct` was missed (test fixed).** Exp. 1 became
+corpus-backed in `5143ee7`; every other test in that file was given the
+`source` fixture, this one was not, and it raised `ValueError`.
+
+---
+
+## 2026-09-07 — corrected Exp. 2 does not fit the pinned host above N=10^5
+
+**Found:** sizing Exp. 2's index in RECORDS (same day, above) multiplies it by
+~32, and the top of the published sweep no longer fits `m6i.xlarge`'s 16 GiB.
+
+Measured with `tracemalloc` over `Exp2SearchLatency.prepare` on the synthetic
+source (|W_i| = 6): 7,689 / 6,959 / 6,797 bytes per record at N = 2,000 /
+5,000 / 10,000 -- converging on ~6.8 KB/record. Scaled by the frozen corpus's
+|W_i| = 31.70:
+
+    N = 10^5      ~3.6 GB     fits
+    N = 5*10^5   ~18.0 GB     does NOT fit
+    N = 10^6     ~35.9 GB     does NOT fit
+
+Rough -- a linear extrapolation of Python allocations, not an RSS reading -- but
+the right order, and it agrees with guo hitting rc=137 at anon-rss 15.67 GB on
+the same host. Note this is the pre-existing shape of the problem, not a new
+one: guo already needs a larger-memory host for its own Exp. 2 and
+`exp2_search.py` says §V must disclose it.
+
+`assert_memory_for` is now called in `Exp2SearchLatency.prepare`, so a point
+that cannot fit refuses with a clear message instead of arriving as SIGKILL.
+
+**Costs:** the two top points of Exp. 2 for the proposed scheme. Without a
+larger host the corrected sweep is measurable only to N = 10^5, and §VI claims
+10^4 to 10^6.
+
+**Options:**
+- **A (would take)** — run the corrected Exp. 2 for the proposed scheme on the
+  larger-memory instance guo's Exp. 2 already requires, and disclose the host in
+  §V alongside guo's. One disclosure covers both.
+- **B** — measure to 10^5 and extrapolate 5*10^5 and 10^6, as Scheme [41] does.
+  Cheaper, but it makes the proposed scheme's own headline figure partly
+  extrapolated, which is much harder to defend than doing it for a baseline.
+
+**Blocked:** the Exp. 2 re-run. It should not be launched at 5*10^5 or 10^6 on
+`m6i.xlarge`; the guard will now refuse it rather than burn the campaign.
+
+---
+
+## 2026-09-07 — `README.md` is empty, and five tests assert its contents
+
+**Found:** `e503655` ("no more claude") deleted all 998 lines / 97,667 bytes of
+`README.md`, alongside the `harvest-campaign-20260830/` tarballs. The file is
+0 bytes at HEAD.
+
+Five tests in `test_repetition_count_agreement.py` read README §7 for the
+reportable `n_runs` requirement, the failure policy, the parameter table, the
+reportability sentence and the `results.csv` example row. All five fail, and
+have since before the `OJCOMS_expByexp` pull -- they are not a regression from
+it. Beyond the tests, `CLAUDE.md` names `README.md` as the long-form
+specification, and docstrings across the harness cite README §4, §5, §7, §13,
+§14 and §15 as their authority. Those citations now point at nothing.
+
+**Costs:** no measured number. It is the project's stated specification and the
+provenance rules the reportability gate is written against.
+
+**Options:**
+- **A (would take)** — restore it (`git checkout e503655^ -- README.md`) if the
+  deletion was collateral to clearing the harvest tarballs, which the commit
+  message and the mixed diff suggest.
+- **B** — if the deletion was deliberate, retarget the five tests to read
+  `global.yaml` directly (they already have `_required_repetitions()` for
+  exactly that) and strip the dangling README citations from the docstrings.
+
+**Blocked:** nothing. But `CLAUDE.md` says README is edit-only-when-asked, so
+this one is not mine to take either way.
+
+---
+
+## 2026-09-07 — `test_psa_exp6_arms_rank_the_way_the_manuscript_says` is flaky
+
+**Found:** it compares wall-clock medians of the DIAS and Incremental-All arms
+and asserts `dias <= everyone`. Observed failing once in five full-suite runs at
+0.598 ms against 0.577 ms -- a 3.6% margin -- and passing three times out of
+three when run alone. It is a timing comparison with no tolerance, on a dev
+machine, between two arms whose separation at ratio 0.1 is genuinely small.
+
+**Costs:** none measured. It is a false alarm that will fire at random and train
+readers to re-run the suite rather than read it.
+
+**Options:**
+- **A (would take)** — keep the ranking assertion but give it a tolerance, or
+  raise the affected ratio to where the arms actually separate, and say in the
+  docstring which.
+- **B** — leave it; it is right about the ordering and only noisy about the
+  margin.
+
+**Blocked:** nothing.
+
+---
+
+## 2026-09-07 — Exp. 3 measures a 40-record toy index against the baselines' 100,000
+
+**Found:** `Exp3CrossDomain.prepare` (`experiments.py:897`) sizes the deployment
+as `records=domain_count * 4` — **8 records at d=2, 40 at d=10**. The four
+baselines each fix a TOTAL index and slice it:
+
+    guo_vdsse/src/exp3_crossdomain.py:46          DEFAULT_N        = 100_000
+    perera_lv_pqabse/.../runner.py:59             TOTAL_INDEX_SIZE = 100_000
+    yue_ge/.../runner.py:79                       TOTAL_INDEX_SIZE = 100_000
+    thingom_pq_abse/src/main.py:98                EXP3_TOTAL_INDEX_SIZE = 2_000
+
+A **2,500x** gap at d=10. Same class as the Exp. 2 defect fixed today, worse by
+two orders of magnitude.
+
+It is not only a size gap, it is the opposite experiment. §VI says "The query
+size and per-domain index size are fixed to isolate cross-domain search
+overhead". Ours fixes PER-DOMAIN (at 4) so the total grows with d; all four
+baselines fix the TOTAL so their per-domain size *shrinks* as d grows. Each
+curve's shape is therefore an artifact of its own sizing rule:
+
+* ours rises 2x (0.076 -> 0.153 ms) because the index grows with d
+* guo is flat (53.79 -> 52.02 ms) and thingom is flat (154,708 -> 155,270 ms)
+  because their total work is constant
+* only perera (4.04 -> 11.79) and yue (62.8 -> 194.2, CI95 +/- 65 to 164) rise
+
+So §VI's central Exp. 3 sentence -- "the baselines accumulate domain-local
+search overhead because their search procedures are independently executed
+across the participating domains" -- is contradicted by two of the four
+baselines in the banked data.
+
+**Three more, found in the same pass:**
+
+* **`trapdoors_issued` is a hardcoded `1.0`** (`experiments.py`, Exp. 3
+  `measure`), not counted from the token. It is the experiment's headline claim
+  -- one trapdoor where a baseline issues d -- asserted rather than measured.
+  `psa_exp3_crossdomain_tokens` measures its equivalent in a real column, which
+  is why the plot spec can call that comparison "read from measured columns".
+* **The queried keyword is invented.** `shared = "kw:00000"`, planted as one
+  entry per domain, so the timed search traverses exactly one entry per domain
+  over an otherwise inert index. `run_meta.json` still reports
+  `corpus_type: synthea` and `reportable: true`. This is precisely the pattern
+  `5143ee7` fixed for PSA Exp. 1 -- "reads the corpus for its policies and
+  keyword vocabulary instead of inventing kw:00000 / hospital/pol0, so it can
+  inherit corpus provenance rather than being stamped psa_in_process" -- and
+  Exp. 3 was not included in that change.
+* **`nodes_searched` saturates at 4.** `global.yaml` fixes
+  `fog_search_nodes: 4` (published, §VI) while d sweeps to 10, so the secondary
+  reads 2, 4, 4, 4, 4 and carries no information for d >= 6.
+* **q=1**, as Exp. 2 had. Not a like-for-like fix here: Exp. 3 plants ONE shared
+  keyword deliberately, so honouring `keywords_per_query: 5` means planting five
+  and deciding whether they are conjunctive across domains.
+
+**Costs:** all of `fig:exp3` and the §VI paragraph reading it. Sizing Exp. 3
+like the baselines changes every proposed-scheme point; whether the "slower
+growth" claim survives is exactly the open question, since our present rise is
+a sizing artifact and two baselines' flatness is theirs.
+
+**Options:**
+- **A (would take)** — adopt the baselines' convention: fix the TOTAL index at
+  100,000 and split it across d, then re-run Exp. 3 for the proposed scheme
+  only (the baselines are already on that convention, so their banked data
+  stands). Amend §VI's "per-domain index size [is] fixed" to say total, since
+  four of five schemes already implement total and the sentence is what
+  disagrees with them.
+- **B** — hold per-domain fixed at a realistic size (say 10,000/domain) and
+  re-run ALL FIVE schemes, making §VI's sentence true instead. Correct on the
+  paper's own terms, but it pays for four baseline re-runs to keep one sentence.
+
+Under either, `trapdoors_issued` must be counted rather than asserted, the
+query must come from the corpus, and `nodes_searched` needs either a cap
+disclosed in §VI or a different secondary.
+
+**Blocked:** Exp. 3's re-run, and the §VI paragraph. Not Exp. 4-8.

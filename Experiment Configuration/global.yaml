@@ -1,28 +1,42 @@
 # =============================================================================
 # global.yaml — Benchmark-wide defaults for ALL schemes
 # =============================================================================
-# The single source of truth for README §6 "Default Parameters" and §7
-# "Measurement Methodology". Every scheme reads these; NO scheme may override
-# them (AGENT_RULES "Bias Detection": "No per-scheme parameter tuning — all
-# schemes use identical global.yaml defaults").
+# The single source of truth for the default parameters and measurement
+# methodology. Every scheme reads these; NO scheme may override them ("Bias
+# Detection": no per-scheme parameter tuning — all schemes use identical
+# global.yaml defaults).
+#
+# AUTHORITY. `Overleaf/MA-LB-PQ-VDSE.tex` §VI is what `published` means; this
+# file is synced to it, most recently 2026-09-07. `SystemConfiguration.md` is
+# the operator's guide and carries the rest of the reasoning. (`SystemConfiguration.md` was
+# deleted 2026-09-07; comments below no longer cite it.)
 #
 # Provenance key for every entry below:
-#   published  — stated in the proposed paper's §VI (cite the line)
+#   published  — stated in the manuscript's §VI
 #   fips       — fixed by a standard
-#   benchmark  — a benchmark choice; NOT specified in any paper (README §6)
+#   benchmark  — a benchmark choice; NOT specified in any paper
 #
-# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING and invalidates every existing
-# results.csv. Record any change in the README §16 Change Log.
+# CHANGING A VALUE HERE IS RESULTS-AFFECTING and invalidates the results.csv
+# files measured under the old one. Record any change in `needfix.md` and, if
+# it moves a number, in `.claude/skills/bug-sweep/DECISIONS.md`.
+#
+# DELIBERATELY PERMISSIVE. Sweeps are the points the FIGURES draw, not a
+# whitelist: a scheme may measure a superset (several baselines already do) and
+# the extra points stay in its results.csv. Nothing here refuses to run — the
+# only hard gate in the repo is what may be REPORTED, and that lives in
+# `corpus.reportable_types` and provenance.py, not in the sweep definitions.
 # =============================================================================
 
 meta:
-  version: 1
+  version: 2
   created: 2026-08-08
-  # Hash of this file is recorded in every run_meta.json (README §7).
+  updated: 2026-09-07          # synced against Overleaf/MA-LB-PQ-VDSE.tex §VI
+  # Hash of this file is recorded in every run_meta.json. Plots/generate_plots.py
+  # warns when two schemes in one figure carry different hashes.
 
 # -----------------------------------------------------------------------------
-# Experiment defaults — README §6. Each experiment varies ONE of these and
-# holds the rest at the values below (README §5).
+# Experiment defaults — §VI "Unless otherwise specified". Each experiment
+# varies ONE of these and holds the rest at the values below.
 # -----------------------------------------------------------------------------
 defaults:
   keywords_per_query: 5         # published: §VI "each query contains five keywords"
@@ -32,7 +46,7 @@ defaults:
   returned_results: 100         # benchmark: mid-point of the Exp. 4 sweep 10-1000
 
 # -----------------------------------------------------------------------------
-# Measurement methodology — README §7.
+# Measurement methodology — §VI.
 # -----------------------------------------------------------------------------
 measurement:
   # REDUCED 30 -> 10 on the user's instruction, 2026-09-03. Section VI was
@@ -43,19 +57,20 @@ measurement:
   confidence_interval: 0.95     # published: §VI "95% confidence intervals"
   warmup_runs: 5                # benchmark: discarded, not counted in the 10
   clock:
-    latency: perf_counter_ns    # benchmark: monotonic, ns resolution (README §7)
+    latency: perf_counter_ns    # published: §VI monotonic ns clock
     throughput: wall_clock      # benchmark: throughput needs elapsed real time
-  latency_unit: ms              # README §9
-  size_unit: KB                 # README §9
-  throughput_unit: queries_per_second  # README §9
-  # README §7: keep outliers. A failed run is recorded status=failed and RE-RUN
-  # to restore n=30; it is never dropped to make the sample look cleaner.
+  latency_unit: ms              # results.csv column unit
+  size_unit: KB                 # results.csv column unit
+  throughput_unit: queries_per_second  # results.csv column unit
+  # §VI: keep outliers. A failed run is recorded status=failed and RE-RUN to
+  # restore n=`repetitions`; it is never dropped to make the sample cleaner.
   drop_outliers: false
-  cache_state: warm             # benchmark: Exp. 1-6 warm; Exp. 7-8 see workload/
+  cache_state: warm             # published: §VI Exp. 1-6 warm; Exp. 7-8 after the ramp
 
 # -----------------------------------------------------------------------------
-# Experiment sweeps — the ranges of README §5. The variable column of each
-# experiment; every other parameter stays at `defaults` above.
+# Experiment sweeps — the ranges §VI states. The variable column of each
+# experiment; every other parameter stays at `defaults` above. A scheme MAY
+# measure more points than are listed; the figure draws these.
 # -----------------------------------------------------------------------------
 experiments:
   exp1_trapdoor_generation:
@@ -66,10 +81,21 @@ experiments:
     # 20. Their extra points are a superset and stay in results.csv; the figure
     # draws these five (generate_plots.py: ExperimentSpec.restrict_x).
     values: [1, 5, 10, 15, 20]
+    # THE SECOND SWEPT PARAMETER, published in the same sentence: §VI Exp. 1
+    # varies "|P_U| in {1,2,4,8}" alongside q. It lived only in code
+    # (`psa_experiments.PSA_EXP1_VARIANTS`, the `pu<N>` arms), which is exactly
+    # what this file exists to prevent — the harness must not carry its own
+    # copy of a §VI range. Added 2026-09-07; the code values are unchanged, so
+    # no measured number moves.
+    policy_scopes: [1, 2, 4, 8]
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp2_search_latency:
     variable: index_size
-    values: [10000, 50000, 100000, 500000, 1000000]   # published: §VI "10^4-10^6"
+    # published: §VI "searchable indexes containing 10^4--10^6 EHRs". N counts
+    # RECORDS, not index entries — every baseline slices `records[:N]`, and the
+    # figure's x-axis reads "(records)". The proposed scheme divided N by
+    # |W_i| until 2026-09-07 and searched a 32x smaller corpus at the same x.
+    values: [10000, 50000, 100000, 500000, 1000000]
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp3_crossdomain_scalability:
     variable: domains
@@ -78,8 +104,10 @@ experiments:
   exp4_verification_overhead:
     variable: returned_results
     values: [10, 50, 100, 500, 1000]              # published: §VI "10 to 1000"
-    # yue_ge (Ref[55]) added 2026-08-28 -- Peony++ has a scheme-native Verify
-    # (SS VI-A), so Exp. 4 finally has a third participant.
+    # yue_ge = Peony++ = Scheme [30] in the current manuscript (it was cited as
+    # Ref[55] before the 2026-09-06 re-sync; §VI now reads
+    # "Scheme~\cite{ref30} (Peony++)"). Added to Exp. 4 on 2026-08-28 -- it has
+    # a scheme-native Verify, so Exp. 4 has a third participant.
     #
     # Ref[41] has no result-verification primitive at all.
     #
@@ -122,8 +150,8 @@ experiments:
     # primitive in the paper -- indexes are (re)built at Phase 3, no
     # standalone update algorithm to measure. Was zhuang's slot; not carried
     # over, see debug_history.md.
-    # yue_ge (Ref[55]) added 2026-08-28: has a native incremental Add (new
-    # batch appended, nothing rewritten), which is exactly what Exp. 5 measures.
+    # yue_ge (Scheme [30], Peony++) added 2026-08-28: has a native incremental
+    # Add (new batch appended, nothing rewritten), which is what Exp. 5 measures.
     schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
   exp6_authorization_sync:
     variable: authorization_updates
@@ -142,12 +170,14 @@ experiments:
     schemes: [ma_lb_pq_vdse]
   exp7_search_throughput:
     variable: concurrency
-    # EXTENDED 2026-09-01 from [100, 500, 1000, 2500, 5000]. The published range
-    # was 100-5000; 10000 is ADDED and every original point is KEPT.
-    # The AASS advantage on cross-node forwards only opens up above ~500
-    # concurrent queries, and the low end is where it is weakest -- dropping
-    # those points would turn a scalability result into a cherry-picked one.
-    # Section VI must be updated to state the full 100-10000 range.
+    # EXTENDED 2026-09-01 from [100, 500, 1000, 2500, 5000]; 10000 was ADDED
+    # and every original point KEPT. The AASS advantage on cross-node forwards
+    # only opens up above ~500 concurrent queries, and the low end is where it
+    # is weakest -- dropping those points would make a scalability result a
+    # cherry-picked one.
+    # RESOLVED 2026-09-07: §VI now states the full range ("concurrent search
+    # ... 10,000", and Exp. 8 "as concurrent queries increase from 100 to
+    # 10,000"), so this is `published`, no longer an extension awaiting text.
     values: [100, 500, 1000, 2500, 5000, 10000]
     schemes: [ma_lb_pq_vdse]                      # scheduler ablation, see scheduler.yaml
   exp8_load_balance:
@@ -155,7 +185,7 @@ experiments:
     # EXTENDED 2026-09-01 -- same range as Exp. 7, whose runs it shares.
     values: [100, 500, 1000, 2500, 5000, 10000]
     schemes: [ma_lb_pq_vdse]
-    # README §5: Exp. 7 and Exp. 8 are DERIVED FROM THE SAME RUNS. Run the
+    # Exp. 7 and Exp. 8 are DERIVED FROM THE SAME RUNS. Run the
     # trace once per variant and emit both metric sets.
     shares_runs_with: exp7_search_throughput
     secondaries: [max_node_utilization, cross_node_forwards, max_queue_depth]
@@ -172,22 +202,22 @@ experiments:
     # by construction, the three oblivious variants do not. RESULTS-AFFECTING:
     # every banked exp8_load_balance/ result predates this and has only two
     # secondary columns, so its secondary_2 is max_queue_depth, NOT forwards.
-    # Exp. 7-8 ramp, README §7 "warm after a 30 s ramp" -- applied once per
+    # Exp. 7-8 ramp: §VI "a 30-second ramp that is excluded" -- applied once per
     # sweep point in setup, which run_point() excludes from every timing.
     ramp_seconds: 30
 
 # -----------------------------------------------------------------------------
-# Topology — README §1. Four FSNs + one cloud server, one VPC/AZ.
+# Topology — §VI. Four FSNs + one cloud server, one VPC/AZ.
 # Each FSN is an INDEPENDENT PROCESS holding its own index shard, VID_j, and
-# request queue. No runtime state is shared between FSNs (README §13).
+# request queue. No runtime state is shared between FSNs.
 # -----------------------------------------------------------------------------
 topology:
   fog_search_nodes: 4           # published: §VI; must equal defaults.fog_search_nodes
   cloud_servers: 1              # published: §VI "one cloud server"
-  independent_processes: true   # benchmark: README §1 requires process isolation
+  independent_processes: true   # published: §VI deploys FSNs as independent processes
   # Phases I-II create FSNs as in-process objects (untimed setup). The process
   # split lands with Phase VI, before any Exp. 2/7/8 measurement.
-  utilization_sample_interval_ms: 100   # benchmark: README §5 Exp. 7-8 rule
+  utilization_sample_interval_ms: 100   # benchmark: Exp. 7-8 sampling rate
 
 # -----------------------------------------------------------------------------
 # Multi-authority topology — proposed scheme only.
@@ -209,8 +239,9 @@ authorities:
                                 # (Phase VII Step 3) but not the initial value.
 
 # -----------------------------------------------------------------------------
-# Environment — README §1. Recorded into run_meta.json and asserted where the
-# assertion is cheap, so a run on the wrong host is visible in provenance.
+# Environment — §VI. RECORDED into run_meta.json rather than enforced: the
+# campaign deliberately rents more than one instance size, so a hard pin here
+# would refuse legitimate runs. Provenance carries what we actually ran on.
 # -----------------------------------------------------------------------------
 environment:
   # instance_type: DROPPED on the user's instruction, 2026-08-30. It pinned
@@ -233,10 +264,14 @@ environment:
   # kept as documentation of what the 85 banked run_metas were measured on.
   vcpus_of_banked_corpus: 4       # historical: the m6i.xlarge all 85 banked runs used
   memory_gb_of_banked_corpus: 16  # historical: as above
-  os: ubuntu-22.04
+  # §VI names Ubuntu but not a point release, and the current AMI
+  # (ami-0b2da6ed17be6c7a1) is 24.04 LTS while the banked runs were on 22.04.
+  # Recorded, not enforced -- run_meta.json carries the real platform string.
+  os: ubuntu                    # 22.04 for the banked runs; 24.04 on the current AMI
   python: "3.11"
-  # README §7: numpy claims all cores by default, which would make Ref[52]'s
-  # latency depend on core count. provision.sh exports these.
+  # numpy claims all cores by default, which would make the lattice baseline's
+  # latency depend on core count. provision.sh exports these. §VI states the
+  # pinning and lists all five variables.
   blas_threads: 1
   thread_env_vars:
     - OMP_NUM_THREADS
@@ -279,8 +314,7 @@ fleet:
 
 
 # -----------------------------------------------------------------------------
-# Paths — load-bearing for Plots/generate_plots.py (README §13). Relative to
-# the repository root.
+# Paths — load-bearing for Plots/generate_plots.py. Relative to the repo root.
 # -----------------------------------------------------------------------------
 paths:
   dataset: Dataset/derived
@@ -289,8 +323,13 @@ paths:
   config_dir: "Experiment Configuration"
 
 # -----------------------------------------------------------------------------
-# Corpus — only `synthea` is reportable (README §4). `synthetic` is a fitted
-# Zipf law with no clinical structure and is development-only.
+# Corpus — only `synthea` is reportable. `synthetic` is a fitted Zipf law with
+# no clinical structure and is development-only.
+#
+# THIS ONE STAYS STRICT, deliberately. Everything else in this file is
+# permissive, but widening `reportable_types` would let invented data be
+# stamped reportable, which is the one failure the provenance chain exists to
+# prevent. Loosen it only for a local dev run, never on a campaign host.
 # The SHA-256 pin itself lives in dataset.yaml and is verified at startup.
 # -----------------------------------------------------------------------------
 corpus:

@@ -1002,8 +1002,11 @@ class PsaExp2SearchLatency:
 
     Same boundary as ``Exp2SearchLatency``: AIM check, shard selection, shard
     search, response assembly, with index construction offline. ``N`` is sized
-    the way Option D sizes it (``index_size // keywords_per_record``) so the
-    axis means the same thing in both.
+    the way Option D sizes it -- in RECORDS -- so the axis means the same thing
+    in both, and the same thing the four baselines and SVI mean by it. Both
+    constructions were changed together on 2026-09-07; before that both divided
+    by ``keywords_per_record`` and drew a corpus 32x smaller than the baselines
+    at the same x.
 
     **What this is expected to show, and why it is a cost not a bug.** A query
     under ``T = H(w ‖ PID ‖ PV ‖ Dom)`` cannot be one trapdoor per keyword: it
@@ -1039,7 +1042,7 @@ class PsaExp2SearchLatency:
             self.values = tuple(self.config.experiment("exp2").values)
 
     def prepare(self, value: Any) -> Any:
-        record_count = max(1, int(value) // self.source.keywords_per_record)
+        record_count = max(1, int(value))
         deployment = psa_build_deployment(
             config=self.config, source=self.source, records=record_count
         )

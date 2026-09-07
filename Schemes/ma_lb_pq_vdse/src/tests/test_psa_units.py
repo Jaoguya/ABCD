@@ -513,8 +513,13 @@ def test_psa_exp2_shares_fewer_posting_lists_than_option_d(config):
     n = 50000
     ours = experiment.measure(experiment.prepare(n)).secondaries["entries_per_token"]
 
+    # SAME N, two constructions. This built Option D at
+    # `n // keywords_per_record` while PSA was built at `n` -- once both
+    # experiments started sizing N in RECORDS (2026-09-07) that compared a
+    # 50,000-record PSA index against an 8,333-record Option D one, and the
+    # sharing ratio it reports is a function of index size.
     theirs = option_d.build_deployment(
-        config=config, source=source, records=max(1, n // source.keywords_per_record)
+        config=config, source=source, records=max(1, n)
     )
     entries = sum(node.index.entry_count for node in theirs.nodes)
     tokens = sum(node.index.token_count for node in theirs.nodes)

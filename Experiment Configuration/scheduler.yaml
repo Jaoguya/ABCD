@@ -11,10 +11,10 @@
 # previous manuscript revision and was removed on 2026-09-07 together with its
 # weight; see Schemes/ma_lb_pq_vdse/src/scheduler/aass.py::CostVector.
 #
-# README §6: the lambda weights are "**not in the paper — must be fixed**", and
+# §VI (defaults): the lambda weights are "**not in the paper — must be fixed**", and
 # §6 further requires: "Choose them once by a documented procedure (e.g. a
 # sweep on a held-out workload), commit that output, and leave them alone."
-# README §14 open issue #5 records them as blocking Exp. 7-8.
+# needfix.md open issue #5 records them as blocking Exp. 7-8.
 #
 # STATUS OF THE WEIGHTS. `weights.status` is `fixed`, so `require_fixed()`
 # returns them and reportable Exp. 7-8 runs are NOT refused. This block used to
@@ -111,7 +111,7 @@ weights:
                                      # the direction of the vector matters
 
 # -----------------------------------------------------------------------------
-# Sweep procedure — the "documented procedure" README §6 demands.
+# Sweep procedure — the "documented procedure" §VI (defaults) demands.
 # -----------------------------------------------------------------------------
 sweep:
   # RUN 2026-08-28. All 1001 vectors evaluated against the held-out workload
@@ -142,7 +142,7 @@ sweep:
   objective:
     # Optimizing throughput ALONE would let the scheduler pin one node at
     # saturation while posting good aggregate numbers — precisely what Exp. 8
-    # exists to expose (README §5). The objective therefore includes both, so
+    # exists to expose (§VI (experiments)). The objective therefore includes both, so
     # the weight vector cannot be chosen to flatter Exp. 7 at Exp. 8's expense.
     primary: throughput_queries_per_second
     constraint: fsn_utilization_stddev
@@ -153,7 +153,7 @@ sweep:
   output: Schemes/ma_lb_pq_vdse/exp7_search_throughput/lambda_sweep.csv
 
 # -----------------------------------------------------------------------------
-# Ablation variants — README §5 / SCHEME.md. Internal ablation, NOT a
+# Ablation variants — §VI (experiments) / SCHEME.md. Internal ablation, NOT a
 # cross-scheme comparison. All four see byte-identical workloads.
 # -----------------------------------------------------------------------------
 variants:

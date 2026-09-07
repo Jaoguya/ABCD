@@ -618,6 +618,56 @@ def test_experiment_sweeps_match_global_yaml():
         assert tuple(experiment.values) == tuple(CONFIG.experiment(key).values)
 
 
+def test_exp1_policy_scopes_match_global_yaml():
+    """|P_U| in {1,2,4,8} is a §VI range, so global.yaml owns it, not the code.
+
+    It lived only in `psa_experiments.POLICY_SCOPES` until 2026-09-07. The
+    harness must not carry its own copy of a published sweep — that is the same
+    rule `test_experiment_sweeps_match_global_yaml` enforces for `values`, and
+    the reason it exists is that a code-side copy drifts silently.
+    """
+    import yaml
+    from pathlib import Path as _P
+    from Schemes.ma_lb_pq_vdse.src.harness import psa_experiments as psa
+
+    repo = _P(__file__).resolve().parents[4]
+    raw = yaml.safe_load(
+        (repo / "Experiment Configuration" / "global.yaml").read_text(encoding="utf-8")
+    )
+    configured = raw["experiments"]["exp1_trapdoor_generation"]["policy_scopes"]
+    assert tuple(configured) == tuple(psa.POLICY_SCOPES)
+    assert tuple(f"pu{n}" for n in configured) == tuple(psa.PSA_EXP1_VARIANTS)
+
+
+def test_index_yaml_restates_the_frozen_corpus_correctly():
+    """index.yaml repeats corpus facts for readability; they must be the REAL ones.
+
+    It described corpus v2 (1,141,072 records, 2,006 keywords, 4 domains) while
+    dataset.yaml had been pinned to v4 since 2026-08-28, so the two configs
+    disagreed about which corpus the benchmark runs on. `CorpusReferenceError`
+    guards this at load time but compares against the manifest, which is
+    git-ignored — so on any machine without a corpus it never fired.
+    """
+    import json
+    import yaml
+    from pathlib import Path as _P
+
+    repo = _P(__file__).resolve().parents[4]
+    manifest = json.loads(
+        (repo / "Dataset" / "dataset_manifest.json").read_text(encoding="utf-8")
+    )
+    index = yaml.safe_load(
+        (repo / "Experiment Configuration" / "index.yaml").read_text(encoding="utf-8")
+    )
+    ref = index["corpus_reference"]
+    assert ref["records"] == manifest["records"]
+    assert ref["keyword_universe"] == manifest["keyword_universe_size"]
+    assert ref["domains"] == len(manifest["per_domain_counts"])
+    assert abs(
+        ref["mean_keywords_per_record"] - manifest["keywords_per_record"]["mean"]
+    ) < 0.01
+
+
 def test_exp1_measures_only_trapdoor_generation():
     """Exp. 1 rule: ML-KEM encapsulation excluded from the per-query curve."""
     experiment, sample = measure_once(1, 5)
@@ -636,11 +686,34 @@ def test_exp1_latency_grows_with_q():
 
 
 def test_exp2_reports_n_eff():
-    """README §5: n_eff "is the only thing that can demonstrate the paper's claim"."""
+    """README §5: n_eff "is the only thing that can demonstrate the paper's claim".
+
+    `>= 0` until 2026-09-07, which passes on the empty result set -- the defect
+    that went undetected in guo's Exp. 2 for 150 banked runs and in psa_exp2 at
+    every sweep point. A search that matches nothing is not a search latency.
+    """
     experiment, sample = measure_once(2, 10_000)
     assert "n_eff" in sample.secondaries
     assert "entries_traversed" in sample.secondaries
-    assert sample.secondaries["n_eff"] >= 0
+    assert sample.secondaries["n_eff"] > 0
+    assert sample.secondaries["entries_traversed"] > 0
+
+
+def test_exp2_sweeps_records_not_index_entries():
+    """N is RECORDS -- the axis label, §VI, and all four baselines agree.
+
+    Exp. 2 sized its deployment as `N // keywords_per_record` until 2026-09-07,
+    so at N=10^6 it searched 31,250 records while guo, yue_ge and perera each
+    indexed 1,000,000 at the same point on a shared x-axis. Identical to the
+    defect Exp. 4 carried and had fixed; nothing pinned it for either.
+    """
+    experiment = exp_mod.build_experiment(2, CONFIG, SOURCE)
+    for value in (10_000, 50_000):
+        prepared = experiment.prepare(value)
+        assert len(prepared["deployment"].records) == value, (
+            f"N={value} built {len(prepared['deployment'].records)} records; "
+            f"the axis says N is records"
+        )
 
 
 def test_exp3_issues_exactly_one_trapdoor_at_every_d():

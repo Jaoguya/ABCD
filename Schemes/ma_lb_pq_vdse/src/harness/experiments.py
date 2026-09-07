@@ -53,6 +53,7 @@ from Common.crypto import hashes  # noqa: E402
 from Common.crypto.rng import DeterministicRNG  # noqa: E402
 from Common.timing import gc_quiesced  # noqa: E402
 
+from Common.crypto import config as crypto_config  # noqa: E402
 from .. import config as scheme_config  # noqa: E402
 from .. import types  # noqa: E402
 from ..aim import aim as aim_mod  # noqa: E402
@@ -714,8 +715,44 @@ class Exp2SearchLatency:
             self.values = tuple(self.config.experiment("exp2").values)
 
     def prepare(self, value: Any) -> Any:
-        # value is the index size N in entries; records carry |W_i| entries each.
-        record_count = max(1, int(value) // self.source.keywords_per_record)
+        """``N`` is the index size in RECORDS, which is what the axis says.
+
+        This used to size the deployment as ``int(value) //
+        keywords_per_record``. With the frozen corpus's ``|W_i| ~= 32`` that
+        turned N=10^6 into 31,250 records, while every baseline indexes
+        ``records[:N]`` -- guo (``exp2_search.py``), yue_ge
+        (``runner.py:130``) and perera (``runner.py:87``) all slice records.
+        So at the same point on a shared x-axis we searched a corpus 32x
+        smaller than the schemes we were compared against, under
+        `generate_plots.py`'s label "Index size $N$ (records)" and SVI's "from
+        $10^4$ to $10^6$ encrypted records".
+
+        Identical to the defect Exp. 4 carried and had fixed (see
+        ``Exp4VerificationOverhead.prepare``): the same ``// keywords_per_record``
+        idiom, the same entries-under-a-records-caption confusion, the same
+        broken like-for-like. Fixed here the same way.
+        """
+        record_count = max(1, int(value))
+        # REFUSE A POINT THAT CANNOT FIT, rather than be OOM-killed.
+        #
+        # An OOM kill is SIGKILL: no traceback, no partial results, nothing in
+        # the log. That is how the 2026-08-28 campaign died (rc=137, anon-rss
+        # 15.67 GB) and guo's runner has guarded itself this way since. Exp. 2
+        # needed no guard while it built `N // 32` records; sizing N in RECORDS
+        # (2026-09-07) multiplied the index by ~32 and brought the top of the
+        # sweep within reach of the ceiling.
+        #
+        # ~6.8 KB/record measured by tracemalloc over the synthetic source at
+        # |W_i| = 6, scaled by the frozen corpus's |W_i| = 31.70. Rough -- a
+        # linear extrapolation of Python allocations, not an RSS reading -- but
+        # it puts N=5*10^5 near 18 GB and N=10^6 near 36 GB against a 16 GiB
+        # host, so the top two points need a larger instance exactly as guo's
+        # do. Better a clear refusal than a silent kill.
+        _BYTES_PER_RECORD = 6_800 * self.source.keywords_per_record / 6
+        crypto_config.assert_memory_for(
+            record_count * _BYTES_PER_RECORD,
+            f"exp2 index at N={record_count:,} records",
+        )
         deployment = build_deployment(
             config=self.config, source=self.source, records=record_count
         )
@@ -736,20 +773,52 @@ class Exp2SearchLatency:
         # question. n_eff varies run to run as a result -- that is the point.
         frequency: "Counter[str]" = Counter()
         in_domain = 0
+        carriers: Dict[str, Tuple[str, ...]] = {}
         for entry in deployment.records:
             if entry["record"].domain == domain:
                 in_domain += 1
-                frequency.update(entry["record"].keywords)
+                record_keywords = tuple(dict.fromkeys(entry["record"].keywords))
+                frequency.update(record_keywords)
+                # One representative record per keyword, for the co-occurrence
+                # completion below. First writer wins so the choice is a
+                # deterministic function of corpus order, not of the draw.
+                for keyword in record_keywords:
+                    carriers.setdefault(keyword, record_keywords)
         measurement = self.config.measurement
         draws = measurement.warmup_runs + measurement.repetitions
         rng = DeterministicRNG(EXP2_QUERY_SEED).spawn(f"exp2/N={value}")
-        keywords = select_query_keywords(
+        anchors = select_query_keywords(
             frequency, rng, draws, total_records=in_domain
         )
+
+        # A q-KEYWORD CONJUNCTIVE QUERY, and the q keywords must CO-OCCUR.
+        #
+        # This used to issue `[keyword]` -- ONE keyword -- against
+        # `global.yaml`'s `keywords_per_query: 5`, sourced to SVI "each query
+        # contains five keywords". Exactly the defect the 2026-09-06 sweep
+        # fixed for Exp. 7/8 (`experiments.py`, SchedulerAblation), whose entry
+        # claimed "every other experiment honours it"; Exp. 2 and Exp. 3 did
+        # not, and were missed.
+        #
+        # Independently drawn keywords will not do. Over a corpus averaging
+        # |W_i| ~= 32 out of a 2,023-keyword universe, five separately-frequent
+        # keywords essentially never all land in one record, so the conjunction
+        # matches NOTHING -- the failure that made guo's Exp. 2 measure a search
+        # short-circuiting on its first miss, and psa_exp2 bank n_eff = 0.0 at
+        # every point. So the ANCHOR is drawn at the baselines' selectivity
+        # (yue_ge is single-keyword by construction and draws exactly this way),
+        # and the query is completed from a record that carries it. The anchor
+        # sets selectivity; the completion makes the query answerable.
+        q = max(1, int(self.config.defaults.keywords_per_query))
+        queries: List[List[str]] = []
+        for anchor in anchors:
+            carrier = carriers.get(anchor, (anchor,))
+            query = [anchor] + [k for k in carrier if k != anchor]
+            queries.append(query[:q])
         return dict(
             deployment=deployment, profile=profile, authority_ids=authority_ids,
             attributes=attributes, resolver=resolver,
-            keywords=keywords, cursor=[0],
+            keywords=anchors, queries=queries, cursor=[0],
         )
 
     def measure(self, prepared: Any) -> Sample:
@@ -757,13 +826,13 @@ class Exp2SearchLatency:
         # One keyword per call, cycling. Warm-ups consume the first entries, as
         # they do for yue_ge, so the retained runs see the same draw the
         # baselines' retained runs see.
-        pool = prepared["keywords"]
+        pool = prepared["queries"]
         cursor = prepared["cursor"]
-        keyword = pool[cursor[0] % len(pool)]
+        query = pool[cursor[0] % len(pool)]
         cursor[0] += 1
         started = time.perf_counter_ns()
         token = token_mod.generate_search_token(
-            d.scheme, prepared["profile"], [keyword]
+            d.scheme, prepared["profile"], query
         )
         decision = authz_mod.verify_search_request(          # AIM check
             d.aim, token, prepared["profile"],

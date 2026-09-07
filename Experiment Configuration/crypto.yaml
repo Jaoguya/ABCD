@@ -7,20 +7,20 @@
 # Provenance key for every entry below:
 #   published  — the value is stated in the scheme's own paper (cite line)
 #   fips       — fixed by a standard (FIPS 203, FIPS 197, FIPS 180-4)
-#   benchmark  — a benchmark choice; NOT specified in any paper (README §6)
+#   benchmark  — a benchmark choice; NOT specified in any paper (§VI (defaults))
 #
-# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING. Per README §14, do not edit
-# without team consensus, and record the change in the README Change Log.
+# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING. Per needfix.md, do not edit
+# without team consensus, and record the change in the SystemConfiguration.md Change Log.
 # =============================================================================
 
 meta:
   version: 1
-  # Hash of this file is recorded in every run_meta.json (README §7).
+  # Hash of this file is recorded in every run_meta.json (§VI (methodology)).
 
 # -----------------------------------------------------------------------------
 # Global primitives — identical for every scheme, so that cross-scheme latency
 # differences come from the constructions and not from the primitive layer.
-# README §1: "Environment parity is part of the result."
+# §VI (testbed): "Environment parity is part of the result."
 # -----------------------------------------------------------------------------
 global:
   hash:
@@ -39,9 +39,9 @@ global:
     info_prefix: "MA-LB-PQ-VDSE/v1"
 
 # -----------------------------------------------------------------------------
-# ML-KEM-768 — proposed scheme only (README §1).
+# ML-KEM-768 — proposed scheme only (§VI (testbed)).
 # Exp. 1 EXCLUDES encapsulation from the trapdoor curve; it is a one-time
-# session-establishment cost reported separately (README §5, Exp. 1 rule).
+# session-establishment cost reported separately (§VI (experiments), Exp. 1 rule).
 # -----------------------------------------------------------------------------
 kem:
   algorithm: ml-kem-768               # fips: FIPS 203
@@ -61,7 +61,7 @@ kem:
 # Phase I Step 1 specifies an ASYMMETRIC (Type-III) pairing
 #   e : G_1 x G_2 -> G_T
 # over prime-order groups with generators g_1 in G_1, g_2 in G_2
-# (Overleaf/PQ-AVDSE-OJCOMS:362ff), consistent with README §1 "Type-III for our
+# (Overleaf/PQ-AVDSE-OJCOMS:362ff), consistent with §VI (testbed) "Type-III for our
 # MA-CP-ABE". This is the OPPOSITE setting to Ref[41] above, which publishes a
 # Type-I symmetric map — the two must not share a backend.
 # -----------------------------------------------------------------------------
@@ -150,7 +150,7 @@ guo_vdsse:
     # never fixes |X| anywhere. The only numeric parameters it publishes are
     # lambda = 128 and a 192-bit hash output (:1763-1764). The "height L = 32"
     # on the same line belongs to the COMPARED VBTree scheme, not to Guo's own
-    # (README §3 already flags that trap).
+    # (§VI (baselines) already flags that trap).
     #
     # 128 came from reading "GGM tree depth = |X| in bits" off lambda = 128.
     # That conflates two different quantities: lambda is the KEY length, |X| is
@@ -201,7 +201,7 @@ guo_vdsse:
 #    as generators of I1. A bilinear map is defined as e : I1 x I1 -> I2"
 #
 # This is a TYPE-I (symmetric) pairing. Security rests on DBDH
-# (Ref[41].txt:280-300). Implemented AS PUBLISHED per README §14 — do not
+# (Ref[41].txt:280-300). Implemented AS PUBLISHED per needfix.md — do not
 # "upgrade" it to a post-quantum or Type-III setting.
 # -----------------------------------------------------------------------------
 thingom_pq_abse:
@@ -247,7 +247,7 @@ thingom_pq_abse:
     # O_3(w_w) (Ref[41].md:328) and its search tests one keyword (:344); no
     # conjunctive form exists in the paper. A q-keyword query therefore runs
     # as q independent trapdoors and q independent searches with client-side
-    # intersection — the same native-mode rule README §3 applies to Exp. 3.
+    # intersection — the same native-mode rule §VI (baselines) applies to Exp. 3.
     mode: independent_trapdoors
 
 # -----------------------------------------------------------------------------
@@ -347,7 +347,7 @@ perera_lv_pqabse:
   cross_domain:
     # NOT PUBLISHED: the paper's system model has a single TA, a single fog
     # tier and no federation -- there is no multi-domain notion at all.
-    # DECIDED 2026-08-29: native mode, the same rule README §3 already applies
+    # DECIDED 2026-08-29: native mode, the same rule §VI (baselines) already applies
     # to guo_vdsse and thingom_pq_abse -- d independent trapdoors, d
     # independent searches, client-side aggregation.
     mode: independent_trapdoors
@@ -414,7 +414,7 @@ yue_ge:
                                       # item 1). Matched to guo_vdsse's
                                       # symmetric_encryption so the two
                                       # verifiable baselines pay the same
-                                      # primitive cost (README §1 parity).
+                                      # primitive cost (§VI (testbed) parity).
 
   # --- benchmark decisions: NOT published by the paper ---
   security_parameter_lambda: 128      # benchmark: never fixed numerically by the
@@ -428,7 +428,7 @@ yue_ge:
                                       # it. Search is O(c) PRF evaluations, so
                                       # this is DIRECTLY RESULTS-AFFECTING.
                                       # 4 matches the repo's default domain count
-                                      # d=4 (README §6) so batch count and domain
+                                      # d=4 (§VI (defaults)) so batch count and domain
                                       # count do not silently differ.
   puncturable_prf:
     # The GGM tree DEPTH is derived, not stored. Ref[55] §IV-B (MSRE.Enc step 1)

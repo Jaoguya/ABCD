@@ -1,7 +1,7 @@
 # =============================================================================
 # workload/exp78_sweep_holdout.yaml — HELD-OUT workload for the lambda sweep
 # =============================================================================
-# README §6 requires the AASS weights L1..L5 to be chosen "once by a documented
+# §VI (defaults) requires the AASS weights L1..L5 to be chosen "once by a documented
 # procedure (e.g. a sweep on a held-out workload)". This is that held-out
 # workload. It exists so the weights are NOT fitted on the same trace that
 # produces the reported Exp. 7-8 figures.
@@ -40,7 +40,7 @@ trace:
 # affordable, and it is not needed — the sweep selects a weight vector, it does
 # not report a mean with a confidence interval.
 #
-# The reported runs keep the full n=30 (README §7). These reduced counts apply
+# The reported runs keep the full n=30 (§VI (methodology)). These reduced counts apply
 # ONLY to the sweep.
 # -----------------------------------------------------------------------------
 generator:

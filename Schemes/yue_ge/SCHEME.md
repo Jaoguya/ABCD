@@ -1,6 +1,6 @@
 # Ge et al. Peony / Peony++ — Scheme Experiment Guide (Ref[55])
 
-**Back to main README:** [README.md](../../README.md)
+**Back to the operator's guide:** [SystemConfiguration.md](../../SystemConfiguration.md)
 **Paper:** Y. Ge, Y. Gao, J. Ning, J. Ma, and X. Chen, "Verifiable Multilevel Dynamic Searchable Encryption With Forward and Backward Privacy in Cloud-Assisted IoT," *IEEE Internet of Things Journal*, vol. 11, no. 24, pp. 40861–40874, 15 Dec. 2024, doi: `10.1109/JIOT.2024.3457270`. Construction summary, published parameters, and legitimacy assessment: [References/Ref[55]/Ref[55].md](../../References/Ref[55]/Ref[55].md).
 
 > **Citation numbers: this repo says Ref[55], the manuscript says `ref30`.**
@@ -188,7 +188,7 @@ python3 -m Schemes.yue_ge.src.dev_runner \
 | `results.csv` | Aggregated means with 95% CI |
 | `run_meta.json` | Provenance |
 
-See main [README.md](../../README.md) §9 for column format.
+See [SystemConfiguration.md](../../SystemConfiguration.md) for column format.
 
 ---
 

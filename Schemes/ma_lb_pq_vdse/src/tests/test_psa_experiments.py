@@ -100,9 +100,18 @@ def test_exp1_rejects_an_unknown_arm(config, source):
         psa.build(1, config, variant="round_robin", source=source)
 
 
-def test_exp1_tokens_are_distinct(config):
-    """q·|P_U| COLLIDING tokens would be q·|P_U| lookups of the same posting list."""
-    experiment = psa.build(1, config, variant=psa.PSA_EXP1_VARIANTS[-1])
+def test_exp1_tokens_are_distinct(config, source):
+    """q·|P_U| COLLIDING tokens would be q·|P_U| lookups of the same posting list.
+
+    Takes `source` because Exp. 1 became corpus-backed in 5143ee7 -- it reads
+    the corpus for its policies and keyword vocabulary instead of inventing
+    them. Every other test in this file was given the fixture in that commit;
+    this one was missed and raised `ValueError: psa experiment 1 reads the
+    corpus and needs a record source`.
+    """
+    experiment = psa.build(
+        1, config, variant=psa.PSA_EXP1_VARIANTS[-1], source=source
+    )
     prepared = experiment.prepare(max(experiment.values))
     from Schemes.ma_lb_pq_vdse.src.psa import tokens as psa_tokens
 

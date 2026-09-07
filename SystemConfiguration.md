@@ -7,9 +7,11 @@ things that will quietly ruin a result if nobody tells you about them.
 Read [§0 Flag points](#0-flag-points--read-this-before-you-touch-anything) first.
 Everything else is reference.
 
-**Related documents.** [`README.md`](README.md) is the benchmark *specification*
-and the source of truth for what the experiments are. This file is the *operator's
-guide*: how the thing is actually configured and run.
+**Related documents.** `README.md` was deleted on 2026-09-07; this file is now
+both the specification and the *operator's guide* — what the experiments are, and
+how the thing is actually configured and run. Its AWS and Fabric content was
+rescued into §15 and §16 below before the deletion. `checkexp.md` tracks which
+experiments have been audited and `needfix.md` what came out of it.
 This file is the working agreement.
 Git history is the record of every defect
 found and what was done about it.
@@ -584,3 +586,177 @@ marker. At the same commit `55aa3c8`, `exp7` and its five shards are clean while
 `exp8`, its five shards, and `exp6` are dirty — same commit, same sweep, opposite
 verdicts. That is write-order contamination. It equally cannot *rule out* a
 modified tree; it simply carries no information either way.
+
+---
+
+## 15. AWS estate — hosts, AMIs, keys, recovery
+
+Rescued from `README.md` on 2026-09-07 before that file was deleted. Every
+concrete identifier below existed **only** there; none of it was in this file.
+Verify against the live console before acting on any of it — instance state
+moves, and the IDs are a record, not a guarantee.
+
+### Instance type
+
+`m6i.xlarge` (4 vCPU, 16 GiB, Xeon 8375C), Ubuntu 24.04 LTS, 30 GiB gp3.
+
+Chosen over the originally specified `c6i.xlarge`: same CPU, 8 -> 16 GiB.
+Ref[52] allocates a 381 MB lattice trapdoor per attribute, and running near
+memory saturation contaminates latency with GC and page-cache effects.
+
+* **Never `t3`/`t4g`** — CPU credits make latency non-reproducible.
+* **Never Spot** — an interruption kills a trace.
+* When launching from the console, plain Ubuntu no longer appears in Quick
+  Start's abbreviated list (only the SQL Server bundle does). Use "Browse more
+  AMIs". A previous host was accidentally launched as "Ubuntu Server 22.04 LTS
+  **with SQL Server** 2022 Standard" and ran an unrelated `sqlservr` process.
+* Launch **one** instance first, never all nine — `provision.sh` is a
+  build-once-then-snapshot workflow, not nine independent provisions.
+
+### AMIs
+
+| AMI | Name | Status |
+|-----|------|--------|
+| `ami-0b2da6ed17be6c7a1` | `abcd-benchmark-2026-08-28b` | **Current — launch the fleet from this one** |
+| `ami-0feb3b14b4ea27844` | `abcd-benchmark-2026-08-28` | Superseded, but see below — do not delete |
+
+`ami-0b2da6ed17be6c7a1` carries corpus v4 (`e56ca2d1`, 10 domains), the Type-III
+pairing backend, multi-process FSNs and the swept AASS weights. The older AMI
+holds the superseded 4-domain corpus and fails the freeze check at startup.
+
+**`ami-0feb3b14b4ea27844` is the single point of recovery for two things that
+exist nowhere else:**
+
+1. The frozen corpus `Dataset/derived/corpus.jsonl` (686 MB, git-ignored).
+2. The from-source crypto build (PBC 0.5.14 + charm-crypto + liboqs).
+
+It also carries ~11 GB of raw Synthea CSVs at `~/synthea/output_full/csv`. Keep
+them: the corpus non-determinism came from Synthea *generating* patients across
+threads, not from `prepare_dataset.py` extracting from fixed CSVs — so those
+CSVs are what make the current corpus re-derivable.
+
+### Keys and access
+
+* Current key: `~/.ssh/ojcoms.pem` (host name `OJCOMS`).
+* Retired key: `~/.ssh/ABCDE_key.pem` — old host `3.236.231.174`, terminated.
+* **No Elastic IP.** The public IP changes on every stop/start and has already
+  moved four times (`44.222.205.213` -> `98.91.21.219` -> `34.228.7.222` ->
+  `54.172.21.174`). Never hardcode it; read the current one from the console.
+* Each restart wipes `/tmp`, so long-running output belongs elsewhere.
+
+### Instance IDs seen in the 2026-09-03 campaign
+
+| Instance | Scheme | Last known outcome |
+|----------|--------|--------------------|
+| `i-0d9b2c6e1776c6f84` | proposed | complete, harvested, stopped |
+| `i-0c376b61dae6fed24` | perera | complete, harvested, stopped |
+| `i-0e5ae20e113bae9f7` | guo | Exp. 1-5 finished; **harvest was pending** |
+| `i-025c809974bbf7511` | yue_ge | complete, harvested, stopped |
+| `i-0b3030b5bd768536e` | thingom | complete, harvested, stopped |
+| `i-007e491c10f5e7d62` | (experiment host `OJCOMS`) | build host |
+
+### Recovering a node whose sshd will not answer
+
+Observed on `i-0e5ae20e113bae9f7`: the box came back `running` with `ok/ok`
+status checks and sshd never answered, on the same security group as nodes that
+connect fine — so it was the host, not access.
+
+```bash
+aws ec2 stop-instances  --instance-ids <id>   # clean stop
+aws ec2 start-instances --instance-ids <id>   # then retry ssh
+# if sshd still refuses, take the console output before anything drastic:
+aws ec2 get-console-output --instance-id <id> --output text | tail -50
+scp -i ~/.ssh/ojcoms.pem "ubuntu@<ip>:results-<scheme>-*.bundle" /tmp/
+```
+
+**Stop, never terminate, a node holding unharvested results.** These volumes
+carry `DeleteOnTermination: true` — a stop preserves every result, a terminate
+destroys them.
+
+### Getting results off a node
+
+The nodes **cannot push**. The remote is `git@github.com:Jaoguya/ABCD` over SSH
+and no node holds a private key; putting a personal key on a cloud instance was
+deliberately not done. For real auto-push, add a per-node GitHub deploy key with
+write access. Until then:
+
+```bash
+scp -i ~/.ssh/ojcoms.pem "ubuntu@<ip>:results-<scheme>-*.bundle" /tmp/
+git fetch /tmp/results-<scheme>-*.bundle HEAD:refs/node/<scheme>
+git checkout refs/node/<scheme> -- Schemes/<that-scheme-only>/
+```
+
+**That last line matters.** Each watchdog runs `git add -A Schemes/`, which is
+too broad: perera's node commit also carried 39 stale `ma_lb_pq_vdse` files that
+were dirty in its working tree, and merging that bundle would have overwritten
+fresh proposed-scheme results with month-old data. Always check
+`git diff --name-only <ref>~1 <ref>` and extract per-scheme paths rather than
+merging. Narrowing that `git add` to the scheme the node actually ran is a
+one-line fix worth making.
+
+### Watchdog design
+
+Each watchdog waits for the **driver** to exit, not a single python process. The
+proposed scheme's run is two invocations (Exp. 1-6, then 7-8), so watching "is
+the python alive" fires in the gap between them and stops the box with the
+ablation unrun. On exit it commits results locally, writes
+`~/results-<scheme>-<ts>.bundle`, attempts a push, then stops.
+
+---
+
+## 16. Fabric + IPFS on the experiment host
+
+Rescued from `infra/fabric/README.md` on 2026-09-07 before that file was
+deleted. Brings up the ledger and off-chain store §5 specifies (Hyperledger
+Fabric v2.5, IPFS). Before 2026-08-28 this directory did not exist, so the
+documented `docker compose` instruction was broken and every run silently fell
+back to `chain/ledger.py`'s `InProcessLedger`.
+
+```bash
+docker compose -f infra/fabric/docker-compose.yaml up -d
+docker compose -f infra/fabric/docker-compose.yaml ps
+docker compose -f infra/fabric/docker-compose.yaml down -v   # -v also drops ledger state
+```
+
+### What this is, and what it is not
+
+**Single organisation, solo orderer.** Not a production topology. What Exp. 4
+and Exp. 6 measure is the cost of *anchoring a commitment and reading it back*
+— ordering latency, block cut, endorsement round-trip — and this reproduces
+those on one `m6i.xlarge` reproducibly.
+
+**A solo orderer has no consensus round, so anchoring latency here is a LOWER
+BOUND on a Raft deployment.** State that in §V rather than describing this as a
+production network. It is the conservative direction for the proposed scheme —
+it does not flatter our anchoring cost relative to a baseline that anchors less
+often — but it is still a difference from the stated stack.
+
+**TLS is disabled**, because a handshake would be measured as if it were
+anchoring cost on a single-host private-VPC network. Never carry that setting
+anywhere the traffic leaves the host.
+
+**LevelDB, not CouchDB**: the scheme stores opaque commitments and issues no
+rich queries, so CouchDB would add indexing cost the construction does not
+incur.
+
+### Before this clears the reportability blocker
+
+`provenance.reportability()` blocks on `ledger_faithful` because an in-process
+hash chain understates Exp. 4's chain-consistency cost. Bringing these
+containers up is **necessary but not sufficient** — a `FabricLedger` adapter
+implementing `chain/ledger.py`'s `Ledger` interface against this network still
+has to exist and be passed `ledger_faithful=True`. That adapter is **not yet
+written**; see `chain/ledger.py`'s note that a Fabric adapter "reading an entry
+it did not write will need a canonical decoder".
+
+So this directory makes the compose command executable and unblocks that work.
+It does not by itself make Exp. 4 reportable, and no run should claim it does.
+
+### Channel setup
+
+`ORDERER_CHANNELPARTICIPATION_ENABLED=true` means the channel is created via the
+admin API (osnadmin) rather than a genesis block baked into the image. The
+adapter above should create the channel on first use so the network is
+reproducible from the compose file alone, with no manual crypto material to
+check in — checked-in MSP keys would be both a security problem and an
+unreviewable binary blob.

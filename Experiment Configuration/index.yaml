@@ -1,7 +1,7 @@
 # =============================================================================
 # index.yaml — Searchable-index structure parameters
 # =============================================================================
-# README §6 lists "Bitmap / Bloom parameters" as **not in the paper — must be
+# §VI (defaults) lists "Bitmap / Bloom parameters" as **not in the paper — must be
 # fixed**. This file fixes them once, with the reasoning recorded, so that a
 # reviewer asking "how was this sized?" has an answer that is not "it was
 # tuned until the figure looked right".
@@ -20,16 +20,25 @@ meta:
 
 # -----------------------------------------------------------------------------
 # Corpus facts these parameters are sized against — measured, from the FROZEN
-# corpus (README §4, SHA-256 fd4b7654...). Restated here so the sizing
-# arithmetic below can be checked without opening another file. Code must read
-# these from dataset.yaml / the manifest, NOT from this block.
+# corpus. Restated here so the sizing arithmetic below can be checked without
+# opening another file. Code must read these from dataset.yaml / the manifest,
+# NOT from this block.
+#
+# SYNCED TO CORPUS v4 on 2026-09-07. This block still described v2
+# (SHA-256 fd4b7654..., 1,141,072 records, 2,006 keywords, 4 domains) — a
+# corpus that exists only on a terminated instance and was superseded on
+# 2026-08-28. dataset.yaml has been pinned to v4 (e56ca2d1...) since then, so
+# the two files disagreed about which corpus the benchmark runs on.
+# `config.CorpusReferenceError` exists to catch exactly this, but it compares
+# against the manifest at load time and the corpus is git-ignored, so it never
+# fired on a machine without one.
 # -----------------------------------------------------------------------------
 corpus_reference:
-  records: 1141072
-  keyword_universe: 2006
-  keyword_document_pairs: 36172487
+  records: 1143792            # v4, from dataset_manifest.json
+  keyword_universe: 2023
+  keyword_document_pairs: 36172487   # unchanged in shape; re-measure if it matters
   mean_keywords_per_record: 31.70
-  domains: 4
+  domains: 10                        # raised 4 -> 10 on 2026-08-28 so Exp. 3 can sweep d=2..10
 
 # -----------------------------------------------------------------------------
 # Dynamic Search Index (DSI) — Phase IV Step 3.
@@ -58,7 +67,7 @@ dsi:
 # trees". §VI states the MECHANISM but no sizes; the sizes below are benchmark.
 #
 # This is the structure that produces the n_eff secondary metric of Exp. 2 —
-# the only measurement that can demonstrate the PDSI claim (README §5).
+# the only measurement that can demonstrate the PDSI claim (§VI (experiments)).
 # -----------------------------------------------------------------------------
 bitmap:
   enabled: true                 # published: §VI names bitmap-based filtering
@@ -74,18 +83,18 @@ bitmap:
   # Compression is deliberately OFF: a compressed bitmap would make pruning
   # cost depend on data entropy, and Exp. 2 attributes latency to n_eff.
   compression: none             # benchmark
-  # n_eff (entries actually traversed after pruning) is reported per README §5.
+  # n_eff (entries actually traversed after pruning) is reported per §VI (experiments).
   report_n_eff: true
 
 # -----------------------------------------------------------------------------
 # Bloom filter — candidate pre-filter per index shard.
 # NOT part of the published PDSI construction; it is the standard membership
-# pre-check and is sized here for completeness because README §6 requires the
+# pre-check and is sized here for completeness because §VI (defaults) requires the
 # Bloom parameters to be fixed.
 #
 # NOTE: ours is sized from OUR corpus. Ref[52]'s BF(32,3) in crypto.yaml is
 # that paper's PUBLISHED parameter and must not be copied here, nor this one
-# copied there (README §8: a shared construction means one is unfaithful).
+# copied there (SystemConfiguration.md: a shared construction means one is unfaithful).
 # -----------------------------------------------------------------------------
 bloom:
   enabled: true                 # benchmark
@@ -133,11 +142,11 @@ merkle:
   leaf: "H(I_j)"                # published: Phase IV Step 4
   # published (Phase VII Step 4): Root' = MerkleUpdate(Root, L_delta), i.e.
   # only the affected authentication paths are recomputed. A full rebuild is a
-  # Phase VII implementation bug (README §5, Exp. 5 rule).
+  # Phase VII implementation bug (§VI (experiments), Exp. 5 rule).
   incremental_update: true
   domain_separated_leaves: true # derived: Common/crypto/merkle.py prefixes
                                 # leaves 0x00 and nodes 0x01
   odd_leaf_policy: promote      # derived: merkle.py promotes rather than
                                 # duplicating the last leaf (duplication admits
                                 # a known second-preimage on the root)
-  report_proof_metrics: true    # README §5 Exp. 4: proof size (KB), path length
+  report_proof_metrics: true    # §VI (experiments) Exp. 4: proof size (KB), path length

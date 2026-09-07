@@ -1,7 +1,8 @@
 # MA-LB-PQ-VDSE — working rules
 
-This file loads on every turn, so it stays short. The long-form specification is
-`README.md`; the operator's guide is `SystemConfiguration.md`.
+This file loads on every turn, so it stays short. `SystemConfiguration.md` is
+both the long-form specification and the operator's guide; `README.md` was
+deleted on 2026-09-07 and its AWS and Fabric config rescued into that file.
 
 ## Every reply
 
@@ -20,10 +21,20 @@ number), and **measured vs extrapolated**.
 
 Follow `.claude/skills/bug-sweep`'s boundary to decide what gets RECORDED,
 but **do not ask which option to take** (granted 2026-09-06). Pick the option
-you would recommend and execute it. Anything that changes a number already in
-a `results.csv`, a figure, or the manuscript still gets an entry in
-`.claude/skills/bug-sweep/DECISIONS.md`, marked `RESOLVED: <what you did>` in
-the same pass. Report what changed, not what you considered.
+you would recommend and execute it. Report what changed, not what you
+considered.
+
+**Two files, and only two** (set 2026-09-07). `checkexp.md` records what has
+been checked and how deep; `needfix.md` records what that check found and what
+must be fixed, one item per finding, each carrying its own evidence — the file
+and line, the measured numbers, why it matters. Anything that changes a number
+already in a `results.csv`, a figure, or the manuscript gets an item in
+`needfix.md` tagged `[DECIDE]` or `[BLOCKED]`, in the same pass.
+
+`.claude/skills/bug-sweep/DECISIONS.md` is a **closed archive**: do not read it
+and do not append to it. It holds history up to 2026-09-07 and nothing after.
+Never split one finding's reasoning across two files — that is what put
+`DO_NOT_READ/remainfix.txt` and `DO_NOT_READ/TASKS.md` in quarantine.
 
 This does not override the refusal rules: destructive or irreversible actions
 — terminating instances, discarding measured data, force-pushing — are still
@@ -33,7 +44,6 @@ confirmed first.
 
 - **`Overleaf/*.tex` may be edited** (granted 2026-09-06). Back the file up
   first, change only the sentences the decision names, and show the diff.
-  `README.md` is still edit-only-when-asked.
 - **Stop an idle instance.** The moment a fleet node has no task left —
   campaign finished, harvested, or blocked awaiting a decision — stop it:
   `aws ec2 stop-instances --instance-ids <id>`. Never leave one running to

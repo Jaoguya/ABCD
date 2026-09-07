@@ -1,7 +1,7 @@
 # =============================================================================
 # workload/exp78_workload.yaml — REPORTED workload trace for Exp. 7 and Exp. 8
 # =============================================================================
-# README §5: "closed-loop generator, fixed concurrency per point, recorded
+# §VI (experiments): "closed-loop generator, fixed concurrency per point, recorded
 # arrival trace so all variants see identical workloads. Utilization sampled
 # every 100 ms." SCHEME.md: "All 4 variants see byte-identical workloads."
 #
@@ -24,7 +24,7 @@ meta:
 # generator produces past saturation.
 # -----------------------------------------------------------------------------
 generator:
-  model: closed_loop            # benchmark: README §5 Exp. 7-8 rule
+  model: closed_loop            # benchmark: §VI (experiments) Exp. 7-8 rule
   # EXTENDED 2026-09-01 to 10000. Must stay identical to global.yaml's exp7
   # sweep -- config.py::validate refuses to run if the two disagree, which is
   # what caught this. Original points are all KEPT: AASS is WEAKEST at low
@@ -33,7 +33,7 @@ generator:
   concurrency: [100, 500, 1000, 2500, 5000, 10000]
   think_time_ms: 0              # benchmark: zero think time, so concurrency is
                                 # the only load control variable
-  ramp_seconds: 30              # benchmark: README §7 "warm after a 30 s ramp";
+  ramp_seconds: 30              # benchmark: §VI (methodology) "warm after a 30 s ramp";
                                 # ramp samples are excluded from both metrics
   steady_state_seconds: 60      # benchmark: long enough that a 100 ms
                                 # utilization sample yields 600 points per run
@@ -55,7 +55,7 @@ trace:
   verify_sha256: true
 
 # -----------------------------------------------------------------------------
-# Query mix — drawn from the FROZEN corpus (README §4), never synthesised.
+# Query mix — drawn from the FROZEN corpus (§VI (dataset)), never synthesised.
 # Keyword co-occurrence is the property Exp. 2's n_eff and the scheduler's
 # candidate-set estimate both depend on; a fitted Zipf law cannot reproduce it.
 # -----------------------------------------------------------------------------
@@ -88,7 +88,7 @@ query_mix:
   unauthorized_fraction: 0.05   # benchmark
 
 # -----------------------------------------------------------------------------
-# Metrics — Exp. 7 and Exp. 8 both emitted from every run (README §5).
+# Metrics — Exp. 7 and Exp. 8 both emitted from every run (§VI (experiments)).
 # -----------------------------------------------------------------------------
 metrics:
   exp7:
@@ -98,6 +98,6 @@ metrics:
     primary: fsn_utilization_stddev
     secondary: [max_node_utilization, cross_node_forwards]
   utilization:
-    sample_interval_ms: 100     # published: README §5 / SCHEME.md Exp. 7-8 rule
+    sample_interval_ms: 100     # published: §VI (experiments) / SCHEME.md Exp. 7-8 rule
     definition: busy_time_fraction_per_interval   # benchmark
     exclude_ramp: true

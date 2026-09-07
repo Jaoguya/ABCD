@@ -110,6 +110,42 @@ def test_every_call_advances_to_a_new_keyword(prepared):
     assert len(set(seen)) == len(p["keywords"]), "a keyword was reused early"
 
 
+def test_the_query_carries_the_published_q(prepared):
+    """SVI: "each query contains five keywords"; global.yaml fixes it at 5.
+
+    Exp. 2 issued ONE keyword until 2026-09-07 -- the same defect the
+    2026-09-06 sweep fixed for Exp. 7/8, whose entry wrongly recorded that
+    "every other experiment honours it". Nothing pinned q here, so nothing
+    failed. This does.
+    """
+    conf, _, p = prepared
+    q = conf.defaults.keywords_per_query
+    assert p["queries"], "no queries were prepared"
+    for query in p["queries"]:
+        assert len(query) == len(set(query)), "a query repeats a keyword"
+        assert len(query) == q, f"query carries {len(query)} keywords, not q={q}"
+
+
+def test_the_query_keywords_co_occur_in_a_real_record(prepared):
+    """Five INDEPENDENTLY drawn keywords match nothing over |W_i| ~= 32.
+
+    That is how guo's Exp. 2 came to measure a search short-circuiting on its
+    first miss, and how psa_exp2 banked n_eff = 0.0 at every sweep point. The
+    completion draws the other q-1 from a record that carries the anchor, so
+    the conjunction is answerable by construction.
+    """
+    _, exp, p = prepared
+    deployment = p["deployment"]
+    carried = {
+        frozenset(entry["record"].keywords) for entry in deployment.records
+    }
+    for query in p["queries"]:
+        assert any(set(query) <= record for record in carried), (
+            f"no single record carries all of {query}; the conjunction "
+            f"cannot match and the point would time an empty search"
+        )
+
+
 def test_the_pool_cycles_rather_than_running_out(prepared):
     """Retries call measure again; the point must not crash on exhaustion."""
     _, exp, p = prepared
@@ -120,9 +156,39 @@ def test_the_pool_cycles_rather_than_running_out(prepared):
     assert p["cursor"][0] == n + 3
 
 
-def test_n_eff_now_varies_across_runs(prepared):
-    """The whole purpose: cost must track the query, not a fixed keyword."""
+def test_the_query_changes_from_run_to_run(prepared):
+    """The whole purpose: cost must track the query, not a fixed one.
+
+    This asserted that `n_eff` VARIES, which held while the query was a single
+    keyword drawn from a frequency band. Under the q=5 conjunctive query
+    (2026-09-07) it no longer holds ON THE SYNTHETIC SOURCE: that source lays
+    keywords out near-uniformly -- `kw:{(rid*6+k) % 2006}` -- so every record
+    carries a structurally identical neighbourhood and five co-occurring
+    keywords match the same count every time. The uniformity is a property of
+    the fixture, which this file's own docstring already warns about, not of
+    the experiment; on the Synthea corpus |W_i| runs 5..64 over a Zipf
+    vocabulary and n_eff moves.
+
+    So this now pins the thing the 2026-09-03 defect actually broke -- a query
+    reused verbatim for every run of every point -- rather than a proxy the
+    fixture can no longer show. `test_exp2_query_is_answerable` covers the
+    other half: that the query matches something.
+    """
     _, exp, p = prepared
     p["cursor"][0] = 0
-    vals = {exp.measure(p).secondaries["n_eff"] for _ in range(len(p["keywords"]))}
-    assert len(vals) > 1, "every run still returns the same candidate count"
+    issued = []
+    for _ in range(len(p["queries"])):
+        issued.append(tuple(p["queries"][p["cursor"][0] % len(p["queries"])]))
+        exp.measure(p)
+    assert len(set(issued)) == len(issued), "a query was reused across runs"
+
+
+def test_exp2_query_is_answerable(prepared):
+    """n_eff > 0. The suite asserted `>= 0`, which passes on the empty result.
+
+    That is not hypothetical: it is exactly what went undetected in guo's
+    Exp. 2 for 150 banked runs and in psa_exp2 at every sweep point.
+    """
+    _, exp, p = prepared
+    p["cursor"][0] = 0
+    assert exp.measure(p).secondaries["n_eff"] > 0

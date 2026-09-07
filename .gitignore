@@ -85,3 +85,7 @@ infra/fabric/channel-artifacts/
 infra/fabric/ipfs-data/
 infra/fabric/chaincode/vendor/
 infra/fabric/chaincode/go.sum
+
+# JVM crash dumps (Synthea generation OOMs) — never results
+hs_err_pid*.log
+replay_pid*.log

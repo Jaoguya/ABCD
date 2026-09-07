@@ -1,6 +1,6 @@
 # MA-LB-PQ-VDSE — Scheme Experiment Guide
 
-**Back to main README:** [README.md](../../README.md)
+**Back to the operator's guide:** [SystemConfiguration.md](../../SystemConfiguration.md)
 
 ---
 
@@ -296,4 +296,4 @@ Each experiment folder produces:
 | `results.csv` | Aggregated means with 95% CI |
 | `run_meta.json` | Provenance (git commit, Python version, dataset SHA-256, etc.) |
 
-See main [README.md](../../README.md) §9 for column format.
+See [SystemConfiguration.md](../../SystemConfiguration.md) for column format.

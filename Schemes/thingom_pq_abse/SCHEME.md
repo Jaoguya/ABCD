@@ -1,6 +1,6 @@
 # Thingom PQ-ABSE — Scheme Experiment Guide (Ref[41])
 
-**Back to main README:** [README.md](../../README.md)
+**Back to the operator's guide:** [SystemConfiguration.md](../../SystemConfiguration.md)
 **Paper:** Thingom *et al.*, "Secure and Privacy-Preserving Post-Quantum Attribute-Based Searchable Encryption for Edge-Driven Transportation Systems", IEEE TCE, doi `10.1109/TCE.2025.3632071`. Extracted text: [References/Ref[41]/Ref[41].md](../../References/Ref[41]/Ref[41].md).
 
 ---
@@ -205,6 +205,6 @@ Unlike the other baselines, Ref[41] has **no working Windows development path**.
 | `results.csv` | Aggregated means with 95% CI (Student-t, `n−1` df) |
 | `run_meta.json` | Provenance + `reportable` flag and blockers |
 
-See main [README.md](../../README.md) §9 for column format.
+See [SystemConfiguration.md](../../SystemConfiguration.md) for column format.
 
 **Unit note:** Exp. 1's trapdoor size is reported in **bytes**, per README §5 ("trapdoor size (B)"). README §9 states sizes are in KB. The two disagree; §5 is the more specific statement and was followed. Needs reconciling before the figures are generated.

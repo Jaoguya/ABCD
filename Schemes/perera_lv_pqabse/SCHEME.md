@@ -1,6 +1,6 @@
 # Perera & Fugkeaw LV-PQ-ABSE — Scheme Experiment Guide (Ref[54])
 
-**Back to main README:** [README.md](../../README.md)
+**Back to the operator's guide:** [SystemConfiguration.md](../../SystemConfiguration.md)
 **Paper:** M. Perera and S. Fugkeaw, "LV-PQ-ABSE: A Lightweight Verifiable Postquantum Attribute-Based Searchable Encryption Scheme with Hybrid Indexing and Provenance-Aware Verification for IoT-Based EHRs," *IEEE Internet of Things Journal*, vol. 13, no. 15, pp. 34302–34317, Aug. 2026, doi: `10.1109/JIOT.2026.3695855`. Extracted text: [References/Ref[54]/Ref[54].md](../../References/Ref[54]/Ref[54].md).
 
 **Status (2026-08-29): IMPLEMENTED.** `src/` and all three experiment runners exist; `src/test_scheme.py` passes 18 tests covering Phases 1–5 including the lattice CP-ABE. The three gaps this file recorded as "decisions needed" are now decided, with reasons, in `crypto.yaml`'s `perera_lv_pqabse` block.
@@ -134,4 +134,4 @@ Dilithium3 availability needs checking against `Common/crypto/kem.py`'s existing
 
 ## Output
 
-Same format as every other scheme — see main [README.md](../../README.md) §9.
+Same format as every other scheme — see [SystemConfiguration.md](../../SystemConfiguration.md).

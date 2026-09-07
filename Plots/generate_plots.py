@@ -597,6 +597,14 @@ class Series:
     #: `secondary_2_mean`, ... in file order. Empty for a run written before the
     #: field existed, in which case a panel cannot be verified and says so.
     secondary_metrics: List[str] = field(default_factory=list)
+    #: run_meta.json's `config_hashes["global.yaml"]`. global.yaml fixes
+    #: `keywords_per_query`, `repetitions`, `warmup_runs` and the sweep values
+    #: -- the parameters that make two schemes on one axis comparable, and its
+    #: own header says changing it "invalidates every existing results.csv".
+    #: Each run records its hash faithfully; nothing checked they AGREE across
+    #: the schemes drawn in one figure, so the drift was invisible at plot time.
+    #: fig:exp2's six runs turned out to carry four different values.
+    config_hash: Optional[str] = None
     problems: List[str] = field(default_factory=list)
 
 
@@ -704,6 +712,16 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
             names = parsed.get("secondary_metrics")
             if isinstance(names, list):
                 series.secondary_metrics = [str(n) for n in names]
+            # Top level for this scheme's harness, nested under `environment`
+            # for the baselines that write the other schema. Both are in use.
+            hashes = parsed.get("config_hashes") or {}
+            if not hashes:
+                hashes = (parsed.get("environment") or {}).get(
+                    "config_hashes"
+                ) or {}
+            digest = hashes.get("global.yaml")
+            if digest:
+                series.config_hash = str(digest)
         except (OSError, json.JSONDecodeError, AttributeError) as exc:
             series.problems.append(f"{meta}: unreadable ({type(exc).__name__})")
     else:
@@ -1264,6 +1282,38 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 f"{required} for reportable data"
             )
         warnings.extend(series.problems)
+
+    # ONE FIGURE, ONE `global.yaml`. Every series above is drawn on a shared
+    # axis, and that only means anything if the schemes were run under the same
+    # `keywords_per_query`, `repetitions`, `warmup_runs` and sweep values --
+    # all of which live in global.yaml. Its header calls any change to it
+    # results-affecting; each run records the hash it used, but until this
+    # check nothing compared them, and fig:exp2's six runs carried FOUR
+    # different values (2026-09-07). Named here rather than silently drawn.
+    if collect_warnings:
+        seen: Dict[str, List[str]] = {}
+        for series in series_list:
+            if series.config_hash:
+                seen.setdefault(series.config_hash, []).append(series.scheme)
+        if len(seen) > 1:
+            detail = "; ".join(
+                f"{digest[:12]}...: {', '.join(sorted(schemes))}"
+                for digest, schemes in sorted(seen.items())
+            )
+            warnings.append(
+                f"exp{spec.number}: schemes in one figure were run under "
+                f"{len(seen)} DIFFERENT global.yaml revisions — {detail}. "
+                f"global.yaml fixes q, repetitions and the sweep, so the "
+                f"curves may not be comparable"
+            )
+        missing = sorted(
+            s.scheme for s in series_list if not s.config_hash
+        )
+        if missing and seen:
+            warnings.append(
+                f"exp{spec.number}: no global.yaml hash in run_meta.json for "
+                f"{', '.join(missing)} — cannot confirm they match the rest"
+            )
 
     # A COMPANION CURVE is a second column of the same run, not another
     # scheme, so it is drawn once (from the first series that has it) in a

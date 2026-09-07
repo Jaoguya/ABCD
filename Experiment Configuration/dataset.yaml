@@ -6,23 +6,23 @@
 # shape requires no code change.
 #
 # CHANGING ANY VALUE HERE IS RESULTS-AFFECTING once results generation has
-# begun — README §14 forbids modifying the derived dataset after that point.
+# begun — needfix.md forbids modifying the derived dataset after that point.
 # =============================================================================
 
 meta:
   version: 1
 
 # -----------------------------------------------------------------------------
-# Corpus shape — README §4 and §6
+# Corpus shape — §VI (dataset) and §6
 # -----------------------------------------------------------------------------
 corpus:
   # Sweep range for Exp. 2 (searchable index size N).
-  min_records: 10000                  # 10^4   — README §4
-  max_records: 1000000                # 10^6   — README §4
-  default_records: 100000             # 10^5   — README §6 (benchmark choice)
+  min_records: 10000                  # 10^4   — §VI (dataset)
+  max_records: 1000000                # 10^6   — §VI (dataset)
+  default_records: 100000             # 10^5   — §VI (defaults) (benchmark choice)
   domains: 10                         # raised from 4 on 2026-08-28 so Exp. 3 can
                                       # sweep its published d=2..10 range
-  domain_split: uniform               # README §4 "Uniform across 4 domains"
+  domain_split: uniform               # §VI (dataset) "Uniform across 4 domains"
 
   # Domain assignment is a deterministic function of the patient identifier,
   # not a per-record coin flip. This keeps every record of one patient inside
@@ -70,7 +70,7 @@ synthea:
   # Every source below is a DISTINCT clinical concept that a real encrypted
   # EHR index would contain. Two things are deliberately excluded because
   # they would inflate the keyword universe without adding real distinctions,
-  # which would pump n_eff and flatter Exp. 2 (README §14):
+  # which would pump n_eff and flatter Exp. 2 (needfix.md):
   #
   #   * free-text DESCRIPTION alongside CODE — the same concept, aliased
   #   * value binning finer than the bins below — granularity for its own sake
@@ -167,7 +167,7 @@ synthea:
 # -----------------------------------------------------------------------------
 # Synthetic corpus — Dataset/synthetic_generator.py
 # -----------------------------------------------------------------------------
-# DEVELOPMENT ONLY. README §4: results from the synthetic corpus MUST NOT be
+# DEVELOPMENT ONLY. §VI (dataset): results from the synthetic corpus MUST NOT be
 # reported in the paper. Every corpus records its type, and run_meta.json
 # carries corpus_type so a synthetic run can never be mistaken for a real one.
 synthetic:
@@ -200,7 +200,7 @@ output:
   corpus_filename: corpus.jsonl
   manifest_filename: dataset_manifest.json
   # SHA-256 of corpus_filename is recorded in the manifest and in every
-  # run_meta.json (README §7).
+  # run_meta.json (§VI (methodology)).
   hash_algorithm: sha256
 
 # -----------------------------------------------------------------------------
@@ -209,7 +209,7 @@ output:
 # The corpus is built once and reused by every scheme on every instance.
 # Regenerating it mid-campaign produces two incomparable result sets that
 # surface only when a reviewer asks why two run_meta.json files disagree
-# (README §14: do not modify the derived dataset once results generation has
+# (needfix.md: do not modify the derived dataset once results generation has
 # begun).
 #
 # Three things enforce this rather than relying on discipline:

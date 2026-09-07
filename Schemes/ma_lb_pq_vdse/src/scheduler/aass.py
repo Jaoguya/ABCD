@@ -481,6 +481,14 @@ class Scheduler:
         self.config = config or scheme_config.load()
         self.reportable = reportable
         self._cursor = 0
+        #: Requests seen, not shards placed. `round_robin` needs BOTH: the
+        #: cursor rotates shards across the pool WITHIN one request, and this
+        #: rotates where that rotation STARTS between requests. With only the
+        #: cursor, `|S_Q|` a multiple of the pool size returns it to the same
+        #: offset every request, so the first shard went to the same node every
+        #: time -- and `select()`, which reduces M_Q by first-assigned, then
+        #: returned that one node for every request. See `assign`.
+        self._requests = 0
 
         if variant == VARIANT_AASS and reportable:
             # Live gate: raises while scheduler.yaml says pending_sweep, so
@@ -551,6 +559,8 @@ class Scheduler:
                 "three of eq:search-cost's four terms, which is not AASS"
             )
         reachable = self._reachable(nodes, request)
+        request_offset = self._requests
+        self._requests += 1
 
         mapping: List[Tuple[Tuple[str, str], FogSearchNode]] = []
         unplaceable: List[Tuple[str, str]] = []
@@ -599,7 +609,23 @@ class Scheduler:
                 if self.variant == VARIANT_NO_LB:
                     chosen = pool[0]
                 elif self.variant == VARIANT_ROUND_ROBIN:
-                    chosen = pool[self._cursor % len(pool)]
+                    # OFFSET BY THE REQUEST, THEN BY THE SHARD.
+                    #
+                    # `self._cursor` alone rotates shards across the pool inside
+                    # one request, which is what a per-shard Algorithm 1 wants.
+                    # But it advances |S_Q| times per request, so whenever
+                    # |S_Q| is a multiple of the pool size it lands back on the
+                    # same offset -- the first shard goes to pool[0] on EVERY
+                    # request. `busiest()` breaks ties by first-assigned, so
+                    # `select()` then returned that same node forever and the
+                    # round_robin arm became indistinguishable from `no_lb`,
+                    # erasing the arm Exp. 7-8 compare against. `busiest()`'s
+                    # own docstring warns about exactly this collapse.
+                    #
+                    # Before 5143ee7 `select()` advanced the cursor ONCE PER
+                    # REQUEST and rotated correctly; this keeps that rotation
+                    # while retaining the per-shard placement.
+                    chosen = pool[(request_offset + self._cursor) % len(pool)]
                     self._cursor += 1
                 else:  # VARIANT_LEAST_LOADED
                     chosen = min(

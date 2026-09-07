@@ -207,10 +207,33 @@ def test_costs_are_the_four_published_terms():
     costs = aass_mod.estimate_costs(node, request)
     assert not hasattr(costs, "auth"), "C^auth is not a term of eq:search-cost"
     assert costs.index == float(aass_mod.estimate_candidate_count(node, request))
-    assert costs.sync == 0.0                    # VID_U == VID_j
     assert costs.queue == 0.0                   # empty queue
     assert costs.verify >= 0.0
     assert len(costs.as_tuple()) == 4
+
+    # C_j^sync IS A LAG COUNT OVER V_Q, not the scalar |VID_U - VID_j|.
+    #
+    # This asserted `costs.sync == 0.0` with the comment "VID_U == VID_j",
+    # which is the previous manuscript revision's scalar. The current
+    # eq:search-cost states C_j^sync = |{(ID_k,v_k) in V_Q : v_{j,k} < v_k}|
+    # and the code was aligned to it on 2026-09-07; the assertion was not, so
+    # it failed on a deliberate change. Both directions are pinned below rather
+    # than the number alone, because the number depends on the fixture: each
+    # FSN serves ONE of the four domains, and `sync_nodes` only gives a node
+    # the state of domains it serves, so against a four-domain V_Q every node
+    # is behind on the three it does not serve.
+    assert costs.sync == 3.0, (
+        "a node serving 1 of 4 authorized domains lags on the other 3"
+    )
+
+    # Scoped to what this node actually serves, the lag is zero -- which is the
+    # per-shard case Algorithm 1 evaluates, since `eligible` only offers a node
+    # shards it maintains.
+    own_domain_only = tuple(
+        pair for pair in authorized if pair[0] == domain
+    )
+    local = make_request(keywords[domain], own_domain_only, vid_u=1)
+    assert aass_mod.estimate_costs(node, local).sync == 0.0
 
 
 def test_cost_verify_scales_with_log_entry_count():
