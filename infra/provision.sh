@@ -134,14 +134,37 @@ log "Pinning BLAS threads"
 # This previously used $(nproc), which both reintroduced that dependency and
 # made verify_thread_pinning(require=True) fail on a correctly provisioned
 # host — global.yaml expected 1, provision exported 4.
+#
+# THE VARIABLE NAMES ARE READ, NOT RESTATED (2026-09-08). Fixing the VALUE above
+# left the LIST hardcoded at four names while global.yaml declares five, and
+# `VECLIB_MAXIMUM_THREADS` has never appeared in this file — `git log -S` over
+# its whole history returns nothing. config.py:thread_pinning_report() reads all
+# five from `environment.thread_env_vars` and verify_thread_pinning(require=True)
+# demands every one equal `blas_threads`, so a node provisioned by this script
+# still failed the gate on the fifth name alone. Restating the names here is what
+# allowed the two lists to drift in the first place, so they are now derived from
+# the config and pinned by
+# `src/tests/test_thread_pinning_agreement.py::test_provision_exports_every_configured_thread_var`.
 THREADS="$(grep -E '^[[:space:]]*blas_threads:' "${REPO}/Experiment Configuration/global.yaml" | head -1 | sed 's/.*://; s/#.*//; s/[[:space:]]//g')"
 THREADS="${THREADS:-1}"
-cat <<EOF | sudo tee /etc/profile.d/malbpq-threads.sh > /dev/null
-export OMP_NUM_THREADS=${THREADS}
-export OPENBLAS_NUM_THREADS=${THREADS}
-export MKL_NUM_THREADS=${THREADS}
-export NUMEXPR_NUM_THREADS=${THREADS}
-EOF
+# The `thread_env_vars:` block is a YAML list of bare names, one `- NAME` per
+# line; take lines until the next key at the same or lower indentation.
+THREAD_VARS="$(awk '
+    /^[[:space:]]*thread_env_vars:[[:space:]]*$/ { collecting = 1; next }
+    collecting && /^[[:space:]]*-[[:space:]]*[A-Z_]+[[:space:]]*$/ {
+        gsub(/[^A-Z_]/, ""); print; next
+    }
+    collecting { exit }
+' "${REPO}/Experiment Configuration/global.yaml")"
+if [ -z "${THREAD_VARS}" ]; then
+    echo "FATAL: environment.thread_env_vars is empty or unparseable in global.yaml" >&2
+    exit 1
+fi
+{
+    for _var in ${THREAD_VARS}; do
+        echo "export ${_var}=${THREADS}"
+    done
+} | sudo tee /etc/profile.d/malbpq-threads.sh > /dev/null
 # shellcheck disable=SC1091
 source /etc/profile.d/malbpq-threads.sh
 
