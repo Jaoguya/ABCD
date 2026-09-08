@@ -1,558 +1,415 @@
-# System Configuration — everything about this experiment, from scratch
+# System Configuration — how to run this, and what is actually true
 
-**Who this is for.** Someone who has never seen this project and needs to understand
-what it measures, how it is set up, how to run it, and — most importantly — the
-things that will quietly ruin a result if nobody tells you about them.
+**Rewritten from scratch 2026-09-08.** The previous version had drifted badly:
+seventeen of its factual claims were false against the repo, including three
+separate sections asserting an instance-type pin that was removed on 2026-08-30,
+and a claim that no result in the repo was reportable when 103 were. It was
+rewritten rather than patched, because a stale rule is worse than no rule — it
+gets followed.
 
-Read [§0 Flag points](#0-flag-points--read-this-before-you-touch-anything) first.
-Everything else is reference.
+**Everything below is either re-derived from a machine-written file, checked
+against code that runs, or carried over verbatim and marked as unverifiable
+experience.** Nothing is copied from prose on trust.
 
-**Related documents.** `README.md` was deleted on 2026-09-07; this file is now
-both the specification and the *operator's guide* — what the experiments are, and
-how the thing is actually configured and run. Its AWS and Fabric content was
-rescued into §15 and §16 below before the deletion. `checkexp.md` tracks which
-experiments have been audited and `needfix.md` what came out of it.
-This file is the working agreement.
-Git history is the record of every defect
-found and what was done about it.
+## How to tell what is true here
 
----
+**There are two different questions, and they rank sources differently.** Using
+the wrong ranking is how the previous version of this file came to tell readers
+to resolve construction disputes against the code.
 
-## 0. Flag points — read this before you touch anything
+### Question A — "is this claim about the repo's current state true?"
 
-These are the things that are not obvious, that have already cost real time, and
-that a newcomer cannot infer from the code.
+*Is BLAS pinned? How many domains does the corpus have? What does the config say?*
 
-**1. Nothing measured on a laptop counts.** Every reportable number must come from
-one pinned AWS instance type (`m6i.xlarge`). This is checked at runtime against the
-live EC2 metadata service, not asserted — `run_meta.json` records the host that
-actually produced each number. A figure produced anywhere else would make the
-paper's "all schemes on identical hardware" claim false.
+| Rank | Source | Why |
+|---|---|---|
+| 1 | `Dataset/dataset_manifest.json`, `run_meta.json`, `results.csv` | Machine-written, committed, never hand-edited |
+| 2 | `Experiment Configuration/*.yaml` and the code | Executable — what actually runs |
+| 3 | This file | Commentary. Useful, never evidence |
 
-**2. `run_meta.json` tells you whether a number is usable.** Every run writes one.
-If `reportable: false`, the `not_reportable_because` list says exactly why. A run
-still completes and still writes results — it is just not quotable. **Always read
-this field before putting a number in the paper.**
+The papers are irrelevant here; they do not know what we ran.
 
-**3. The corpus is frozen and pinned by hash.** `Dataset/derived/corpus.jsonl` is
-git-ignored (it is hundreds of MB) but its SHA-256 is pinned in `dataset.yaml`.
-Results from a different corpus are not comparable to each other. If you regenerate
-the corpus, **every scheme must be re-run** — not just the one you were working on.
+### Question B — "is the implementation correct?"
 
-**4. `Dataset/dataset_manifest.json` is committed provenance. Do not overwrite it.**
-`synthetic_generator.py`'s `--manifest` used to default to that path, so generating
-a development corpus with only `--output` set would silently replace the campaign's
-frozen pin with a 20,000-record dev manifest. It now refuses unless you pass
-`--force`. If you ever see that file modified in `git status` and did not mean it,
-`git checkout -- Dataset/dataset_manifest.json`.
+*Does our token match the spec? Does Scheme [35]'s search match its paper? Is
+Exp. 3's workload the published one?* **This is the question the publication
+rests on**, because the entire repo exists to derive from published schemes.
 
-**5. Index construction is untimed, but it is most of the wall-clock.** Every
-experiment separates *setup* (build the encrypted index) from *measurement* (time
-the search). Only the measurement is reported. But building a 10⁶-record index
-takes hours, and that is where the campaign's time actually goes. A runtime
-estimate that only counts measured operations will be wrong by an order of
-magnitude.
+| Rank | Source | Why |
+|---|---|---|
+| 1 | `References/Ref[NN]/Ref[NN].pdf` | The baselines' papers. If our Scheme [35] differs from its paper, **ours** is wrong. Immovable — we cannot edit someone else's paper |
+| 2 | `Overleaf/MA-LB-PQ-VDSE.tex` | The spec for the proposed scheme. Authority, but **movable by decision**: code and spec must agree, and which one moves is a choice |
+| 3 | Code and `*.yaml` | *Implementations.* A config asserting `u: 10` does not make 10 what the paper published. Here they are the thing under test, not the evidence |
+| 4 | `results.csv` | **The output.** It cannot validate its own generator — if the code measures the wrong thing, the data measures it faithfully and looks perfect |
 
-**6. Two baselines cannot be developed on macOS.** `thingom_pq_abse` needs
-`charm-crypto`, which is Linux-only, and there is no macOS wheel for the
-`petrelic` fallback. Develop it on the Linux host. Everything else runs anywhere.
+**Test for any claim: can you execute it, or read it out of committed data?** If
+not, it is a lead, not a fact.
 
-**7. One baseline claims something its own maths does not support.**
-`thingom_pq_abse` (Ref[41]) describes itself as post-quantum while its construction
-rests on DBDH, which Shor's algorithm breaks — and the same paper states elsewhere
-that pairings are not post-quantum. It is implemented **exactly as published** and
-the contradiction is reported as a finding. Do not "fix" it.
+Two inversions worth knowing. On `keyword_document_pairs` the old prose said
+36,263,865 and `index.yaml` said 36,172,487 — the manifest agrees with the
+prose, so it is not "code beats docs", it is "the manifest beats everything".
+And under Question B the code never wins on its own: it is a claim about the
+paper, not proof of it.
 
-**8. Four of the five schemes needed parameters their papers never published.**
-Those decisions are recorded in `Experiment Configuration/crypto.yaml` with a date
-and a reason each. If a reviewer asks "where did n = 768 come from", the answer is
-in that file, not in anyone's head.
-
-**9. Exp. 4 understates its cost.** It runs against an in-process hash chain, not
-the Hyperledger Fabric deployment the specification names. The run completes and
-`run_meta.json` says so. The Fabric adapter is not written yet.
-
-**Exp. 6 was gated alongside it until 2026-09-03 and should not have been.** Its
-timed path never anchors: `sync/ias.py::synchronize` takes `ledger` as *optional*
-and the Exp. 6 runner passes none, so Phase VII Step 7 is outside the boundary —
-which is also where README §5 and `tab:cost`'s sync row put it. **Exp. 6 is
-reportable without Fabric.** The general lesson is worth more than the fix: that
-gate was justified by a *protocol step* rather than a *measurement boundary*, and
-nobody checked the runner. When a gate blocks something, confirm its premise
-against the code before accepting it.
-
-**10. Never edit `README.md` casually.** It is the
-specification's source of truth.
+**Note on the reference extractions.** `Ref[NN].md` is lossy OCR of the PDF —
+`λ` renders as `?`, `10⁻⁴` as `10? 4`. Fine for locating a passage, not for
+reading an equation. For anything load-bearing, open the PDF.
 
 ---
 
-## 1. What this experiment actually is
+## 1. What this is
 
-The project evaluates a proposed **searchable encryption** scheme for
-IoT-based electronic health records against four published baselines.
-
-Searchable encryption lets a server hold encrypted records and answer keyword
-queries over them **without ever decrypting**. The trade-offs are the interesting
-part: how fast is a search, how much does verification cost, what happens when
-someone's access is revoked, and does the security survive a quantum computer.
+An evaluation of a proposed searchable-encryption scheme for IoMT electronic
+health records against four published baselines, on shared hardware over a
+frozen corpus.
 
 The proposed scheme is `ma_lb_pq_vdse` — **M**ulti-**A**uthority,
 **L**oad-**B**alanced, **P**ost-**Q**uantum, **V**erifiable **D**ynamic
-**S**earchable **E**ncryption. Its claims are that it (a) verifies results, (b)
-propagates authorization changes incrementally rather than by rebuilding, and (c)
-balances query load across fog nodes using an authorization-aware scheduler.
+**S**earchable **E**ncryption. Its claims: it verifies results per record, it
+propagates authorization changes incrementally instead of rebuilding, and it
+balances query load across fog nodes with an authorization-aware scheduler.
 
-The benchmark exists to test those claims against real alternatives, on identical
-hardware, over identical data.
-
----
-
-## 2. The five schemes
-
-| Folder | Ref | Paper | What it contributes |
-|---|---|---|---|
-| `ma_lb_pq_vdse` | ours | This work | The proposed framework |
-| `guo_vdsse` | Ref[35] | Guo *et al.*, IEEE TDSC 2024 | Verifiable dynamic SSE |
-| `thingom_pq_abse` | Ref[41] | Thingom *et al.*, IEEE TCE 2026 | Attribute-based SE |
-| `perera_lv_pqabse` | Ref[54] | Perera & Fugkeaw, IEEE IoT-J 2026 | Lattice post-quantum ABSE |
-| `yue_ge` | Ref[55] | Ge *et al.*, IEEE IoT-J 2024 | Verifiable multilevel DSSE |
-
-**What each one rests on** — this is the axis that matters most:
-
-- `guo_vdsse` and `yue_ge` are **symmetric only** (HMAC, AES, hashes). They make no
-  post-quantum claim and need none: there is nothing for Shor's algorithm to break.
-- `thingom_pq_abse` rests on a **Type-I pairing** under DBDH. See flag point 7.
-- `perera_lv_pqabse` is **lattice-based end to end** (LWE + Kyber768 + Dilithium3).
-  It is the only genuinely post-quantum baseline.
-- `ma_lb_pq_vdse` (ours) is **partially** post-quantum: ML-KEM-768 covers session
-  key establishment, but the pairing is still classical. Be precise about this in
-  the paper — "post-quantum" unqualified would overstate it.
-
-**Two schemes were dropped**, and the reasons matter:
-
-- **Ref[36] (XB-Muse)** — runs part of its algorithm inside an Intel SGX enclave.
-  The benchmark host has no SGX. Simulating it would omit enclave-transition
-  overhead and make the baseline look *faster* than reality; moving it to an
-  SGX-capable host would break hardware parity. Dropped, and §V must say the reason
-  was hardware, not an unfavourable result.
-- **Ref[52] (Zhuang)** — its Exp. 2 never built a real index; it encrypted one
-  record and replayed the search N times to fake an N-record scan. Every other
-  scheme builds a real index. Replaced by Ref[54].
-
-There is also a **citation rule**: IEEE venues only. Ref[57] (an MDPI paper) was
-added and removed the same day for this reason. See
-`.claude/skills/reference-vetting`.
+Refer to the baselines as **Scheme [30]** (`yue_ge`, Peony++), **[35]**
+(`guo_vdsse`), **[41]** (`thingom_pq_abse`) and **[54]** (`perera_lv_pqabse`),
+matching the manuscript's citation keys. Never by author name.
 
 ---
 
-## 3. The eight experiments
+## 2. Environment — what is pinned, and what is not
 
-Each varies exactly one thing and holds everything else at the defaults in §5.
+Read this carefully; the previous version had it backwards.
 
-| # | Measures | Variable | Range | Schemes |
-|---|---|---|---|---|
-| 1 | Trapdoor generation latency | keywords `q` | 1 → 20 | all 5 |
-| 2 | Search latency | index size `N` | 10⁴ → 10⁶ | all 5 |
-| 3 | Cross-domain scalability | domains `d` | 2 → 10 | all 5 |
-| 4 | Verification overhead | results `r` | 10 → 1000 | ours, Ref[35], Ref[55] |
-| 5 | Dynamic keyword update | pairs `k` | 10² → 10⁵ | ours, Ref[35], Ref[55] |
-| 6 | Authorization sync | updates `δ` | 10² → 10⁵ | ours only |
-| 7 | Search throughput | concurrency | 100 → 5000 | ours — ablation |
-| 8 | Load balancing | concurrency | 100 → 5000 | ours — ablation |
+| | Value | Enforced? |
+|---|---|---|
+| Corpus type | `synthea` | **Yes** — `reportability()` refuses anything else |
+| Corpus SHA-256 | `e56ca2d1…f707d6a0`, pinned in `dataset.yaml` | **Yes** |
+| Instance type | *(none)* | **No.** `environment.instance_type` was commented out of `global.yaml` on 2026-08-30 so `guo_vdsse` Exp. 2 could have the ~52 GB it needs. `verify_experiment_host()` reports `pin_configured=false` and passes vacuously; its `require=True` path has **zero call sites** |
+| OS / Python | Ubuntu, Python 3.11 | **No** — recorded in `run_meta.json`, read by nothing |
+| BLAS threads | 1, over the five names in `environment.thread_env_vars` | **Recorded, not blocking** — see below |
 
-**Measurement boundaries — what is inside the timer.** These decide what the
-numbers *mean*, and getting one wrong silently produces a plausible, wrong figure.
+**The host is not part of the reportability check.** A run is stamped
+`reportable: true` with no host guarantee, and the campaign deliberately rents
+more than one instance size (`m6i.xlarge`, plus `r6i.8xlarge` / `r6i.32xlarge`
+for the memory-hungry points). Cross-host latency comparisons are unsound until
+the pin returns. The manuscript's §VI states a single `m6i.xlarge` — that
+sentence and this table disagree, and the manuscript is the one that needs
+changing.
 
-- **Exp. 1** — online trapdoor generation only. ML-KEM encapsulation happens once
-  per session, not per query, so it is **excluded** and reported separately.
-- **Exp. 2** — the online search path only. Index construction is offline setup.
-- **Exp. 3** — baselines have no native cross-domain search, so they run in
-  "native mode": `d` independent trapdoors, `d` independent searches, aggregated on
-  the client. Ours issues one trapdoor reused across domains. **Counting trapdoors
-  issued is what makes that difference visible in the plot.**
-- **Exp. 4** — client-side verification only. Fetching and decrypting the documents
-  is excluded.
-- **Exp. 5** — incremental update only. If a scheme rebuilds the whole index, that
-  is a bug, not a slow update.
-- **Exp. 6** — the incremental propagation path, until every affected node reports
-  the new version. Blockchain anchoring (Phase VII Step 7) is **excluded** and
-  reported separately, as ML-KEM encapsulation is for Exp. 1. Runs as a three-way
-  ablation — `ias` / `broadcast` / `full_rebuild` — because `fsns_touched` alone is
-  a constant 1 by construction and evidences nothing without `broadcast` to read it
-  against.
-- **Exp. 7–8** — the *same runs* produce both. Throughput alone can hide congestion:
-  a scheduler can post good aggregate numbers while pinning one node at saturation,
-  which is exactly what Exp. 8 exists to expose.
+**BLAS pinning is currently ineffective.** `provenance.py` calls
+`verify_thread_pinning(require=True)`, but it *appends to the non-reportable
+reasons* — it does not raise, and no `infra/` invocation passes
+`--require-reportable`, so a run completes and writes output regardless. As of
+2026-09-08: **114 banked `run_meta.json`, 0 with BLAS pinned, 103 stamped
+`reportable: true`.** `infra/provision.sh` now derives the export list from
+`global.yaml` rather than restating names — it previously exported four of the
+five, so `VECLIB_MAXIMUM_THREADS` was never set and even a correctly provisioned
+node failed the check. `/etc/profile.d/` is read by login shells only, and
+`fleet.sh` drives nodes over non-login `ssh host '<cmd>'`.
 
-**One rule that governs Exp. 3 and Exp. 2 alike: the total amount of indexed data
-is held constant while the swept variable changes.** This has been violated twice
-and caught twice — once in `thingom_pq_abse`, once in `yue_ge` — and in both cases
-the `d = 10` point indexed five times the data of `d = 2`, so the "scalability
-curve" was mostly the growing corpus. If you add a scheme, check this first.
+**vCPU count is load-bearing for one baseline.** `thingom_pq_abse` runs its
+search across **2** processes, tuned to `m6i.xlarge`'s 4 vCPU being 2 physical
+cores plus hyperthreading — 4 processes measured slower. Changing instance type
+means re-measuring that, and disclosing it.
+
+---
+
+## 3. Setting up
+
+Python **3.11**, in a virtualenv. `infra/provision.sh` uses `~/.venv-malbpq`;
+match it.
+
+```bash
+python3.11 -m venv ~/.venv-malbpq
+source ~/.venv-malbpq/bin/activate
+pip install --upgrade pip wheel setuptools
+pip install -r requirements.txt
+pip install pytest ruff        # NOT in requirements.txt
+```
+
+Three traps:
+
+- **`pytest` is not in `requirements.txt`** and is not installed on the AWS
+  host. Install it into the venv separately, never into a system Python.
+- **ML-KEM is not in `cryptography` despite what `requirements.txt` implies.**
+  `Common/crypto/kem.py` probes `cryptography` then `liboqs` then `kyber-py`.
+  The AWS host runs **liboqs 0.16.0**; match it. `liboqs-python` builds its
+  native library on first import and fails with `cmake: command not found`
+  unless cmake is present — install the **cmake PyPI wheel into the venv**, not
+  Homebrew, to keep the toolchain self-contained. Do **not** fall back to
+  `kyber-py`: `crypto.yaml` marks it development-only and it is a different
+  implementation from the server's, so timings would not correspond.
+- **`charm-crypto` is Linux-only**, so Ref[41] cannot be developed on macOS and
+  there is no macOS wheel for the `petrelic` fallback.
+
+### Tests
+
+```bash
+python -m pytest -q      # inside the venv, from the repo root
+```
+
+**There is no agreed pass count.** Figures of 609, ~651 and 895 have all been
+recorded at different times by different documents. Run it before changing
+anything and use *that* as your floor; do not trust a number written down.
+`pytest.ini` sets `--import-mode=importlib` — do not remove it, as all schemes
+ship a package literally named `src` and the default mode makes them collide.
 
 ---
 
 ## 4. The dataset
 
-**Synthea** — a synthetic but clinically realistic patient-record generator. Chosen
-over MIMIC-IV because it has no size ceiling, needs no credentialing, is citable and
-reproducible, and yields real keyword co-occurrence and real institutional domain
-boundaries.
+**Synthea** — synthetic but clinically realistic patient records. Chosen over
+MIMIC-IV: no size ceiling, no credentialing, citable, reproducible, and it
+yields real keyword co-occurrence and real institutional domain boundaries.
 
-Frozen corpus **v4** (re-frozen 2026-08-28):
+Frozen corpus **v4**, re-derived here from `Dataset/dataset_manifest.json`
+(rank 1) rather than restated:
 
 | | |
 |---|---|
-| Records | 1,143,792 |
+| Records | 1,143,792 (unit: one Synthea *encounter*) |
 | Keyword universe | 2,023 distinct |
 | Keyword/document pairs | 36,263,865 |
-| `\|W_i\|` min / median / mean | 5 / 29 / 31.70 |
+| Keywords per record, min / median / mean | 5 / 29 / 31.70 |
 | Zipf exponent | 2.741 |
-| Domains | 10, at 114,379–114,380 each (0.001% imbalance) |
+| Domains | **10**, at 114,379–114,380 each (0.0009% imbalance) |
 | SHA-256 | `e56ca2d1…f707d6a0` |
+| Generated | 2026-08-28, Synthea `7e08387`, `balanced_organizations` |
 
-Two corpus types exist: `synthea` (reportable) and `synthetic` (from
-`synthetic_generator.py` — a fitted Zipf law with no clinical structure,
-**development only**). They have identical file formats; the manifest's
-`corpus_type` is what distinguishes them, and the reportability gate refuses
-anything that is not `synthea`.
+**Note the domain count.** The corpus has **ten** domains. `global.yaml`'s
+`defaults.domains` is **4**, and §VI says records are "uniformly distributed
+across four administrative healthcare domains". Exp. 3 sweeps d = 2…10 and needs
+all ten. Confirm what a four-domain default actually selects from a ten-domain
+corpus before quoting §VI's sentence.
 
-> **A trap worth knowing.** The dev corpus has a very different *shape* from v4:
-> ~13,000 keywords over ~11 pairs/record, versus v4's 2,023 over 31.70. Anything
-> whose cost scales with the *keyword count* rather than the pair count will be
-> badly mis-estimated if you extrapolate from a dev corpus. This produced a 6.5×
-> memory over-estimate once already.
+`Dataset/derived/corpus.jsonl` is git-ignored (686 MB) and exists **only** on
+AMI `ami-0feb3b14b4ea27844` (§12). Regenerating it is not reproducible — Synthea
+generates patients across threads, so a fixed seed pins the random stream but
+not which patient consumes which draw. Re-deriving from the *fixed CSVs* on that
+AMI is deterministic; regenerating from Synthea is not. **If the corpus changes,
+every scheme must be re-run.**
+
+`Dataset/dataset_manifest.json` is committed provenance. If you see it modified
+in `git status` and did not mean it:
+`git checkout -- Dataset/dataset_manifest.json`.
+
+A second corpus type exists — `synthetic`, from `synthetic_generator.py`, a
+fitted Zipf law with no clinical structure, **development only** and refused by
+the reportability gate. Its shape differs sharply from v4 (~13,000 keywords over
+~11 pairs/record versus 2,023 over 31.70), so anything scaling with keyword
+count rather than pair count will be badly mis-estimated from it. That produced
+a 6.5× memory over-estimate once already.
 
 ---
 
-## 5. Defaults and environment
+## 5. Defaults, and the eight experiments
 
-**Defaults** (`global.yaml`), held constant unless that experiment sweeps them:
+Defaults from `global.yaml`, held constant unless the experiment sweeps them:
+`keywords_per_query: 5`, `domains: 4`, `fog_search_nodes: 4`,
+`index_size: 100,000`, `returned_results: 100`. Methodology: **10** measured runs
+after 5 discarded warm-ups, `perf_counter_ns`, mean ± 95% CI from the
+t-distribution, outliers kept.
 
-```
-keywords_per_query : 5        domains        : 4
-fog_search_nodes   : 4        index_size     : 100,000
-returned_results   : 100
-```
+Sweeps and participants, read from `global.yaml` rather than restated in prose:
 
-**Environment** — pinned, and the pin is enforced:
+| # | Measures | Variable | Sweep | Schemes |
+|---|---|---|---|---|
+| 1 | Token generation | `q` | 1, 5, 10, 15, 20 (with `P_U` in 1,2,4,8) | all 5 |
+| 2 | Search latency | `N` | 10^4 … 10^6 | all 5 |
+| 3 | Cross-domain scalability | `d` | 2, 4, 6, 8, 10 | all 5 |
+| 4 | Verification overhead | `r` | 10, 50, 100, 500, 1000 | ours, [35], [30], [54] |
+| 5 | Dynamic keyword update | `k` | 10^2 … 10^5 | ours, [35], [30] |
+| 6 | Authorization sync | `delta` | 10^2 … 10^5 | ours only |
+| 7 | Search throughput | concurrency | 100 … **10,000** | ours — ablation |
+| 8 | Load balancing | concurrency | 100 … **10,000** | ours — ablation |
 
-```
-instance_type : m6i.xlarge     vcpus  : 4      memory : 16 GiB
-os            : ubuntu-22.04   python : 3.11   BLAS threads : 1
-```
+Baselines legitimately sweep **supersets** of these; `generate_plots.py`
+restricts the x-axis. Extra points staying in `results.csv` is by design.
 
-**Why BLAS threads are pinned to 1.** NumPy's BLAS claims every core by default,
-which would make lattice latency depend on the host's core count and be
-irreproducible even on identical hardware. It is read from `global.yaml`, not from
-`nproc`, so the config is the single source of truth.
+**Measurement boundaries** — these decide what the numbers mean:
 
-**Why the vCPU count is load-bearing.** `thingom_pq_abse` runs its search across
-**2** processes, chosen because `m6i.xlarge`'s "4 vCPU" is 2 physical cores plus
-hyperthreading — 4 processes measured *slower*. If you ever change the instance
-type, that tuning has to be re-measured, and §V's disclosure updated.
+- **Exp. 1** — online token generation only. ML-KEM encapsulation is per session,
+  not per query, so it is excluded and reported separately.
+- **Exp. 2** — the online search path. Index construction is offline setup.
+- **Exp. 3** — baselines have no native cross-domain search, so they run `d`
+  independent trapdoors aggregated client-side.
+- **Exp. 4** — client-side verification only; fetch and decrypt excluded.
+- **Exp. 5** — incremental update only. A global rebuild is a bug, not a slow update.
+- **Exp. 6** — incremental propagation until every affected node reports the new
+  version. Chain anchoring excluded and reported separately. Three-way ablation:
+  directory slugs are `ias` / `broadcast` / `full_rebuild`, labelled
+  *DIAS (proposed)* / *Incremental-All* / *Full-State Synchronization*.
+- **Exp. 7–8** — the *same runs* produce both. Throughput alone hides congestion.
 
-**Measurement methodology**: 30 measured runs per point after 5 discarded warm-ups,
-timed with `time.perf_counter_ns()`, reported as mean ± 95% CI from the
-t-distribution. One experiment at a time per instance — no concurrent plotting or
-preprocessing, because that contaminates latency.
+**Index construction is untimed but is most of the wall-clock.** A runtime
+estimate counting only measured operations will be wrong by an order of magnitude.
+
+**Two constructions share these numbers.** `option_d` (`harness/experiments.py`)
+and `psa` (`harness/psa_experiments.py`) time *different functions at the same
+experiment number* — the first uses `T = H(w)`, the second the manuscript's
+`T = H(w || PID || PV || Dom)`. Every reported number must say which produced it.
+All `psa_*` runs are built on in-process synthetic data and are
+`reportable: false` by construction.
 
 ---
 
 ## 6. What makes a number reportable
 
-Every run writes `run_meta.json` with `reportable: true|false` and, when false, the
-reasons. The conditions:
+Every run writes `run_meta.json` with `reportable: true|false` and, when false,
+`not_reportable_because`. A failing run still executes and still writes results —
+that is deliberate. **Always read the field before quoting a number.**
 
-- Running on the pinned `m6i.xlarge`, verified against live EC2 metadata
-- `corpus_type == "synthea"`
-- Corpus SHA-256 matches `dataset.yaml`'s frozen pin
-- A faithful cryptographic backend, not a development stand-in
-  (a real Type-III pairing for ours; a real ML-KEM/ML-DSA backend for Ref[54])
-- The ledger is the real Fabric deployment — **currently failing, but only for
-  Exp. 4** (see flag point 9). Scoped to the experiments whose *measured path*
-  touches the chain: it was a blanket blocker until `451df65`, then Exp. 4 + Exp. 6
-  until 2026-09-03, and is now Exp. 4 alone.
-- For ours: scheduler weights fixed (not `pending_sweep`), tokens scheme-keyed,
-  fog nodes in independent processes
+Conditions actually checked, verified against `provenance.py:reportability()`:
 
-A run that fails these still executes and still writes results. That is deliberate:
-seeing *why* a development run does not count matters as much as the runs that do.
+- `corpus_type == "synthea"` and the SHA-256 matches `dataset.yaml`'s pin
+- a faithful pairing backend (Type-III for ours), not a development stand-in
+- `measurement.repetitions == 10`
+- the ledger is real Fabric — **Exp. 4 only**; the adapter is not written, so
+  Exp. 4 cannot pass this today
+- for ours: scheduler weights `fixed`, tokens scheme-keyed, fog nodes in
+  independent processes
+- BLAS pinning — appended as a reason, **not blocking** (§2)
+
+**Not checked:** the host, the OS, the Python version.
 
 ---
 
-## 7. How to run it
+## 7. Running it
 
 ```bash
-# 1. Provision a fresh instance (installs everything, gates on the primitive tests)
-bash infra/provision.sh
+bash infra/provision.sh                       # provisions, gates on primitive tests
 
-# 2. Build the corpus (once — see §4; regenerating invalidates every result)
 python3 Dataset/prepare_dataset.py --input <synthea>/output_full/csv \
     --output Dataset/derived --synthea-version 7e08387
 
-# 3. Infrastructure — proposed scheme only
-docker compose -f infra/fabric/docker-compose.yaml up -d
+docker compose -f infra/fabric/docker-compose.yaml up -d    # ours only
 ipfs daemon &
 
-# 4. Run the schemes
-python3 -m Schemes.ma_lb_pq_vdse.src.main    --experiment all     --runs 10
-python3 -m Schemes.guo_vdsse.src.main        --experiment 1,2,3,4,5 --runs 10
-python3 -m Schemes.thingom_pq_abse.src.main  --experiment 1,2,3   --runs 10
-python3 -m Schemes.perera_lv_pqabse.src.main --experiment all     --runs 10
-python3 -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 10
+python3 -u -m Schemes.ma_lb_pq_vdse.src.main    --experiment all       --runs 10
+python3 -u -m Schemes.guo_vdsse.src.main        --experiment 1,2,3,4,5 --runs 10
+python3 -u -m Schemes.thingom_pq_abse.src.main  --experiment 1,2,3     --runs 10
+python3 -u -m Schemes.perera_lv_pqabse.src.main --experiment all       --runs 10
+python3 -u -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 10
 
-# 5. Figures
 python3 Plots/generate_plots.py --input Schemes --output Plots/output
 ```
 
-**Flags differ per scheme** — they were written at different times:
+**Flags differ per scheme** — they were written at different times. Only
+`ma_lb_pq_vdse` reads `global.yaml` for `--runs`/`--warmup`; the other four carry
+argparse defaults that happen to match it. Changing `global.yaml` alone does
+**not** change what a baseline runs.
 
-| Scheme | `--dataset` | `--points` | Output flag | Notable |
-|---|---|---|---|---|
-| `ma_lb_pq_vdse` | yes | yes | `--output` | `--smoke`, `--warmups` |
-| `guo_vdsse` | **no** | yes | `--output-dir` | `--warmup` |
-| `thingom_pq_abse` | yes | yes | `--output` | `--dev`, `--max-seconds-per-run` |
-| `perera_lv_pqabse` | **no** | yes | `--output` | `--warmup` |
-| `yue_ge` | **no** | yes | `--output-dir` | `--variant`, `--bloom-hashes` |
+**Never launch Ref[41] Exp. 2 above N=10^4.** 50k–1M are linear scalings from
+that anchor (`n_runs=1`, blank `ci95`); one real run at 10^6 costs ~11.3 h.
 
-Schemes without `--dataset` read the corpus from its configured location.
-`generate_plots.py` skips schemes with no results, so partial runs still plot.
+### Parallelism
 
-**Development on a laptop.** Create the venv per `MacOS/SETUP.md`, then
-`python -m pytest -q` should report ~651 passing. `thingom_pq_abse` will not run
-(flag point 6).
-
----
-
-## 7b. Restarting and updating the fleet
-
-Use `infra/fleet.sh` rather than doing it by hand — the manual procedure has
-already destroyed completed results.
+Split by sweep point with `--points`; each shard writes its own
+`…__points-2_3_4_5` directory so instances cannot overwrite each other, then
+reassemble with `infra/merge_points.py`. Shards are not results — the merge step
+is required.
 
 ```bash
-./infra/fleet.sh status              # what is running, what is busy, burn rate
-./infra/fleet.sh start               # start all, authorise your IP, wait for sshd
-./infra/fleet.sh deploy              # archive results, update code, restore results
-./infra/fleet.sh harvest ./out       # pull results, selected by provenance
-./infra/fleet.sh stop                # stop all (STOP, not terminate)
-```
-
-`OJCOMS_BRANCH` picks the branch (default `main`); `OJCOMS_KEY` and `OJCOMS_SG`
-override the key and security group.
-
-**Why `deploy` is not just `git pull`.** Result files are **git-tracked**, so
-`git reset --hard` restores the committed versions over fresh ones, silently.
-That is how `guo_vdsse`'s completed Exp. 1, 2 and 4 were lost. `deploy`
-archives `Schemes/` first, resets, then restores every result whose
-`run_meta.json` says `corpus_type: synthea` — real results come back, stale
-committed ones do not.
-
-**Why `harvest` ignores timestamps.** A reset rewrites mtimes, so a stale file
-can look newer than a real one. Selection is by `run_meta.json` provenance, never
-by `find -newermt`.
-
-**If every host times out at once**, it is almost certainly your egress IP
-rotating, not dead nodes — it changed three times in one session. `start` and
-`status` re-authorise the current address automatically; otherwise:
-
-```bash
-aws ec2 authorize-security-group-ingress --group-id sg-0dea7cf940668cddb \
-  --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$(curl -s https://checkip.amazonaws.com)/32}]"
-```
-
-## 8. Running it in parallel
-
-A campaign's wall-clock is bounded by its **largest indivisible unit of work**, not
-by how many instances you own. Adding instances without splitting the work more
-finely changes nothing.
-
-Three granularities:
-
-| Split by | Wall-clock | Notes |
-|---|---|---|
-| Scheme (one instance each) | ~25 h | bounded by `guo_vdsse`'s whole track |
-| Experiment | ~21 h | bounded by `guo_vdsse` Exp. 2 |
-| **Sweep point** (`--points`) | **~11 h** | bounded by guo's single N=10⁶ build |
-
-`--points` selects which sweep values one process runs:
-
-```bash
-# two instances split Exp. 3's nine d-points between them
 python3 -m Schemes.thingom_pq_abse.src.main --experiment 3 --points 2-5
 python3 -m Schemes.thingom_pq_abse.src.main --experiment 3 --points 6-10
-
-# then reassemble
 python3 infra/merge_points.py Schemes/thingom_pq_abse/exp3_crossdomain_scalability
 ```
 
-Each shard writes to its own `…__points-2_3_4_5` directory so instances cannot
-overwrite each other. `merge_points.py` re-aggregates from `raw_runs.csv` (never by
-averaging the shards' means — that is only valid at equal run counts, and a
-confidence interval cannot be recovered from other confidence intervals), and it
-**refuses** to merge shards that disagree on git commit, corpus hash, or config
-hashes, or that contain the same sweep value twice.
-
-A `--points` value the experiment does not sweep is an **error**, not a silent
-no-op. A typo that quietly ran zero points would leave a hole in the campaign that
-only surfaced when the figure was drawn.
-
-**Not everything splits.** `guo_vdsse` and `perera_lv_pqabse` Exp. 2 grow *one*
-index across the sweep — the points are nested prefixes (`records[:n]`), so
-rebuilding per point costs 1.88× more — which makes them inherently sequential.
-Sharding them is allowed but buys nothing.
-
 ---
 
-## 9. Cost and runtime
-
-| Track | Runtime | Index @ N=10⁶ |
-|---|---|---|
-| `guo_vdsse` | 25.0 h | 9.5 GB |
-| `ma_lb_pq_vdse` | 17.8 h | 1.3 GB |
-| `thingom_pq_abse` | 16.7 h | capped at N=10⁴ |
-| `yue_ge` | 9.4 h | 11.2 GB |
-| `perera_lv_pqabse` | 5.5 h | 0.6 GB |
-| **Total compute** | **74.4 h** | |
-
-At $0.19/hr for `m6i.xlarge` the whole campaign is **$14–36** of compute depending
-on how promptly idle instances are terminated. **Cost is not the constraint here —
-wall-clock is.** Note that the 240 GB of EBS attached to the stopped fleet bills
-~$19/month regardless, which is more than the experiments themselves.
-
-Peak memory per instance is roughly the largest index (11.2 GB) plus the
-materialised corpus (~2 GB) plus the interpreter — about **13.7 GB against a
-16 GiB host**. It fits, but with little headroom, and running near memory
-saturation contaminates latency with GC and page-cache effects. Upgrading to a
-32 GiB instance with the same 4 vCPU costs about $6 across the campaign and
-removes that risk. Keep the vCPU count at 4 (see §5).
-
-`.claude/skills/runtime-table` regenerates this table from
-`Experiment Configuration/planning/runtime_estimates.csv`. Re-run it after
-changing any measured code path — a stale row is worse than no row.
-
----
-
-## 10. Decisions the papers did not make for us
-
-Recorded in `crypto.yaml` with a date and a reason each. A reviewer asking "why
-this value?" should be answered from that file.
-
-| Scheme | Undetermined | Decided | Why |
-|---|---|---|---|
-| ours | AASS weights λ₁…λ₅ | (0.2, 0.4, 0.1, 0.2, 0.1) | 1,001-vector held-out sweep against independent-process nodes |
-| `thingom_pq_abse` | attribute universe `u` | 10 | matched the then-current lattice baseline's published ℓ = 10 |
-| `perera_lv_pqabse` | lattice `(n, q, σ)` | 768, 2²², 4.0 | Kyber768's security is module-LWE rank 3 over a degree-256 ring — effective dimension **768**. Taking 256 would name the right number for the wrong parameter |
-| `perera_lv_pqabse` | attribute universe | 10 | matches `thingom_pq_abse`, so both ABSE schemes face the same policy size |
-| `perera_lv_pqabse` | fuzzy `n`, `θ` | trigrams, 0.6 | paper names both and fixes neither |
-| `yue_ge` | batch assignment | stratified round-robin within access level | keeps batches comparable in size *and* ensures every batch holds files at every level |
-| `yue_ge` | access-level assignment | `pid_hash` | deterministic, uniform, and keeps one patient's records at one level |
-
-**One decision is a measurement boundary rather than a parameter.**
-`perera_lv_pqabse` sets `abe_on_measured_path: false`: Exp. 1 times PRF tokenisation
-plus a signature, Exp. 2 times the fog index, Exp. 3 is `d` searches — **none of
-them reads the lattice ciphertext**. Generating one per record costs a measured
-758 ms (211 h at N=10⁶) and would change no reported number in either direction.
-The full Phase 2 → Phase 5 path *including* that ciphertext is exercised by the
-scheme's tests, which is what makes the omission honest rather than convenient.
-
----
-
-## 11. What is not done
-
-- **Fabric ledger adapter.** `infra/fabric/` brings the network up; nothing reads
-  it. **Exp. 4** therefore understates chain cost, and every run says so. Exp. 6
-  does not depend on it (flag point 9).
-- **Exp. 6's ablation has never been run.** The `ias` / `broadcast` /
-  `full_rebuild` variants landed 2026-09-03 and the existing
-  `exp6_authorization_sync/` results are single-variant, so §5's "selective
-  propagation is the claim" still has no measurement behind it. The 17 tests in
-  `test_exp6_propagation_ablation.py` have also never executed — pytest is not
-  installed on the dev host. Run `--experiment 6 --variant all` on a real host.
-- **The campaign has not been run.** No `results.csv` in the repo is reportable yet.
-- **`guo_vdsse`'s 25.0 h carries an unverified 1.5× derate** from a development
-  host to the pinned instance. Confirm it on the real host before planning around it.
-- **`perera_lv_pqabse` and `thingom_pq_abse` memory at N=10⁶** is estimated, not
-  measured (both are small, so this is low risk).
-- **Manuscript catch-up.** §V still names MIMIC-IV and `c6i.xlarge`; there is a
-  duplicate `\bibitem{ref55}`; the Ref[41] cap and 2-process disclosure are not in
-  the text yet.
-
----
-
-## 12. Where things live
+## 8. Where things live
 
 ```
-README.md                     specification — source of truth, do not edit casually
+CLAUDE.md                     working rules, loaded every turn — kept short
 SystemConfiguration.md        this file — operator's guide
-
 Common/crypto/                primitives every scheme shares, so all pay the same cost
-                              hashes, PRF, AES-GCM, Merkle, Bloom, lattice, pairing,
-                              ML-KEM, ML-DSA
-Dataset/                      corpus generation + the committed manifest
-                              derived/ is git-ignored
+Dataset/                      corpus generation + the committed manifest (derived/ git-ignored)
 Experiment Configuration/     global.yaml, crypto.yaml, dataset.yaml, index.yaml,
-                              scheduler.yaml, planning/runtime_estimates.csv
-Schemes/<scheme>/             SCHEME.md + src/ + one folder per experiment
-infra/                        provision.sh, fabric/, sweep.py, merge_points.py
+                              scheduler.yaml, workload/, planning/runtime_estimates.csv
+Schemes/<scheme>/src/         implementation + one results folder per experiment
+infra/                        provision.sh, fleet.sh, fabric/, sweep.py, merge_points.py
 Plots/                        generate_plots.py -> Plots/output/
 References/                   the papers, and extracted text per reference
 Overleaf/                     the manuscript
+.claude/                      skills and agent definitions
 ```
 
 **`Common/` has a scope rule.** Primitives a paper *cites* (SHA-256, AES-GCM,
-Merkle, Bloom, ML-KEM) live there so every scheme measures the same cost. Anything
-a paper *contributes* stays in its own `src/`. If two schemes seem to need the same
-construction, one of them is probably being implemented unfaithfully.
+Merkle, Bloom, ML-KEM) live there so every scheme measures the same cost.
+Anything a paper *contributes* stays in its own `src/`. If two schemes seem to
+need the same construction, one is probably being implemented unfaithfully.
 
 ---
 
-## 12b. The agent team
+## 9. Before you change something
 
-Three agents in `.claude/agents/`, split by what the work actually needs rather
-than by convenience:
+- **Adding a scheme?** Hold total indexed data constant across the swept
+  variable — this has been violated and caught twice, and both times the top
+  point indexed several times the data of the bottom one, so the "scalability
+  curve" was mostly a growing corpus. Give it a `run_meta.json` with the same
+  reportability conditions as everyone else, and record every unpublished
+  parameter you had to choose (they go in `crypto.yaml`, with a date and a reason).
+- **Optimising a baseline?** Fine and sometimes necessary, but disclose it, and
+  if the proposed scheme gets an optimisation the baselines need it too. An
+  optimisation on the *measured* path needs a manuscript note.
+- **Found a defect?** Put it in the commit message with its evidence — file,
+  line, measured numbers, why it matters. Say explicitly if it changes a number
+  already in a `results.csv`, a figure, or the manuscript.
+- **Ref[41] claims post-quantum security its own maths does not support** — it
+  rests on DBDH, which Shor breaks, and the same paper says pairings are not
+  post-quantum. It is implemented exactly as published and the contradiction is
+  reported as a finding. Do not "fix" it.
 
-| Agent | Model | For |
-|---|---|---|
-| `bench-coder` | Opus | Writing and changing code — schemes, runners, harnesses, plots, infra |
-| `bench-investigator` | Opus | Finding root cause — OOMs, crashes, wrong-looking numbers, cost surprises |
-| `bench-hand` | **Sonnet** | Git, fleet start/stop/deploy/harvest, running tests, regenerating figures |
+---
 
-**Why the split.** The failures on this project were never syntax errors — they
-were an estimate measured on the wrong data shape, a filter applied at the wrong
-place, a `git reset` that ate results. That is judgement work, so coding and
-diagnosis stay on Opus. The mechanical half — git, fleet ops, unpacking,
-plotting — has known-correct recipes and runs on Sonnet, which is faster and
-cheaper for exactly that.
+## 10. Known gaps
 
-Each carries the traps that have already cost this project time: `bench-coder`
-knows results are git-tracked and that sweep filters belong at the range
-definition; `bench-investigator` knows `ru_maxrss` is a high-water mark and that
-the dev corpus has the wrong keyword density to extrapolate from; `bench-hand`
-knows never to `git reset --hard` on a node and never to terminate an instance.
+Verified 2026-09-08 against the repo, not carried over from the previous version:
 
-`bench-hand` is told to stop and escalate rather than improvise — a cheap model
-guessing at an unfamiliar failure is how results get quietly destroyed.
+- **The Fabric ledger adapter is not written.** `infra/fabric/` brings the
+  network up; nothing reads it, so Exp. 4 understates chain cost and cannot pass
+  its own reportability condition. Exp. 6 does **not** depend on it — its timed
+  path never anchors (`sync/dias.py::synchronize` takes `ledger` as optional and
+  the runner passes none).
+- **BLAS was never pinned in any banked run** — 114 files, 0 pinned, 103 stamped
+  reportable (§2).
+- **`secondary_metrics` is absent from all 114 `run_meta.json`**, so the
+  panel-label agreement check in `generate_plots.py` can verify no figure.
+- **Four of five schemes never read `global.yaml`.** Their `--runs`, `q` and
+  sweep lists are Python literals that happen to match, and `yue_ge` searches a
+  single keyword where §VI states a five-keyword conjunctive query.
+- **The λ weight vector was never swept in its current form.** The 2026-08-28
+  hold-out sweep chose five weights over a cost function including `C^auth`;
+  when that term was removed the surviving four were renormalised, not re-swept.
+- **Parameter provenance for the shared primitives is unverifiable.** 64
+  citations across 13 files point at `Ref[35].txt`, `Ref[41].txt` and
+  `Ref[52].txt`. **No `.txt` extraction exists** — `References/Ref[NN]/` holds
+  `.md` and `.pdf` — and the surviving `.md` files are far shorter than the
+  cited lines (`Ref[35].md` is 830 lines against a cited `:1807`;
+  `Ref[41].md` is 508 against `:919`), so the extension cannot simply be
+  swapped. Worse, **`Ref[52]` is not in the repo at all** — it is the dropped
+  Zhuang baseline — yet `Common/crypto/bloom.py` and `Common/crypto/lattice.py`
+  cite it nine times as the source of their published parameters. `crypto.yaml`
+  promises that "if a reviewer asks where n = 768 came from, the answer is in
+  that file"; for these three references it is not.
+- **§V's Exp. 4 "within measurement error" sentence rests on two datasets that
+  disagree.** The Fabric run recorded on 2026-09-07 measured PSA against
+  Option D at r = 10 / 100 / 1000 as 1.017× / 0.977× / 0.996× — within 2% at
+  every point, which is what the sentence claims. A separate five-point
+  comparison (r = 10 / 50 / 100 / 500 / 1000) gave +1.67 / −3.09 / −2.30 /
+  −2.28 / −0.40%, exceeding 2% at three points with disjoint 95% CIs. Both
+  cannot be the basis of one sentence. Re-derive from `raw_runs.csv` before
+  defending it.
+- **The construction question is open.** The code implements `T = H(w)`; the
+  manuscript specifies `T = H(w || PID || PV || Dom)` and proves their equality
+  as a theorem. These are two different schemes. Adopting the manuscript's form
+  invalidates every banked number; keeping the code's form means the manuscript
+  loses its Policy-State Non-Interference theorem, which a scalar version
+  counter cannot express. Nothing else in this file resolves that — it is a
+  decision, not a defect.
 
-Agent teams need `export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1`.
+---
 
-## 13. If you are about to change something
-
-- **Changed a measured code path?** Re-derive its runtime rows and re-run
-  `.claude/skills/runtime-table`. A stale estimate has already caused one campaign
-  to be killed mid-run.
-- **Adding a scheme?** Check the "total indexed data held constant" rule (§3), give
-  it a `run_meta.json` with the same reportability conditions as everyone else (a
-  baseline held to a weaker standard biases the comparison), and record every
-  unpublished parameter you had to choose.
-- **Optimising a baseline?** Implementation-level speedups are fine and sometimes
-  necessary, but they must be disclosed, and if the proposed scheme gets an
-  optimisation the baselines need it too or the comparison is confounded. An
-  optimisation on the *measured* path needs a §V note; one on untimed setup does not.
-- **Found a defect?** Say in the commit message: what changed, why, and what it
-  means. That file is why the same bug has not been fixed twice.
-
-## 14. Operational traps
+## 11. Operational traps
 
 Rescued 2026-09-07 from `infra/SESSION_HANDOFF.md` and `infra/CAMPAIGN_RESUME.md`
 before both were deleted as stale. Everything else in those two files was a
@@ -589,7 +446,7 @@ modified tree; it simply carries no information either way.
 
 ---
 
-## 15. AWS estate — hosts, AMIs, keys, recovery
+## 12. AWS estate — hosts, AMIs, keys, recovery
 
 Rescued from `README.md` on 2026-09-07 before that file was deleted. Every
 concrete identifier below existed **only** there; none of it was in this file.
@@ -704,7 +561,7 @@ ablation unrun. On exit it commits results locally, writes
 
 ---
 
-## 16. Fabric + IPFS on the experiment host
+## 13. Fabric + IPFS on the experiment host
 
 Rescued from `infra/fabric/README.md` on 2026-09-07 before that file was
 deleted. Brings up the ledger and off-chain store §5 specifies (Hyperledger

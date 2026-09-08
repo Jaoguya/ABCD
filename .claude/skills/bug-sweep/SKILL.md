@@ -42,8 +42,10 @@ yours. A one-line change that picks between two defensible estimands is not.
 
 ### Theirs — ask, and keep going
 
-README §13: *ask rather than guess on scheme constructions, parameter values,
-or anything affecting reported numbers.*
+Do not guess on scheme constructions, parameter values, or anything affecting a
+reported number. Note this is narrower than it sounds: `CLAUDE.md` grants **"do
+not ask which option to take — pick the option you would recommend and execute
+it"**, so escalation means *recording the decision loudly*, not stopping to ask.
 
 - Any change to a number already in a `results.csv`, a figure, or the
   manuscript.
@@ -58,16 +60,24 @@ blocked decision is not a blocked sweep.
 
 ## How to escalate
 
-1. Append to `.claude/skills/bug-sweep/DECISIONS.md` — one entry, newest last:
+1. Put it in the **commit message**, and — only if it outlives the commit — add
+   it to `SystemConfiguration.md`'s **Known gaps**. Same shape either way:
 
    ```
-   ## <date> — <one-line title>
-   **Found:** file:line, what is wrong, and the evidence that it is wrong.
-   **Costs:** which number/figure/claim moves, and by how much if known.
-   **Options:** A … / B … (name the one you would take, and why)
-   **Blocked:** what cannot proceed until this is answered. "Nothing" is a
-   valid answer and usually the true one.
+   <one-line title>
+   Found:   file:line, what is wrong, and the evidence that it is wrong.
+   Costs:   which number/figure/claim moves, and by how much if known.
+   Options: A … / B … (name the one you would take, and why)
+   Blocked: what cannot proceed until this is answered. "Nothing" is a
+            valid answer and usually the true one.
    ```
+
+   **Not `DECISIONS.md`.** This step used to say "append to
+   `.claude/skills/bug-sweep/DECISIONS.md`", which `CLAUDE.md` declares a closed
+   archive — do not read it, do not append to it. That contradiction meant the
+   one skill `CLAUDE.md` delegates recording to pointed at a file nothing may
+   write. Corrected 2026-09-09, when the audit files it was written alongside
+   were deleted for going stale.
 
 2. If — and only if — the user is likely away and the pass is now blocked on
    it, send one `PushNotification` naming the decision. Never one per finding;
@@ -122,11 +132,14 @@ Never traded away, whatever else the pass finds:
 3. **Never gate on speed.** Slowness is a finding, not a reason to skip.
 4. **Two constructions that share a figure axis must do the same work per
    point.** Option D and PSA both.
-5. **Do not edit `README.md` or the Overleaf `.tex`.** Report file, line and
-   value; the user applies it.
+5. **The Overleaf `.tex` may be edited** (granted 2026-09-06, per `CLAUDE.md`):
+   back it up first, change only the sentences the decision names, and show the
+   diff. This rule previously forbade it, which contradicted `CLAUDE.md`.
+   `README.md` no longer exists.
 
 ## Ending the loop
 
-Stop when a pass finds nothing new and DECISIONS.md has no unanswered entry.
+Stop when a pass finds nothing new and `SystemConfiguration.md`'s Known gaps
+has no unanswered entry.
 Say so plainly rather than manufacturing a finding to justify the tick — under
 `/loop` dynamic pacing that is a `noop: true`.

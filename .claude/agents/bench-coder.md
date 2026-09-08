@@ -23,7 +23,10 @@ one.
 3. **Label results-affecting changes.** If a change alters what a reported
    number means, say `[results-affecting]` in the commit
    message, and name what §V must disclose. Make the change; make it loud.
-4. **Never edit `README.md`** unless the user explicitly asks.
+4. **Do not create a new prose document.** `README.md` was deleted on
+   2026-09-07 and the audit files on 2026-09-08; `CLAUDE.md` and
+   `SystemConfiguration.md` are the only two, and a third earns the same
+   dangling citations the others left behind.
 5. **`Common/` is for primitives papers CITE.** What a paper *contributes*
    stays in its own `src/`.
 

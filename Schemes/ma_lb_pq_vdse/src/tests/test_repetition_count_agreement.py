@@ -122,13 +122,14 @@ def test_no_source_file_still_quotes_the_old_count():
 #: this same number passed a green suite because nothing here looked at them.
 #:
 #: A doc that prints a command is a doc someone copies onto a node.
+#: The five `SCHEME.md` files were deleted on 2026-09-08 along with fourteen
+#: other prose documents; `CLAUDE.md` and `SystemConfiguration.md` are the two
+#: that survive. The list is kept pointed at what exists rather than allowed to
+#: empty out, because an empty list here passes silently and this guard is the
+#: only thing that has ever caught a document printing a stale `--runs`.
 COMMAND_PRINTING_DOCS = (
     "SystemConfiguration.md",
-    "Schemes/ma_lb_pq_vdse/SCHEME.md",
-    "Schemes/guo_vdsse/SCHEME.md",
-    "Schemes/yue_ge/SCHEME.md",
-    "Schemes/thingom_pq_abse/SCHEME.md",
-    "Schemes/perera_lv_pqabse/SCHEME.md",
+    "CLAUDE.md",
 )
 
 

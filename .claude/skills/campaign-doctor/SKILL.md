@@ -68,7 +68,7 @@ parameters touch everything.
 
 | Signature | Cause | Fix |
 |---|---|---|
-| `rc=137`, one scheme, several experiments | index too large for the host | scope the build to README §6 `index_size`, or cap the sweep and disclose |
+| `rc=137`, one scheme, several experiments | index too large for the host | scope the build to `global.yaml`'s `defaults.index_size`, or cap the sweep and disclose |
 | OOM in an experiment that does not sweep N | runner indexes the whole corpus | scope to `DEFAULT_N`; check keyword-frequency selection uses the same subset |
 | OOM despite `--points` | selection applied at `run_experiment`, not where the range is computed | filter at the range definition so pre-build loops see it |
 | Sweep is nested prefixes, rebuilt per point | `records[:n]` re-inserts everything already indexed | build once and grow; assert index structure and search results match a fresh build |
