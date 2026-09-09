@@ -894,27 +894,70 @@ class Exp3CrossDomain:
             self.values = tuple(self.config.experiment("exp3").values)
 
     def prepare(self, value: Any) -> Any:
+        """PER-DOMAIN index size fixed, so total data grows with ``d``.
+
+        §VI Exp. 3: "The query size and per-domain index size are fixed to
+        isolate cross-domain search overhead." This built ``records=d*4`` — a
+        per-domain size of FOUR records, so d=10 indexed 40 records while every
+        baseline indexed 100,000 at the same point on the shared axis. The
+        convention was right and the size made the comparison meaningless.
+
+        The baselines had the opposite defect: they fixed TOTAL at 100,000 and
+        sharded by ``d``, so their per-domain size SHRANK 50,000 -> 10,000 and
+        Scheme [35]'s latency actually FELL as ``d`` grew. §VI read that pair as
+        the proposed scheme "exhibiting slower growth" when the curve directions
+        were set by the two designs.
+
+        All five now hold per-domain fixed at ``global.yaml``'s
+        ``exp3 -> held_constant.per_domain_index_size``.
+        """
         domain_count = int(value)
+        held = self.config.experiment("exp3").held_constant or {}
+        per_domain = int(held.get("per_domain_index_size", 0))
+        if per_domain <= 0:
+            raise ValueError(
+                "global.yaml exp3_crossdomain_scalability.held_constant."
+                "per_domain_index_size must be a positive record count; §VI "
+                "fixes the per-domain index size and the value cannot come "
+                "from a literal here"
+            )
+        record_count = per_domain * domain_count
+        # Same guard and the same measured constant as Exp. 2: a refusal beats
+        # an OOM kill, which is SIGKILL and leaves no traceback.
+        _BYTES_PER_RECORD = 6_800 * self.source.keywords_per_record / 6
+        crypto_config.assert_memory_for(
+            record_count * _BYTES_PER_RECORD,
+            f"exp3 index at d={domain_count} x {per_domain:,} records/domain",
+        )
         deployment = build_deployment(
             config=self.config, source=self.source,
-            records=domain_count * 4, domains=domain_count,
+            records=record_count, domains=domain_count,
         )
-        shared = "kw:00000"
-        # Index one shared keyword in every domain so a single trapdoor can hit
-        # all of them — the property this experiment measures.
+        # A q-KEYWORD CONJUNCTIVE QUERY, per §VI's "each query contains five
+        # keywords". This issued ONE keyword until 2026-09-09 — the defect the
+        # 2026-09-06 sweep fixed for Exp. 7/8 and the 2026-09-03 one for Exp. 2,
+        # both of which missed Exp. 3.
+        q = max(1, int(self.config.defaults.keywords_per_query))
+        shared = [f"kw:{i:05d}" for i in range(q)]
+        # One representative record per domain, in ONE pass. The per-domain
+        # `next(...)` scan was O(d*N) and N is now 10,000x larger.
+        first_in_domain: Dict[str, Any] = {}
+        for entry in deployment.records:
+            first_in_domain.setdefault(entry["record"].domain, entry)
+        # Index the shared keywords in every domain so one trapdoor can hit all
+        # of them — the property this experiment measures.
         for domain in deployment.domains:
             node = deployment.node_for(domain)
-            record = next(
-                r for r in deployment.records if r["record"].domain == domain
-            )
+            record = first_in_domain[domain]
             node.insert_entries(
                 [
                     types.IndexEntry(
-                        token=deployment.scheme.index_token(shared),
+                        token=deployment.scheme.index_token(keyword),
                         cid=record["cid"],
                         policy_id=record["record"].policy_id,
                         vid=record["record"].metadata.vid,
                     )
+                    for keyword in shared
                 ],
                 domain=domain,
             )
@@ -923,14 +966,14 @@ class Exp3CrossDomain:
         )
         return dict(
             deployment=deployment, profile=profile, authority_ids=authority_ids,
-            attributes=attributes, resolver=resolver, keyword=shared,
+            attributes=attributes, resolver=resolver, keywords=shared,
         )
 
     def measure(self, prepared: Any) -> Sample:
         d = prepared["deployment"]
         started = time.perf_counter_ns()
         token = token_mod.generate_search_token(
-            d.scheme, prepared["profile"], [prepared["keyword"]]
+            d.scheme, prepared["profile"], prepared["keywords"]
         )
         decision = authz_mod.verify_search_request(
             d.aim, token, prepared["profile"],

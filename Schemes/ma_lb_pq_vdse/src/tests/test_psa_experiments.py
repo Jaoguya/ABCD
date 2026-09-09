@@ -122,6 +122,50 @@ def test_exp1_tokens_are_distinct(config, source):
 
 
 # ===========================================================================
+# §VI Exp. 3 — the LATENCY figure the manuscript includes
+# ===========================================================================
+def test_psa_exp3_latency_is_the_registered_experiment_3(config):
+    """§VI Fig. 3 plots latency, so experiment 3 must be the latency one.
+
+    The PSA track registered the token-count experiment at 3, which left the
+    manuscript's Fig. 3 with no source under this construction. The token
+    count is the D9 companion and now sits at 9, mirroring how the Option D
+    track parks its Exp. 4 companion there.
+    """
+    assert psa.PSA_EXPERIMENTS[3] is psa.PsaExp3CrossDomainLatency
+    assert psa.PSA_EXPERIMENTS[10] is psa.PsaExp3CrossDomainTokens
+    assert main_mod.PSA_FOLDERS[3] == "psa_exp3_crossdomain_latency"
+    assert main_mod.PSA_FOLDERS[10] == "psa_exp3_crossdomain_tokens"
+    # 9 must stay free in the PSA track: Option D uses it for
+    # verification granularity, and one number cannot mean two things.
+    assert 9 not in psa.PSA_EXPERIMENTS
+
+
+def test_psa_exp3_latency_issues_q_times_d_tokens(config, source):
+    """|T_Q| = q*|P_U| with one authorized policy per participating domain.
+
+    This is D9 priced on the search path rather than asserted: Option D issues
+    q tokens whatever d is, the policy-bound token issues q*d.
+    """
+    experiment = psa.PsaExp3CrossDomainLatency(
+        config=config, source=source
+    )
+    q = config.defaults.keywords_per_query
+    issued = {}
+    for d in (2, 4):
+        prepared = experiment.prepare(d)
+        sample = experiment.measure(prepared)
+        issued[d] = sample.secondaries["tokens_issued"]
+        assert sample.secondaries["nodes_searched"] >= 1
+    assert issued[2] == q * 2, issued
+    assert issued[4] == q * 4, issued
+    assert issued[4] > issued[2], (
+        "a policy-bound token names its domain, so a wider cross-domain query "
+        "cannot reuse one trapdoor"
+    )
+
+
+# ===========================================================================
 # D9 — the single-trapdoor property does not survive
 # ===========================================================================
 def test_exp3_token_count_grows_with_domains(config):
@@ -137,12 +181,32 @@ def test_exp3_token_count_grows_with_domains(config):
 
 
 def test_exp3_reports_the_option_d_baseline_alongside(config):
-    """The panel's whole content is the contrast with a constant 1."""
+    """The panel's content is the contrast with a count that is FLAT in d.
+
+    It asserted ``== 1.0`` until 2026-09-09, matching a hardcoded literal on the
+    other side. Both were wrong in the same direction: ``tokens_issued`` counts
+    TOKENS (q*d) while Option D's ``generate_trapdoor`` returns one trapdoor
+    holding ``q`` tokens, so the same-unit comparison is ``q``, not 1 -- the
+    pair understated Option D by a factor of q.
+
+    What matters for D9 is not the value but the SHAPE: Option D's count does
+    not depend on ``d`` and the PSA count does. Asserting that makes the test
+    fail if a regression ever makes the Option D side domain-dependent, which a
+    literal on both sides could never do.
+    """
     experiment = psa.PsaExp3CrossDomainTokens(config=config)
+    q = config.defaults.keywords_per_query
+    baseline = []
     for d in experiment.values:
         sample = _run(experiment, d)
-        assert sample.secondaries["option_d_tokens_issued"] == 1.0
+        assert sample.secondaries["option_d_tokens_issued"] == float(q), (
+            "Option D issues one token per keyword, independent of d"
+        )
         assert sample.secondaries["tokens_issued"] >= sample.secondaries["policies"]
+        baseline.append(sample.secondaries["option_d_tokens_issued"])
+    assert len(set(baseline)) == 1, (
+        f"the Option D reference must be flat in d, got {baseline}"
+    )
 
 
 # ===========================================================================

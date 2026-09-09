@@ -189,6 +189,20 @@ class RunMetadata:
     #: is about to draw, and refuse rather than mislabel.
     secondary_metrics: List[str] = field(default_factory=list)
 
+    #: WHICH CONSTRUCTION produced these numbers — ``option_d`` (``T = H(w)``)
+    #: or ``psa`` (the manuscript's ``T = H(w ‖ PID ‖ PV ‖ Dom)``). The two time
+    #: DIFFERENT functions at the same experiment number, so a results.csv that
+    #: does not name its construction cannot be attributed to a scheme at all.
+    #: It lived only in ``notes`` as free text, which no figure could check;
+    #: Fig. 1 was drawn from ``psa`` while Figs. 2-8 were drawn from
+    #: ``option_d`` and nothing in the artifacts said so.
+    construction: str = "option_d"
+    #: The ledger the run actually called (``memory`` or ``fabric``), from the
+    #: same ``ABCD_LEDGER`` switch ``build_deployment`` reads. ``ledger_faithful``
+    #: gates Exp. 4's reportability but was never recorded, so a banked Exp. 4
+    #: number could not be attributed to a ledger after the fact.
+    ledger_backend: str = "unknown"
+
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
 
@@ -502,6 +516,8 @@ def build_metadata(
     warmups: Optional[int] = None,
     notes: Optional[List[str]] = None,
     secondary_metrics: Optional[Sequence[str]] = None,
+    construction: str = "option_d",
+    ledger_backend: str = "unknown",
 ) -> RunMetadata:
     """Assemble ``run_meta.json`` at the start of a run."""
     reportable, reasons = reportability(
@@ -514,6 +530,31 @@ def build_metadata(
         ledger_faithful=ledger_faithful,
         fsn_processes=fsn_processes,
     )
+    # THE HOST CAVEAT MUST TRAVEL WITH THE NUMBER.
+    #
+    # `verify_experiment_host()` is right to satisfy `host_check_satisfied`
+    # vacuously when no pin is configured -- global.yaml dropped
+    # `environment.instance_type` deliberately, so that guo (52 GB at N=10^6)
+    # and thingom (vCPU-bound) can run on hosts sized for their work, and
+    # failing the check would refuse every legitimate run.
+    #
+    # But the consequence was invisible: a run is stamped `reportable: true`
+    # with NO host guarantee at all, while SVI states one `m6i.xlarge` for all
+    # five schemes. The artifact recorded `pin_configured: false` three levels
+    # down and nothing said what it meant. Recorded here as a note -- not a
+    # blocking reason, because the pin was dropped on purpose -- so a reader
+    # quoting the number sees the caveat attached to it.
+    host_report = verify_experiment_host()
+    run_notes = list(notes or ())
+    if not host_report.get("pin_configured"):
+        run_notes.append(
+            "host NOT pinned: global.yaml sets no environment.instance_type, so "
+            "the host check passed vacuously. Detected "
+            f"{host_report.get('detected_instance_type') or 'no EC2 metadata'!r}. "
+            "Cross-host latency comparisons are unsound until the pin returns; "
+            "SVI must disclose the host per scheme rather than claim one type."
+        )
+
     return RunMetadata(
         scheme=SCHEME_NAME,
         experiment=experiment,
@@ -523,7 +564,7 @@ def build_metadata(
         python_version=platform.python_version(),
         platform=platform.platform(),
         instance_type=str(config.environment.get("instance_type", "unknown")),
-        experiment_host=verify_experiment_host(),
+        experiment_host=host_report,
         libraries=library_versions(),
         crypto_backends=environment_report(),
         config_hashes=scheme_config.config_hashes(),
@@ -536,8 +577,10 @@ def build_metadata(
         confidence=config.measurement.confidence_interval,
         reportable=reportable,
         not_reportable_because=reasons,
-        notes=list(notes or ()),
+        notes=run_notes,
         secondary_metrics=list(secondary_metrics or ()),
+        construction=construction,
+        ledger_backend=ledger_backend,
     )
 
 

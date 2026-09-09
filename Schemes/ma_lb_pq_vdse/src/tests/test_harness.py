@@ -739,10 +739,15 @@ def test_exp3_trapdoor_count_does_not_scale_with_domains():
         f"trapdoors_issued must not depend on d, got {counts} -- a trapdoor "
         f"that scales with domains refutes the Exp. 3 claim outright"
     )
-    # And it is the keyword count, so raising q to §VI's five (item 3-4) moves
-    # this to 5 rather than silently leaving a stale 1.
-    assert set(counts.values()) == {1.0}, (
-        f"expected one trapdoor per keyword at q=1, got {counts}"
+    # And it is the KEYWORD COUNT, read from the config rather than pinned to a
+    # literal. Exp. 3 issued q=1 against §VI's "each query contains five
+    # keywords" until 2026-09-09; this assertion said `== {1.0}` and so agreed
+    # with the defect instead of catching it. Sourcing q from global.yaml means
+    # the two move together and neither can silently go stale.
+    q = float(config_mod.load().defaults.keywords_per_query)
+    assert set(counts.values()) == {q}, (
+        f"expected one token per queried keyword (q={q:g} from global.yaml), "
+        f"got {counts}"
     )
 
 

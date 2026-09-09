@@ -100,6 +100,29 @@ experiments:
   exp3_crossdomain_scalability:
     variable: domains
     values: [2, 4, 6, 8, 10]                      # published: §VI "2 to 10"
+    # PUBLISHED CONVENTION, benchmark VALUE. §VI Exp. 3: "The query size and
+    # per-domain index size are fixed to isolate cross-domain search overhead."
+    # PER-DOMAIN, not total -- so total data GROWS with d and each domain's
+    # shard stays the same size at every point.
+    #
+    # Until 2026-09-09 the five schemes held OPPOSITE quantities constant and
+    # neither matched this sentence for all of them:
+    #   * all four baselines fixed TOTAL at 100,000 and sharded by d
+    #     (guo exp3_crossdomain.py:46,87; perera runner.py:59,76;
+    #      yue_ge runner.py:79,97; thingom experiments.py:673), so per-domain
+    #     SHRANK 50,000 -> 10,000 and [35]'s latency FELL as d grew;
+    #   * the proposed scheme fixed per-domain at 4 records (records=d*4), so
+    #     it indexed 40 records at d=10 against the baselines' 100,000.
+    # A 2,500x data disparity on one axis, with the curve directions set by the
+    # two designs rather than by the schemes. §VI read the pair as the proposed
+    # scheme "exhibiting slower growth".
+    #
+    # The VALUE is a benchmark choice (§VI states the convention, not the
+    # number): 10,000 keeps total at 100,000 when d=10, which is what the
+    # baselines already indexed, so the campaign cost is unchanged.
+    # RESULTS-AFFECTING for all five schemes' Exp. 3.
+    held_constant:
+      per_domain_index_size: 10000                # benchmark: see above
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp4_verification_overhead:
     variable: returned_results

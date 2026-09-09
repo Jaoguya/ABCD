@@ -59,12 +59,17 @@ FOLDERS = {
 PSA_FOLDERS = {
     1: "psa_exp1_token_generation",
     2: "psa_exp2_search_latency",
-    3: "psa_exp3_crossdomain_tokens",
+    3: "psa_exp3_crossdomain_latency",
     4: "psa_exp4_verification_overhead",
     5: "psa_exp5_retokenization",
     6: "psa_exp6_affected_ratio",
     7: "psa_exp7_search_throughput",
     8: "psa_exp8_load_balance",
+    # The D9 token-count companion to SVI's Fig. 3. Numbered 10, not 9: the
+    # Option D track already uses 9 for verification granularity, and one
+    # number meaning two different experiments across constructions is how
+    # `--experiment 9` becomes ambiguous.
+    10: "psa_exp3_crossdomain_tokens",
 }
 
 
@@ -99,19 +104,31 @@ def _run_notes(
     return notes
 
 
-def parse_experiments(value: str) -> List[int]:
-    """``all``, ``2``, or ``1,2,5``."""
+def parse_experiments(value: str, construction: str = "option_d") -> List[int]:
+    """``all``, ``2``, or ``1,2,5`` — resolved against THIS construction's set.
+
+    The two constructions do not cover the same experiment numbers: Option D has
+    9 (tamper granularity, the Exp. 4 companion) and no 10; PSA has 10 (the D9
+    token-count companion to §VI's Fig. 3) and no 9.
+
+    This ignored ``construction`` and always returned ``sorted(FOLDERS)``, which
+    was wrong in both directions once the sets diverged: ``--experiment all
+    --construction psa`` tried 9, which has no PSA form and raises, and never
+    reached 10 at all — so a full PSA campaign would silently omit an experiment
+    while failing on one that does not exist for it.
+    """
+    known = PSA_FOLDERS if construction == "psa" else FOLDERS
     if value.strip().lower() == "all":
-        return sorted(FOLDERS)
+        return sorted(known)
     numbers = []
     for part in value.split(","):
         part = part.strip()
         if not part:
             continue
-        if not part.isdigit() or int(part) not in FOLDERS:
+        if not part.isdigit() or int(part) not in known:
             raise argparse.ArgumentTypeError(
-                f"unknown experiment {part!r}; README §5 defines 1-8, plus 9 "
-                f"(tamper granularity, the Exp. 4 companion)"
+                f"unknown experiment {part!r} for construction "
+                f"{construction!r}; valid: {sorted(known)}"
             )
         numbers.append(int(part))
     if not numbers:
@@ -193,7 +210,7 @@ def build_parser() -> argparse.ArgumentParser:
 def run(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     config = scheme_config.load()
-    numbers = parse_experiments(args.experiment)
+    numbers = parse_experiments(args.experiment, args.construction)
     scheme_root = Path(__file__).resolve().parent.parent
     output_root = Path(args.output) if args.output else scheme_root
 
@@ -404,6 +421,11 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             secondary_metrics=[
                 spec.name for spec in getattr(experiment, "secondaries", ())
             ],
+            # Machine-readable, not a note: a figure must be able to refuse to
+            # draw two constructions on one axis, and free text in `notes`
+            # cannot be checked. See RunMetadata.construction.
+            construction=args.construction,
+            ledger_backend=chain_select.ledger_backend(),
         )
         if args.require_reportable and not metadata.reportable:
             log(f"REFUSED {experiment.name}: not reportable")

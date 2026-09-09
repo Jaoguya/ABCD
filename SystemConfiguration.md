@@ -231,7 +231,13 @@ restricts the x-axis. Extra points staying in `results.csv` is by design.
   not per query, so it is excluded and reported separately.
 - **Exp. 2** — the online search path. Index construction is offline setup.
 - **Exp. 3** — baselines have no native cross-domain search, so they run `d`
-  independent trapdoors aggregated client-side.
+  independent trapdoors aggregated client-side. **Per-domain index size is
+  fixed**, at `global.yaml`'s `exp3 -> held_constant.per_domain_index_size`
+  (10,000), so total data grows with `d`. That is §VI's stated convention;
+  until 2026-09-09 the four baselines fixed *total* at 100,000 and sharded by
+  `d` (per-domain shrinking 50,000 -> 10,000, which is why [35]'s latency
+  *fell* as `d` grew) while the proposed scheme fixed per-domain at 4 records —
+  a 2,500x data disparity at `d=10` on one axis.
 - **Exp. 4** — client-side verification only; fetch and decrypt excluded.
 - **Exp. 5** — incremental update only. A global rebuild is a bug, not a slow update.
 - **Exp. 6** — incremental propagation until every affected node reports the new

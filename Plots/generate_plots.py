@@ -345,13 +345,33 @@ PSA_EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # d, this construction issues q per authorized policy. Both curves live in
     # the same results.csv (`tokens_issued` and `option_d_tokens_issued`), so
     # the comparison is read from measured columns rather than assembled here.
-    ExperimentSpec(3, "psa_exp3_crossdomain_tokens",
+    # SVI Exp. 3 measures cross-domain search LATENCY, so experiment 3 of this
+    # track is the latency experiment -- this is the figure that stands in for
+    # `fig_exp3_crossdomain.pdf` under the PSA construction. The token count is
+    # a DIFFERENT claim (D9) and moved to 10; letting it occupy slot 3 is why
+    # the PSA track had no source for the manuscript's Fig. 3 at all.
+    ExperimentSpec(3, "psa_exp3_crossdomain_latency",
+                   "fig_psa_exp3_crossdomain.pdf",
+                   "Domains $d$", "Cross-domain search latency (ms)",
+                   log_y=True, prefix="psa_",
+                   panels=(
+                       PanelSpec(0, "Cross-domain search\nlatency (ms)", "a"),
+                       PanelSpec(1, "Tokens issued", "b", log_y=True,
+                                 metric_name="tokens_issued"),
+                   )),
+    # D9's companion at 10, matching main.PSA_FOLDERS. Its claim is the TOKEN
+    # COUNT contrast -- q*d under the policy-bound token against a flat q under
+    # Option D -- not latency. `companion_metric=3` reads
+    # `option_d_tokens_issued`, a hardcoded 1.0 until 2026-09-09 and now
+    # len(keywords), i.e. the same unit as the series it is drawn against.
+    ExperimentSpec(10, "psa_exp3_crossdomain_tokens",
                    "fig_psa_exp3_tokens.pdf",
                    "Domains $d$", "Token generation latency (ms)",
                    log_y=True, prefix="psa_",
                    panels=(
                        PanelSpec(0, "Token generation\nlatency (ms)", "a"),
-                       PanelSpec(1, "Trapdoors issued", "b", log_y=True,
+                       PanelSpec(1, "Tokens issued", "b", log_y=True,
+                                 metric_name="tokens_issued",
                                  companion_metric=3,
                                  companion_label="Option D (implemented)"),
                    )),
@@ -605,6 +625,18 @@ class Series:
     #: the schemes drawn in one figure, so the drift was invisible at plot time.
     #: fig:exp2's six runs turned out to carry four different values.
     config_hash: Optional[str] = None
+    #: run_meta.json's `corpus_type`. A figure whose series were measured on
+    #: DIFFERENT corpora is not one comparison: fig:exp1 drew four proposed
+    #: curves from `psa_in_process` fixtures against four baseline curves from
+    #: the frozen `synthea` corpus, on one axis, while SVI's own setup paragraph
+    #: says the fixture measurements are "not directly comparable with the
+    #: cross-scheme results".
+    corpus_type: Optional[str] = None
+    #: run_meta.json's `construction` — `option_d` (T = H(w)) or `psa`
+    #: (T = H(w || PID || PV || Dom)). The two time DIFFERENT functions at the
+    #: same experiment number, so mixing them in one figure publishes two
+    #: schemes as one.
+    construction: Optional[str] = None
     problems: List[str] = field(default_factory=list)
 
 
@@ -704,6 +736,33 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
         try:
             parsed = json.loads(meta.read_text(encoding="utf-8"))
             series.reportable = bool(parsed.get("reportable", False))
+            # Top level for most schemes; nested under `dataset` for the
+            # schema thingom_pq_abse writes. Both are in use, exactly as they
+            # are for `config_hashes` below.
+            def _nested(key: str) -> Optional[str]:
+                # isinstance rather than `or {}`: a malformed run_meta whose
+                # `dataset` is a string would raise AttributeError, and that
+                # exception is caught by the SHARED handler below — silently
+                # costing this series its `secondary_metrics` and
+                # `config_hash` too. A type check keeps one bad field from
+                # taking the others with it.
+                block = parsed.get(key)
+                if isinstance(block, dict):
+                    value = block.get("corpus_type")
+                    if value:
+                        return str(value)
+                return None
+
+            corpus = (
+                parsed.get("corpus_type")
+                or _nested("dataset")
+                or _nested("environment")
+            )
+            if corpus:
+                series.corpus_type = str(corpus)
+            construction = parsed.get("construction")
+            if construction:
+                series.construction = str(construction)
             # The secondary column ORDER the run actually wrote. This scheme's
             # results.csv columns are positional (`secondary_N_mean`), so a
             # panel's `metric` index is a claim about which metric sits there
@@ -969,7 +1028,26 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     if not input_root.is_dir():
         return found
     for scheme_dir in sorted(p for p in input_root.iterdir() if p.is_dir()):
-        matches = sorted(scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*"))
+        # THE SPEC'S OWN FOLDER FIRST, then the number glob.
+        #
+        # The glob exists so a scheme that names its directory slightly
+        # differently still contributes instead of silently plotting nothing.
+        # But it matches on the NUMBER, and two different experiments can share
+        # one number across a construction: `psa_exp3_crossdomain_latency`
+        # (SVI's Fig. 3) and `psa_exp3_crossdomain_tokens` (the D9 companion)
+        # both match `psa_exp3_*`. The latency spec therefore drew the token
+        # experiment's data under a "Cross-domain search latency (ms)" axis --
+        # the same defect as Fig. 8(c), reached by a different route.
+        #
+        # Preferring the declared folder makes the spec's own `folder` field
+        # load-bearing rather than decorative; the glob stays as the fallback
+        # it was written to be.
+        declared = scheme_dir / spec.folder
+        matches = [declared] if declared.is_dir() else []
+        matches += [
+            m for m in sorted(scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*"))
+            if m != declared
+        ]
         used: Optional[Path] = None
         for exp_dir in matches:
             if not exp_dir.is_dir():
@@ -1071,7 +1149,9 @@ def _panel_values(
     return scaled_v, scaled_e
 
 
-def _panel_metric_agrees(spec, panel, panel_series, warnings) -> bool:
+def _panel_metric_agrees(
+    spec, panel, panel_series, warnings, strict: bool = False
+) -> bool:
     """Refuse to draw a panel whose label does not name the column it reads.
 
     ``PanelSpec.metric`` is a POSITION in results.csv and ``ylabel`` is a claim
@@ -1090,13 +1170,25 @@ def _panel_metric_agrees(spec, panel, panel_series, warnings) -> bool:
     for series in panel_series:
         names = series.secondary_metrics
         if not names:
-            # A run written before the field existed. Say so once, and draw:
-            # refusing would blank every panel of every banked result.
+            # A run written before the field existed.
+            #
+            # WITHOUT `strict`: say so once, and draw. Refusing outright would
+            # blank every panel of every banked result, and a figure nobody can
+            # produce is not a safer figure.
+            #
+            # WITH `strict` (--require-reportable): SKIP. This is the submission
+            # path, and an unverifiable label is exactly how Fig. 8(c) shipped
+            # captioned "Cross-node forwards" over a column holding peak queue
+            # depth. A missing panel is obviously incomplete; a mislabelled one
+            # is not, so the strict path must not draw it.
             warnings.append(
                 f"exp{spec.number}: panel ({panel.tag}) cannot be verified — "
                 f"{series.scheme}'s run_meta.json records no "
                 f"secondary_metrics; the label {panel.ylabel!r} is unchecked"
+                + ("; panel skipped (--require-reportable)" if strict else "")
             )
+            if strict:
+                ok = False
             continue
         index = panel.metric - 1          # metric 1 is the first secondary
         actual = names[index] if 0 <= index < len(names) else None
@@ -1111,9 +1203,64 @@ def _panel_metric_agrees(spec, panel, panel_series, warnings) -> bool:
     return ok
 
 
+def _check_provenance_homogeneity(
+    spec: "ExperimentSpec", series_list, warnings: List[str]
+) -> None:
+    """Refuse to present series measured on different corpora or constructions.
+
+    A figure is a COMPARISON, and a comparison only means something if the
+    things compared were measured against the same corpus by the same scheme.
+    Neither was checked, and both had already gone wrong:
+
+    * **Corpus.** fig:exp1's four proposed curves come from
+      ``psa_exp1_token_generation__pu<N>/``, whose ``corpus_type`` is
+      ``psa_in_process`` and whose ``reportable`` is ``false`` ("no corpus
+      SHA-256"), drawn on one axis against four baselines measured on the frozen
+      ``synthea`` corpus. SVI's own setup paragraph says the fixture
+      measurements are "not directly comparable with the cross-scheme results",
+      and then the figure compares them.
+
+    * **Construction.** ``option_d`` computes ``T = H(w)`` and ``psa`` computes
+      ``T = H(w || PID || PV || Dom)``. They time DIFFERENT functions at the same
+      experiment number, so a figure mixing them publishes two schemes as one.
+
+    A warning rather than a hard skip, for the reason the label check gives:
+    every banked run predates ``construction``, so refusing outright would blank
+    every figure in the repo. Under ``--require-reportable`` the non-reportable
+    series is dropped before this runs, which is the enforcing path.
+    """
+    for attribute, label, plural in (
+        ("corpus_type", "corpus", "corpora"),
+        ("construction", "construction", "constructions"),
+    ):
+        # A MISSING value is its own bucket, not a skip. Every one of the 114
+        # banked runs predates `construction`, so skipping None would leave the
+        # check blind during exactly the migration it exists to police: a figure
+        # drawing one freshly re-run `psa` series against four banked series
+        # that never recorded a construction is the most likely way the two get
+        # mixed, and it would pass silently. Bucketing None keeps a
+        # wholly-unrecorded figure quiet (one bucket) while flagging a partly
+        # re-run one (two buckets), which is the case that matters.
+        seen = {}
+        for series in series_list:
+            value = getattr(series, attribute, None)
+            seen.setdefault(value or "<not recorded>", []).append(series.scheme)
+        if len(seen) > 1:
+            detail = "; ".join(
+                f"{value}: {', '.join(sorted(schemes))}"
+                for value, schemes in sorted(seen.items())
+            )
+            warnings.append(
+                f"exp{spec.number}: this figure mixes more than one {label} "
+                f"on one axis — {detail}. Series measured on different "
+                f"{plural} are not one comparison."
+            )
+
+
 def render(spec: ExperimentSpec, series_list: Sequence[Series],
            out_path: Path, dpi: Optional[int] = None,
-           input_root: Optional[Path] = None) -> Tuple[bool, List[str]]:
+           input_root: Optional[Path] = None,
+           strict: bool = False) -> Tuple[bool, List[str]]:
     """Draw one figure. Returns (written, warnings).
 
     ``input_root`` is needed only when a panel names its own ``folder``; without
@@ -1123,6 +1270,7 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
     if not series_list:
         return False, [f"exp{spec.number}: no results.csv found for any scheme"]
     _check_log_y_criterion(spec, series_list, warnings)
+    _check_provenance_homogeneity(spec, series_list, warnings)
 
     if spec.panels:
         # A panel drawn from another experiment sweeps a DIFFERENT variable, so
@@ -1156,7 +1304,7 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
                     )
                     continue
             if not _panel_metric_agrees(
-                spec, panel, panel_series, warnings
+                spec, panel, panel_series, warnings, strict=strict
             ):
                 continue
             _draw_panel(
@@ -1453,6 +1601,22 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
 # CLI
 # ---------------------------------------------------------------------------
 def main(argv: Optional[Sequence[str]] = None) -> int:
+    # THE WARNINGS CONTAIN NON-ASCII (`§`, `—`) AND THE CONSOLE MAY NOT.
+    #
+    # On a console whose encoding is not UTF-8, `print()` of a warning raised
+    # UnicodeEncodeError and killed the script MID-RUN -- after exp1's warnings
+    # and before any figure past it was rendered, so the run looked like it had
+    # simply produced fewer figures. `errors="replace"` degrades one character
+    # instead of losing seven figures; the file writes are unaffected because
+    # matplotlib writes bytes, not through this stream.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is not None:
+            try:
+                reconfigure(encoding="utf-8", errors="replace")
+            except (ValueError, OSError):
+                pass          # a redirected or already-wrapped stream
+
     parser = argparse.ArgumentParser(
         prog="python3 Plots/generate_plots.py",
         description="Generate the manuscript's eight figures (README §10).",
@@ -1552,7 +1716,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             target_dir.mkdir(parents=True, exist_ok=True)
             ok, warns = render(spec, found, target_dir / name,
                                dpi=args.png_dpi if fmt == "png" else None,
-                               input_root=input_root)
+                               input_root=input_root,
+                               strict=args.require_reportable)
             # Warnings describe the DATA, not the format, so collect them once
             # rather than repeating every reportability warning per format.
             if not rendered_any:

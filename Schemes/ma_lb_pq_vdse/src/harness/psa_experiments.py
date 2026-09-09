@@ -52,6 +52,7 @@ from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from Common.crypto import hashes, merkle  # noqa: E402
+from Common.crypto import config as crypto_config  # noqa: E402
 from Common.crypto.rng import DeterministicRNG  # noqa: E402
 from Common.timing import gc_quiesced  # noqa: E402
 
@@ -533,9 +534,161 @@ class PsaExp3CrossDomainTokens:
             secondaries={
                 "tokens_issued": float(len(produced)),
                 "policies": float(len(prepared["scopes"])),
-                # The comparison the panel exists to make: Option D issues one
-                # trapdoor whatever d is (Exp3CrossDomain's headline secondary).
-                "option_d_tokens_issued": 1.0,
+                # The comparison the panel exists to make: under Option D the
+                # token is H(w), so the count is q and does NOT grow with d.
+                #
+                # THIS WAS THE LITERAL 1.0, which compared two different units.
+                # `tokens_issued` above counts TOKENS (q*d); Option D's
+                # `generate_trapdoor` returns ONE TRAPDOOR CONTAINING q TOKENS
+                # (index/tokens.py: `tuple(scheme.query_token(k) for k in
+                # keywords)`), so the honest same-unit comparison is q, not 1 --
+                # the literal understated Option D by a factor of q, which is 5
+                # at SVI's query size. Exactly the defect fixed in
+                # `Exp3CrossDomain.measure` on 2026-09-08 ("It was the literal
+                # 1.0 ... that made the experiment's headline secondary
+                # unfalsifiable"); the fix never reached this twin.
+                #
+                # RESULTS-AFFECTING for `fig_psa_exp3_tokens.pdf`'s reference
+                # curve: banked runs carry 1.0 at every d and must be re-run.
+                "option_d_tokens_issued": float(len(prepared["keywords"])),
+            },
+        )
+
+
+# ===========================================================================
+# §VI Exp. 3 — cross-domain SEARCH LATENCY under the policy-bound token
+# ===========================================================================
+@dataclass
+class PsaExp3CrossDomainLatency:
+    """§VI Exp. 3, which measures LATENCY — the figure the manuscript includes.
+
+    §VI: *"This experiment evaluates encrypted-search latency as the number of
+    participating healthcare domains d increases from 2 to 10 … compared with
+    Schemes [30], [35], [41], [54],"* captioned *"Cross-domain search latency
+    versus number of participating domains."*
+
+    The PSA track had no such experiment. :class:`PsaExp3CrossDomainTokens`
+    reports a token COUNT, which is the D9 companion claim, not §VI's Fig. 3 —
+    so under the PSA construction seven of the manuscript's eight figures had a
+    source and Fig. 3 did not. This is that source.
+
+    **Per-domain index size is fixed**, per §VI's own sentence, at
+    ``global.yaml``'s ``exp3 -> held_constant.per_domain_index_size``. Total
+    data therefore grows with ``d``. The four baselines fixed *total* instead
+    and sharded by ``d``, which shrank their per-domain size as ``d`` grew and
+    is why [35]'s latency FELL across the sweep; all five now hold the same
+    quantity constant.
+
+    **Authorization scope grows with ``d``**, and that is the measurement, not
+    an accident. A cross-domain query is authorized under one policy per
+    participating domain, so ``|P_U| = d`` and the token count is ``q·d`` where
+    Option D issues ``q``. That cost is D9, and it is what §VI's Exp. 3 buys
+    for the policy-state binding.
+
+    The query is posed the way :class:`PsaExp2SearchLatency` poses it — a
+    disjunction across authorized policies of a conjunction over keywords —
+    because a flat ``q·|P_U|`` token set asks one record to satisfy tokens bound
+    to several policies at once, which no record can.
+    """
+
+    config: scheme_config.Configuration
+    source: Any
+    name: str = "psa_exp3_crossdomain_latency"
+    number: int = 3
+    variable: str = "domains"
+    values: Tuple[Any, ...] = ()
+    #: Reads the corpus, so it inherits the corpus provenance.
+    CORPUS_BACKED: ClassVar[bool] = True
+    primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
+    secondaries: Tuple[MetricSpec, ...] = (
+        MetricSpec("tokens_issued", COUNT),
+        MetricSpec("nodes_searched", COUNT),
+        MetricSpec("n_eff", COUNT),
+    )
+
+    def __post_init__(self) -> None:
+        if not self.values:
+            self.values = tuple(self.config.experiment("exp3").values)
+
+    def prepare(self, value: Any) -> Any:
+        domain_count = int(value)
+        held = self.config.experiment("exp3").held_constant or {}
+        per_domain = int(held.get("per_domain_index_size", 0))
+        if per_domain <= 0:
+            raise ValueError(
+                "global.yaml exp3_crossdomain_scalability.held_constant."
+                "per_domain_index_size must be a positive record count; §VI "
+                "fixes the per-domain index size and the value cannot come "
+                "from a literal here"
+            )
+        record_count = per_domain * domain_count
+        # Refuse rather than be OOM-killed, exactly as Exp. 2 and Option D's
+        # Exp. 3 do. An OOM is SIGKILL: no traceback, no partial results.
+        crypto_config.assert_memory_for(
+            record_count * 6_800 * self.source.keywords_per_record / 6,
+            f"psa exp3 index at d={domain_count} x {per_domain:,} records/domain",
+        )
+        deployment = psa_build_deployment(
+            config=self.config, source=self.source,
+            records=record_count, domains=domain_count,
+        )
+        world = deployment.world
+        # ONE AUTHORIZED POLICY PER PARTICIPATING DOMAIN, so |P_U| = d. Picked
+        # from the policies the corpus actually produced, first per domain, so
+        # the scope is derived rather than stipulated.
+        by_domain: Dict[str, str] = {}
+        for policy in world.policies:
+            domain = policy.split("/", 1)[0]
+            by_domain.setdefault(domain, policy)
+        scopes = [
+            world.scope(by_domain[d]) for d in world.domains if d in by_domain
+        ]
+        if not scopes:
+            raise RuntimeError(
+                f"no policy found for any of {len(world.domains)} domains; "
+                f"a cross-domain query needs at least one authorized policy"
+            )
+        pool = [r["keywords"] for r in deployment.records]
+        return dict(
+            deployment=deployment, scopes=scopes, pool=pool, cursor=[0],
+        )
+
+    def measure(self, prepared: Any) -> Sample:
+        deployment = prepared["deployment"]
+        pool, cursor = prepared["pool"], prepared["cursor"]
+        keywords = pool[cursor[0] % len(pool)]
+        cursor[0] += 1
+        q = min(self.config.defaults.keywords_per_query, len(keywords))
+        query = list(dict.fromkeys(keywords))[:q]
+
+        issued = 0
+        hits = 0
+        searched: set = set()
+        with gc_quiesced():
+            started = time.perf_counter_ns()
+            for scope in prepared["scopes"]:
+                scope_tokens = psa_tokens.generate_query_tokens(
+                    deployment.scheme, query, [scope]
+                )
+                issued += len(scope_tokens)
+                for node_id, served, index in deployment.nodes:
+                    if scope.domain not in served:
+                        continue
+                    found, _stats = index.lookup(
+                        scope_tokens, [(scope.domain, scope.policy_id)]
+                    )
+                    hits += len(found)
+                    searched.add(node_id)
+            elapsed = time.perf_counter_ns() - started
+
+        return Sample(
+            primary=elapsed / 1e6,
+            secondaries={
+                # q*|P_U| = q*d, COUNTED from what was issued rather than
+                # asserted. Option D issues q here, flat in d (D9).
+                "tokens_issued": float(issued),
+                "nodes_searched": float(len(searched)),
+                "n_eff": float(hits),
             },
         )
 
@@ -1477,12 +1630,21 @@ class PsaExp8LoadBalance(PsaSchedulerAblation, experiments_mod.Exp8LoadBalance):
 PSA_EXPERIMENTS = {
     1: PsaExp1TokenGeneration,
     2: PsaExp2SearchLatency,
-    3: PsaExp3CrossDomainTokens,
+    # 3 is SVI's Fig. 3, which measures LATENCY. The token-count experiment is
+    # the D9 companion and moves to 9, mirroring how the Option D track parks
+    # the Exp. 4 companion (Exp9VerificationGranularity) at 9 rather than
+    # letting a companion occupy a manuscript figure's slot.
+    3: PsaExp3CrossDomainLatency,
     4: PsaExp4Verification,
     5: PsaExp5ReTokenization,
     6: PsaExp6AffectedRatio,
     7: PsaExp7Throughput,
     8: PsaExp8LoadBalance,
+    # 10, NOT 9: in the Option D track 9 is Exp9VerificationGranularity, and
+    # giving the same number two different meanings across constructions would
+    # make `--experiment 9` mean one thing and `--experiment 9 --construction
+    # psa` another. 10 is unused in both.
+    10: PsaExp3CrossDomainTokens,
 }
 
 
@@ -1530,6 +1692,7 @@ __all__ = [
     "PSA_EXPERIMENTS",
     "PsaExp1TokenGeneration",
     "PsaExp2SearchLatency",
+    "PsaExp3CrossDomainLatency",
     "PsaExp3CrossDomainTokens",
     "PsaExp4Verification",
     "PsaExp5ReTokenization",
