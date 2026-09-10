@@ -361,7 +361,21 @@ def build_deployment(
             faithful_ops = _BackedGroupOperations(_backend)
         except Exception:  # noqa: BLE001 - absence is expected off the host
             group_provider = _unfaithful_group_provider
-    domain_count = len(source.domains) if domains is None else domains
+    # §VI's FOUR DOMAINS, from the config — not the corpus's width.
+    #
+    # This read `len(source.domains)`, which for the frozen corpus is **10**
+    # (`dataset_manifest.json`'s `per_domain_counts`). So Exps. 2, 4, 5, 7 and 8
+    # ran on ten domains and ten AAs while §VI says "four administrative
+    # healthcare domains" and `global.yaml` says `defaults.domains: 4` and
+    # `authorities.count: 4`. Three sources, two answers, and the code followed
+    # neither of the two that agreed.
+    #
+    # Resolved 2026-09-10 in the paper's favour. Exp. 3 is unaffected: it passes
+    # `domains=` explicitly because §VI sweeps d = 2…10 for that experiment.
+    # RESULTS-AFFECTING for Exps. 2, 4, 5, 7, 8.
+    domain_count = (
+        int(config.defaults.domains) if domains is None else domains
+    )
     domain_names = tuple(
         source.domains[:domain_count]
         if domain_count <= len(source.domains)

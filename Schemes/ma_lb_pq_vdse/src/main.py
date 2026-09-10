@@ -426,6 +426,10 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             # cannot be checked. See RunMetadata.construction.
             construction=args.construction,
             ledger_backend=chain_select.ledger_backend(),
+            # The experiment ITSELF, so provenance can fingerprint the source of
+            # `prepare`/`measure`. Passing the object rather than a precomputed
+            # digest keeps the definition of "what this measures" in one place.
+            experiment_object=experiment,
         )
         if args.require_reportable and not metadata.reportable:
             log(f"REFUSED {experiment.name}: not reportable")

@@ -637,6 +637,18 @@ class Series:
     #: same experiment number, so mixing them in one figure publishes two
     #: schemes as one.
     construction: Optional[str] = None
+    #: Secondaries keyed by their COLUMN NAME, alongside the positional `extra`.
+    #: A panel that declares `metric_name` is resolved through this, so the
+    #: number it draws is the metric the label names rather than whatever sits
+    #: at that index. Empty only for a legacy file whose columns are numbered.
+    extra_by_name: Dict[str, Tuple[List[float], List[float]]] = field(
+        default_factory=dict
+    )
+    #: run_meta.json's `measurement_fingerprint` — a digest of the construction,
+    #: metric names, sweep values and the SOURCE of `prepare`/`measure`. Two
+    #: series with different fingerprints came from different measurements, even
+    #: when their columns agree. Empty for a run written before the field.
+    fingerprint: Optional[str] = None
     problems: List[str] = field(default_factory=list)
 
 
@@ -714,6 +726,16 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
                     vals, errs = series.extra.setdefault(i, ([], []))
                     vals.append(sy)
                     errs.append(sci)
+                    # Also by NAME. `secondary_1_mean` yields the stem
+                    # "secondary_1", which matches no panel's `metric_name`, so
+                    # a legacy numbered file simply contributes nothing here and
+                    # the positional path still serves it.
+                    stem = mcol[: -len("_mean")]
+                    nvals, nerrs = series.extra_by_name.setdefault(
+                        stem, ([], [])
+                    )
+                    nvals.append(sy)
+                    nerrs.append(sci)
     except FileNotFoundError:
         return None
     except OSError as exc:
@@ -763,6 +785,9 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
             construction = parsed.get("construction")
             if construction:
                 series.construction = str(construction)
+            fingerprint = parsed.get("measurement_fingerprint")
+            if fingerprint and fingerprint != "unavailable":
+                series.fingerprint = str(fingerprint)
             # The secondary column ORDER the run actually wrote. This scheme's
             # results.csv columns are positional (`secondary_N_mean`), so a
             # panel's `metric` index is a claim about which metric sits there
@@ -940,6 +965,15 @@ def _restrict_to(series: Series, allowed: Sequence[float]) -> Series:
             [vals[i] for i in keep if i < len(vals)],
             [errs[i] for i in keep if i < len(errs)],
         )
+    # The name-keyed copy is the SAME data under a different key, so it must be
+    # filtered with the same `keep`. Leaving it unfiltered would misalign a
+    # named series against a restricted x -- the exact class of silent shift
+    # this function's docstring exists to prevent.
+    for name, (vals, errs) in list(series.extra_by_name.items()):
+        series.extra_by_name[name] = (
+            [vals[i] for i in keep if i < len(vals)],
+            [errs[i] for i in keep if i < len(errs)],
+        )
     return series
 
 
@@ -998,6 +1032,28 @@ def collect_mixed(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     return found
 
 
+def _folders_claimed_by_other_specs(spec: "ExperimentSpec") -> set:
+    """Folder names that belong to a DIFFERENT experiment spec.
+
+    `collect`'s glob keys on the experiment NUMBER so a scheme whose directory
+    is named slightly differently still contributes. Two specs can share a
+    number across constructions, though — `psa_exp3_crossdomain_latency` (§VI's
+    Fig. 3) and `psa_exp3_crossdomain_tokens` (the D9 companion) both match
+    `psa_exp3_*` — and then the fallback silently draws the wrong experiment
+    under the right axis label. Excluding folders another spec has claimed keeps
+    the fallback for its purpose (a naming variant) and out of the one case it
+    gets wrong (a different measurement).
+    """
+    claimed = set()
+    for other in tuple(EXPERIMENTS) + tuple(PSA_EXPERIMENTS):
+        if other.folder and other.folder != spec.folder:
+            claimed.add(other.folder)
+        for panel in other.panels:
+            if panel.folder and panel.folder != spec.folder:
+                claimed.add(panel.folder)
+    return claimed
+
+
 def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
     """Find every scheme's results for one experiment.
 
@@ -1044,9 +1100,15 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
         # it was written to be.
         declared = scheme_dir / spec.folder
         matches = [declared] if declared.is_dir() else []
+        # The fallback must never reach ANOTHER spec's declared folder. Merely
+        # preferring `declared` was not enough: when it is absent the glob still
+        # matched the sibling and drew it, so an experiment with no data yet
+        # borrowed a different experiment's numbers instead of reporting that it
+        # had none.
+        claimed = _folders_claimed_by_other_specs(spec)
         matches += [
             m for m in sorted(scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*"))
-            if m != declared
+            if m != declared and m.name not in claimed
         ]
         used: Optional[Path] = None
         for exp_dir in matches:
@@ -1124,17 +1186,29 @@ def _check_log_y_criterion(spec: ExperimentSpec, series_list: Sequence[Series],
 
 def _panel_values(
     series: Series, metric: int, per_x: bool = False,
+    metric_name: Optional[str] = None,
 ) -> Tuple[List[float], List[float]]:
-    """(values, ci95s) for one metric: 0 is primary, 1+ index the secondaries.
+    """(values, ci95s) for one metric, BY NAME where the file provides one.
+
+    ``metric`` is a position and ``metric_name`` is what the panel claims sits
+    there. When the file names its columns the name wins, so the number drawn is
+    the metric the label names; the positional read remains for legacy files
+    whose columns are ``secondary_1_mean``, ``secondary_2_mean``, ….
+
+    That positional binding is what let Fig. 8(c) caption `max_queue_depth` as
+    "Cross-node forwards": the metric list gained an entry, every later column
+    shifted, and the panel kept its index.
 
     ``per_x`` divides both the value and its interval by the x value, turning a
     total into a per-unit rate. The interval scales with the value because it is
     a half-width in the same units, so T_avg's interval is the total's over r.
     """
-    values, errs = (
-        (series.y, series.yerr) if metric == 0
-        else series.extra.get(metric, ([], []))
-    )
+    if metric == 0:
+        values, errs = series.y, series.yerr
+    elif metric_name and metric_name in series.extra_by_name:
+        values, errs = series.extra_by_name[metric_name]
+    else:
+        values, errs = series.extra.get(metric, ([], []))
     if not per_x:
         return values, errs
     scaled_v, scaled_e = [], []
@@ -1310,6 +1384,10 @@ def render(spec: ExperimentSpec, series_list: Sequence[Series],
             _draw_panel(
                 ax, spec, panel_series, warnings,
                 metric=panel.metric, ylabel=panel.ylabel,
+                # The panel's own claim about which metric it draws. When the
+                # results.csv names its columns this selects by name, so the
+                # label and the number cannot disagree.
+                metric_name=panel.metric_name,
                 # Legend once, on the top panel -- EXCEPT for a panel that
                 # draws curves the top one does not. A cross-folder panel has
                 # its own scheme set (Exp. 4 panel (b) omits Scheme [54], which
@@ -1357,8 +1435,9 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 per_x: bool = False, xlabel: Optional[str] = None,
                 force_log_x: bool = False,
                 companion_metric: Optional[int] = None,
-                companion_label: str = "") -> None:
-    """Draw every series' `metric` onto one axes."""
+                companion_label: str = "",
+                metric_name: Optional[str] = None) -> None:
+    """Draw every series' `metric` onto one axes, resolved BY NAME where given."""
     # The furthest point any scheme reached, so a shorter series can be marked.
     _all_x = [v for s in series_list for v in s.x]
     max_x = max(_all_x) if _all_x else None
@@ -1388,7 +1467,7 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
             or (i < len(series.measurement)
                 and series.measurement[i].strip().lower() == "projected")
         ]
-        yvals, yerrs = _panel_values(series, metric, per_x)
+        yvals, yerrs = _panel_values(series, metric, per_x, metric_name)
         if not yvals:
             # A scheme that records no such secondary simply has no curve on
             # this panel; the others still draw.
@@ -1463,6 +1542,30 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 f"{', '.join(missing)} — cannot confirm they match the rest"
             )
 
+        # SAME CHECK, ONE LEVEL DEEPER. global.yaml pins the parameters; the
+        # fingerprint pins the MEASUREMENT — construction, metric names, sweep
+        # values and the source of prepare/measure. Two series can share a
+        # config revision and still have been produced by different code, which
+        # is exactly the `exp5_keyword_update` case: `entries_rewritten` reads
+        # 0.0 in banked data and 6-per-record today, with identical column names
+        # either side. Named columns cannot see that; this can.
+        prints: Dict[str, List[str]] = {}
+        for series in series_list:
+            if series.fingerprint:
+                prints.setdefault(series.fingerprint, []).append(series.scheme)
+        if len(prints) > 1:
+            detail = "; ".join(
+                f"{digest[:12]}...: {', '.join(sorted(schemes))}"
+                for digest, schemes in sorted(prints.items())
+            )
+            warnings.append(
+                f"exp{spec.number}: series in one figure carry "
+                f"{len(prints)} DIFFERENT measurement fingerprints — {detail}. "
+                f"They were produced by different measurement code; a "
+                f"difference between their curves is not necessarily a "
+                f"difference between the schemes."
+            )
+
     # A COMPANION CURVE is a second column of the same run, not another
     # scheme, so it is drawn once (from the first series that has it) in a
     # neutral dashed grey. psa_exp3 is the case: the D9 claim is the gap
@@ -1501,7 +1604,8 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
     if spec.log_y and allow_log_y:
         # Only if every plotted value is strictly positive — a zero or negative
         # would be silently dropped by a log axis, which would hide data.
-        all_y = [v for s in series_list for v in _panel_values(s, metric)[0]]
+        all_y = [v for s in series_list
+                 for v in _panel_values(s, metric, metric_name=metric_name)[0]]
         if all_y and min(all_y) > 0:
             ax.set_yscale("log")
         else:

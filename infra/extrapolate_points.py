@@ -3,7 +3,7 @@
 
     python3 infra/extrapolate_points.py Schemes/thingom_pq_abse/exp2_search_latency \\
         --anchor 10000 --targets 50000,100000,500000,1000000 \\
-        --scale-columns primary_mean,secondary_1_mean,secondary_2_mean
+        --scale-columns primary_mean,n_eff_mean,entries_traversed_mean
 
 WHY THIS EXISTS
 ---------------

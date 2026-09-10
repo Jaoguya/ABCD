@@ -205,7 +205,10 @@ def psa_build_deployment(
     authorities_per_policy: int = psa_gov.DEFAULT_AUTHORITIES_PER_POLICY,
 ) -> PsaDeployment:
     """Build a PSA deployment over ``source``'s records — untimed by construction."""
-    domain_count = len(source.domains) if domains is None else domains
+    # §VI's four domains, from the config — see build_deployment's note.
+    domain_count = (
+        int(config.defaults.domains) if domains is None else domains
+    )
     names = tuple(source.domains[:domain_count])
     if len(names) < domain_count:
         names = tuple(f"dom{i}" for i in range(domain_count))
@@ -420,7 +423,14 @@ class PsaExp1TokenGeneration:
         # stipulated `hospital/pol0` policies were what made this experiment
         # `psa_in_process` and therefore unquotable.
         world, vocabulary = corpus_world(
-            self.source, records=EXP1_SAMPLE_RECORDS
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            # §VI's four domains. Left to `corpus_world`'s own default this
+            # took the corpus's width (10), so Exp. 1 derived its policy set
+            # over ten domains while every other non-sweeping experiment is
+            # pinned to four. `corpus_world` keeps its `None` default rather
+            # than taking a config, because its other callers are tests that
+            # want the source's own width.
+            domains=int(self.config.defaults.domains),
         )
         if len(world.policies) < self.policy_scope:
             raise RuntimeError(

@@ -120,47 +120,101 @@ def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
     evidence in the primary metric. The arms now deliver to real `_PsaShard`
     recipients that ingest the message, so the extra fan-out is work.
     """
-    def median(variant, ratio):
+    def arm(variant, ratio):
         import statistics
         experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant)
         prepared = experiment.prepare(ratio)
         for _ in range(2):
             experiment.measure(prepared)          # warm
-        return statistics.median(
+        latency = statistics.median(
             experiment.measure(prepared).primary for _ in range(9)
         )
+        return latency, experiment.measure(prepared).secondaries["delivered_kb"]
 
-    dias = median(psa.VARIANT_DIAS, 0.1)
-    everyone = median(psa.VARIANT_INCREMENTAL_ALL, 0.1)
-    full = median(psa.VARIANT_FULL_STATE, 0.1)
-    assert dias <= everyone, (
-        f"unnecessary propagation must cost something: DIAS {dias:.3f} ms vs "
-        f"Incremental-All {everyone:.3f} ms"
+    dias, dias_kb = arm(psa.VARIANT_DIAS, 0.1)
+    everyone, everyone_kb = arm(psa.VARIANT_INCREMENTAL_ALL, 0.1)
+    full, full_kb = arm(psa.VARIANT_FULL_STATE, 0.1)
+
+    # SELECTIVE PROPAGATION, asserted on DELIVERED PAYLOAD -- where the claim
+    # actually holds. Measured: 3.52 / 14.06 / 141.05 KB, i.e. a clean 4x from
+    # the 1-vs-4 FSN fan-out and 40x for full reconstruction, identical across
+    # repeated runs.
+    assert dias_kb < everyone_kb < full_kb, (
+        f"selective propagation must send less: DIAS {dias_kb:.2f} KB vs "
+        f"Incremental-All {everyone_kb:.2f} KB vs Full-State {full_kb:.2f} KB"
     )
+
+    # INCREMENTAL EVOLUTION, asserted on latency -- an 11x gap that reproduces.
     assert everyone < full, (
         f"full state reconstruction must dominate: Incremental-All "
         f"{everyone:.3f} ms vs Full-State {full:.3f} ms"
     )
 
+    # DIAS vs Incremental-All in LATENCY is deliberately NOT asserted.
+    #
+    # It used to be, and the test failed ~15% of the time (measured: 8/10 and
+    # 9/10 passes over ten isolated runs at two different commits) -- because
+    # the two do the same sender-side work and differ only in how many local
+    # recipients they hand a message to. The measured gap is ~2%
+    # (0.9425 vs 0.9645 ms), i.e. noise, which `generate_plots.py` also records
+    # ("the campaign measured +2%, a local rerun measured -4.5%").
+    #
+    # A 15%-flaky assertion is worse than none: it makes every regression run
+    # ambiguous and trains a reader to re-run until green. The claim it was
+    # trying to make is real, and it is the payload assertion above.
+    # SV must therefore say the selective advantage is in BYTES, not in time.
+
 
 def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config):
     """§VI: the advantage "narrows because a larger portion of the system
-    becomes dependency relevant". At 100% DIAS and Full-State evolve the same
-    set, so the latency ratio must fall toward 1."""
-    def ratio_at(affected):
-        import statistics
+    becomes dependency relevant".
+
+    Asserted on the WORK DONE, which is exact, rather than on latency, which is
+    not. This compared median latencies with `rel=0.35` and failed ~7% of the
+    time (14/15 in isolation) — the second timing-ratio assertion in this file
+    to do so. Measured, the work ratios are integers:
+
+        policies_evolved     full/dias = 10.000 @0.1  ->  1.000 @1.0
+        entries_retokenized  full/dias = 10.000 @0.1  ->  1.000 @1.0
+
+    At ratio 1.0 the two arms evolve exactly the same set (40 policies, 240
+    entries), so the ratio is exactly 1 — which is what §VI's sentence claims,
+    stated as a fact about work rather than a hope about a clock.
+
+    NOTE FOR §V: the narrowing is NOT total. `delivered_kb` goes 40.1x -> 4.0x,
+    because at 100% DIAS still delivers selectively where Full-State republishes
+    every authority's commitment to every FSN. The INCREMENTAL advantage
+    vanishes at a full ratio; the SELECTIVE advantage does not.
+    """
+    def work_at(affected):
         out = {}
         for variant in (psa.VARIANT_DIAS, psa.VARIANT_FULL_STATE):
             experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant)
             prepared = experiment.prepare(affected)
-            experiment.measure(prepared)
-            out[variant] = statistics.median(
-                experiment.measure(prepared).primary for _ in range(9)
-            )
-        return out[psa.VARIANT_FULL_STATE] / out[psa.VARIANT_DIAS]
+            out[variant] = experiment.measure(prepared).secondaries
+        return out
 
-    assert ratio_at(0.1) > ratio_at(1.0)
-    assert ratio_at(1.0) == pytest.approx(1.0, rel=0.35)
+    sparse, full = work_at(0.1), work_at(1.0)
+    for metric in ("policies_evolved", "entries_retokenized"):
+        sparse_ratio = (sparse[psa.VARIANT_FULL_STATE][metric]
+                        / sparse[psa.VARIANT_DIAS][metric])
+        full_ratio = (full[psa.VARIANT_FULL_STATE][metric]
+                      / full[psa.VARIANT_DIAS][metric])
+        assert sparse_ratio > full_ratio, (
+            f"{metric}: the DIAS advantage must narrow as the affected ratio "
+            f"grows, got {sparse_ratio:.3f} at 0.1 and {full_ratio:.3f} at 1.0"
+        )
+        assert full_ratio == pytest.approx(1.0), (
+            f"{metric}: at a full ratio both arms evolve the same set, so the "
+            f"ratio must be exactly 1, got {full_ratio}"
+        )
+
+    # The selective advantage SURVIVES a full ratio -- see the note above.
+    assert (full[psa.VARIANT_FULL_STATE]["delivered_kb"]
+            > full[psa.VARIANT_DIAS]["delivered_kb"]), (
+        "at ratio 1.0 DIAS still delivers selectively where Full-State "
+        "republishes to every FSN; that advantage does not narrow"
+    )
 
 
 def test_psa_exp6_fsns_touched_is_the_affected_node_set(config):

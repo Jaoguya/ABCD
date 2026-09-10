@@ -18,6 +18,7 @@ with no reason is not provenance.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import re
@@ -176,13 +177,16 @@ class RunMetadata:
     reportable: bool
     not_reportable_because: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
-    #: The secondary metric names, IN THE ORDER results.csv writes them as
-    #: ``secondary_1_mean``, ``secondary_2_mean``, ...
+    #: The secondary metric names, in the order the experiment declares them.
     #:
-    #: results.csv cannot carry them: this scheme's columns are positional
-    #: (``secondary_N_mean``) while the baselines write the metric's real name,
-    #: and the plotter reads the i-th column after primary for both. That made a
-    #: panel label a claim nothing checked — Exp. 8's Fig. 8(c) was labelled
+    #: SINCE 2026-09-10 results.csv also carries them, as the column names
+    #: themselves (``cross_node_forwards_mean``), so the plotter resolves a
+    #: panel by name and this field is the cross-check rather than the only
+    #: record. It remains load-bearing for BANKED files, whose columns are
+    #: positional (``secondary_N_mean``) and whose meaning lives nowhere else.
+    #:
+    #: The positional layout made a panel label a claim nothing checked —
+    #: Exp. 8's Fig. 8(c) was labelled
     #: "Cross-node forwards" while `cross_node_forwards` had been dropped from
     #: the metric list, so the column at that position was peak queue depth.
     #: Recording the names here lets Plots/generate_plots.py verify the label it
@@ -202,6 +206,10 @@ class RunMetadata:
     #: gates Exp. 4's reportability but was never recorded, so a banked Exp. 4
     #: number could not be attributed to a ledger after the fact.
     ledger_backend: str = "unknown"
+    #: Digest of what this run MEASURES — see :func:`measurement_fingerprint`.
+    #: Two artifacts with different fingerprints came from different
+    #: measurements and must not be drawn on one axis.
+    measurement_fingerprint: str = "unavailable"
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
@@ -501,6 +509,53 @@ def reportability(
     return (not reasons), reasons
 
 
+def measurement_fingerprint(experiment, construction: str) -> str:
+    """A digest of WHAT THIS RUN MEASURES, so a stale artifact is detectable.
+
+    Named columns (2026-09-10) closed most of the stale-data family: a metric
+    added or renamed is now a MISSING COLUMN, which fails loudly. One case
+    survives that — **names match, shape matches, behaviour changed underneath**.
+    `exp5_keyword_update`'s `entries_rewritten` is the worked example: banked
+    data reads 0.0 at every k, today's code returns 6 per record for the same
+    call, and nothing in either artifact says they came from different code.
+
+    This hashes the things that decide what a number MEANS: the construction,
+    the metric names in order, the sweep values, and **the source of `prepare`
+    and `measure`** — the part that actually changed in the `exp5` case and that
+    no other field captures.
+
+    Source text rather than a git commit, because a commit moves whenever
+    anything in the repo moves: the 114 banked runs span four commits and most
+    of those changes were irrelevant to the numbers. Hashing the measurement
+    keeps the signal.
+
+    Degrades to ``"unavailable"`` rather than raising — a provenance field must
+    never be why a campaign dies.
+    """
+    import inspect
+
+    parts = [f"construction={construction}"]
+    primary = getattr(experiment, "primary", None)
+    if primary is not None:
+        parts.append(
+            f"primary={getattr(primary, 'name', '')}:{getattr(primary, 'unit', '')}"
+        )
+    parts.append("secondaries=" + ",".join(
+        f"{spec.name}:{getattr(spec, 'unit', '')}"
+        for spec in getattr(experiment, "secondaries", ())
+    ))
+    parts.append("values=" + ",".join(
+        str(v) for v in getattr(experiment, "values", ())
+    ))
+    for method in ("prepare", "measure"):
+        fn = getattr(experiment, method, None)
+        try:
+            parts.append(f"{method}={inspect.getsource(fn)}" if fn else f"{method}=")
+        except (OSError, TypeError):
+            parts.append(f"{method}=unavailable")
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
 def build_metadata(
     config: scheme_config.Configuration,
     *,
@@ -518,6 +573,7 @@ def build_metadata(
     secondary_metrics: Optional[Sequence[str]] = None,
     construction: str = "option_d",
     ledger_backend: str = "unknown",
+    experiment_object: Any = None,
 ) -> RunMetadata:
     """Assemble ``run_meta.json`` at the start of a run."""
     reportable, reasons = reportability(
@@ -581,6 +637,10 @@ def build_metadata(
         secondary_metrics=list(secondary_metrics or ()),
         construction=construction,
         ledger_backend=ledger_backend,
+        measurement_fingerprint=(
+            measurement_fingerprint(experiment_object, construction)
+            if experiment_object is not None else "unavailable"
+        ),
     )
 
 

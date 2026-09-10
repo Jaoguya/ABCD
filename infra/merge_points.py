@@ -223,11 +223,13 @@ def merge(base: Path, *, dry_run: bool = False) -> int:
         writer.writeheader()
         writer.writerows(rows)
 
-    # Column NAMES for the aggregate are scheme-specific and are not
-    # recoverable from raw_runs.csv: ma_lb writes `secondary_1_mean` while the
-    # other schemes write the metric's real name (`trapdoors_issued_mean`).
-    # Take them from a shard's own results.csv and map positionally, so the
-    # merged file is byte-compatible with what Plots/generate_plots.py reads.
+    # Column NAMES for the aggregate are not recoverable from raw_runs.csv, so
+    # take them from a shard's own results.csv and map positionally; the merged
+    # file is then byte-compatible with whatever the shard wrote.
+    #
+    # Every scheme now writes the metric's real name (`trapdoors_issued_mean`).
+    # ma_lb_pq_vdse wrote `secondary_1_mean` until 2026-09-10 -- this copies the
+    # shard's own header either way, so banked positional shards still merge.
     _refuse_projected(shards)
     _reaggregate(rows, base / "results.csv",
                  template=_result_columns(shards[0]))

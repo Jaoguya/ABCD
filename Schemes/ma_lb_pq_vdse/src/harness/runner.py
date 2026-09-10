@@ -394,12 +394,43 @@ def write_raw_runs(result: ExperimentResult, path: Path) -> Path:
 
 
 def write_results(result: ExperimentResult, path: Path) -> Path:
-    """``results.csv`` — the aggregate ``Plots/generate_plots.py`` reads."""
+    """``results.csv`` — the aggregate ``Plots/generate_plots.py`` reads.
+
+    COLUMNS ARE NAMED AFTER THEIR METRIC, not numbered.
+
+    This wrote ``secondary_1_mean``, ``secondary_2_mean``, … which put the
+    meaning of a column somewhere other than the column — in the order of
+    ``experiment.secondaries``, which is code, not data. Every reader then had
+    to bind position to meaning by convention, and nothing checked the binding.
+    That is the mechanism behind a recurring family of defects in this repo:
+
+    * Fig. 8(c) drew ``secondary_2`` captioned "Cross-node forwards" when the
+      banked column was ``max_queue_depth`` — the metric list had gained an
+      entry and the figure kept its position;
+    * `Exp4Verification` "counted index entries under a caption reading
+      'returned results'";
+    * a `psa_exp3` reference curve compared trapdoors against tokens.
+
+    Naming the column makes the binding data rather than convention: a reader
+    asks for ``cross_node_forwards_mean`` and a file that does not have it
+    fails loudly instead of silently yielding whatever sits at that index.
+    **Three of the four baselines already write named columns** (`guo_vdsse`,
+    `yue_ge`, `perera_lv_pqabse`), so this conforms the proposed scheme to the
+    convention already in the repo rather than inventing one.
+
+    The ``secondary_N`` padding to ``MIN_SECONDARY_COLUMNS`` is dropped with it:
+    it existed to keep a fixed column count, which only mattered while columns
+    were addressed by number.
+
+    RESULTS-AFFECTING for readers, not for values: every banked
+    ``results.csv`` still holds the numbers it always did, but its columns are
+    named the old way. `Plots/generate_plots.py` reads by name and falls back to
+    position for those, saying so.
+    """
     names = [spec.name for spec in result.experiment.secondaries]
-    count = _secondary_count(names)
     columns = ["variable_value", "primary_mean", "primary_ci95"]
-    for index in range(1, count + 1):
-        columns += [f"secondary_{index}_mean", f"secondary_{index}_ci95"]
+    for name in names:
+        columns += [f"{name}_mean", f"{name}_ci95"]
     columns.append("n_runs")
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -413,13 +444,12 @@ def write_results(result: ExperimentResult, path: Path) -> Path:
                 "primary_ci95": f"{point.primary.ci95:.6f}",
                 "n_runs": point.retained,
             }
-            for index in range(1, count + 1):
-                name = names[index - 1] if index <= len(names) else None
-                summary = point.secondaries.get(name) if name else None
-                row[f"secondary_{index}_mean"] = (
+            for name in names:
+                summary = point.secondaries.get(name)
+                row[f"{name}_mean"] = (
                     "" if summary is None else f"{summary.mean:.6f}"
                 )
-                row[f"secondary_{index}_ci95"] = (
+                row[f"{name}_ci95"] = (
                     "" if summary is None else f"{summary.ci95:.6f}"
                 )
             writer.writerow(row)

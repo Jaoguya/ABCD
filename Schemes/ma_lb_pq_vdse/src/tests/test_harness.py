@@ -306,7 +306,22 @@ def test_raw_runs_leaves_unused_secondary_columns_blank():
     assert rows[0]["secondary_metric_2"] == ""      # none declared
 
 
-def test_results_columns_match_readme_section_9():
+def test_results_columns_are_named_after_their_metric():
+    """Columns carry the METRIC'S NAME, not its position.
+
+    This asserted `secondary_1_mean`, `secondary_2_mean`, ... — a layout that
+    put a column's meaning in the ORDER of `experiment.secondaries` rather than
+    in the column, so every reader bound position to meaning by convention and
+    nothing checked the binding. That is the mechanism behind a recurring family
+    of defects here: Fig. 8(c) captioned `max_queue_depth` as "Cross-node
+    forwards" after the metric list gained an entry and every later column
+    shifted under a panel that kept its index.
+
+    Three of the four baselines already wrote named columns, so this is the
+    repo's own majority convention rather than a new one. The padding to two
+    columns went with it: it existed only to keep a fixed column count, which
+    mattered only while columns were addressed by number.
+    """
     directory, _ = written_outputs(ScriptedExperiment(samples=[1.0, 2.0, 3.0]))
     with (directory / "results.csv").open() as handle:
         reader = csv.DictReader(handle)
@@ -314,10 +329,8 @@ def test_results_columns_match_readme_section_9():
             "variable_value",
             "primary_mean",
             "primary_ci95",
-            "secondary_1_mean",
-            "secondary_1_ci95",
-            "secondary_2_mean",
-            "secondary_2_ci95",
+            "secondary_a_mean",
+            "secondary_a_ci95",
             "n_runs",
         ]
         rows = list(reader)
@@ -356,9 +369,11 @@ def test_a_third_secondary_reaches_results_csv():
     directory, _ = written_outputs(ThreeSecondaryExperiment(samples=[1.0, 2.0]))
     with (directory / "results.csv").open() as handle:
         reader = csv.DictReader(handle)
-        assert "secondary_3_mean" in (reader.fieldnames or [])
+        # By NAME: the third metric is `secondary_c`, and a column named for
+        # it cannot be confused with whichever metric happens to sit third.
+        assert "secondary_c_mean" in (reader.fieldnames or [])
         rows = list(reader)
-    assert float(rows[0]["secondary_3_mean"]) == 9.0
+    assert float(rows[0]["secondary_c_mean"]) == 9.0
 
 
 def test_a_third_secondary_reaches_raw_runs_csv():
