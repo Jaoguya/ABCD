@@ -106,13 +106,6 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
 
 ## D. Hygiene
 
-- [ ] **D1 Commit the modified files** with findings and evidence in the
-      message, per `CLAUDE.md`.
-- [ ] **D2 Migrate durable findings to `SystemConfiguration.md` §10.** The audit
-      currently lives in `~/.claude/plans/`, **outside the repo** — the next
-      person will never see it. Also correct entries this session resolved
-      (`secondary_metrics` is no longer absent from new runs; the construction
-      question is decided).
 - [ ] **D3 Fix 97 dangling citations to five deleted documents** — `SCHEME.md`
       (39), `README.md` (21), `MANUSCRIPT_DIVERGENCE.md` (15),
       `PHASE_IV_PLAN.md` (13), `PHASE_III_PLAN.md` (9). Every one sends a
@@ -144,6 +137,18 @@ This is the first run that is *meaningfully* green. Earlier "green" runs were
 little. Both now assert exact quantities. Treat any failure from here as real.
 
 ## Done (kept as the evidence trail until this file is deleted)
+
+- [x] **D1 Committed** as `3114495` — named columns, fingerprint, `domains: 4`,
+      the UTF-8 crash, `parse_experiments`, `collect()` folder precedence and
+      both de-flaked tests, with evidence and results-affecting flags in the
+      message. Tree clean.
+- [x] **D2 Findings migrated to `SystemConfiguration.md` §10.** Eight new
+      entries (Table I errors, the unachievable q=5 conjunctive claim, the
+      unfalsifiable selectivity claim, the PSA track's missing AIM check, two
+      §V Exp. 6 corrections, Exp. 5's zero, 97 dangling citations, the parked
+      cross-node-forward decision) and two corrected
+      (`secondary_metrics`; the construction question, now decided: PSA).
+      `test_document_config_agreement` green.
 
 - [x] **A1 `domains: 4`** — `build_deployment`, `psa_build_deployment` and
       `PsaExp1`'s `corpus_world` call now default to

@@ -378,8 +378,10 @@ Verified 2026-09-08 against the repo, not carried over from the previous version
   the runner passes none).
 - **BLAS was never pinned in any banked run** — 114 files, 0 pinned, 103 stamped
   reportable (§2).
-- **`secondary_metrics` is absent from all 114 `run_meta.json`**, so the
-  panel-label agreement check in `generate_plots.py` can verify no figure.
+- **`secondary_metrics` is absent from all 114 banked `run_meta.json`**, so the
+  panel-label check can verify no BANKED figure. *(2026-09-10: current code
+  writes it, and `results.csv` now names its columns after the metric, so new
+  runs are checkable by name. The gap is the banked data, closed by a re-run.)*
 - **Four of five schemes never read `global.yaml`.** Their `--runs`, `q` and
   sweep lists are Python literals that happen to match, and `yue_ge` searches a
   single keyword where §VI states a five-keyword conjunctive query.
@@ -405,13 +407,81 @@ Verified 2026-09-08 against the repo, not carried over from the previous version
   −2.28 / −0.40%, exceeding 2% at three points with disjoint 95% CIs. Both
   cannot be the basis of one sentence. Re-derive from `raw_runs.csv` before
   defending it.
-- **The construction question is open.** The code implements `T = H(w)`; the
-  manuscript specifies `T = H(w || PID || PV || Dom)` and proves their equality
-  as a theorem. These are two different schemes. Adopting the manuscript's form
-  invalidates every banked number; keeping the code's form means the manuscript
-  loses its Policy-State Non-Interference theorem, which a scalar version
-  counter cannot express. Nothing else in this file resolves that — it is a
-  decision, not a defect.
+- **Table I contains verified errors, and ten rows cannot be checked here.**
+  Audited against the PDFs (2026-09-10): the `ref54` row is wrong in two of
+  seven columns — Blockchain Audit and Multi-Keyword Search are both `x` where
+  that paper's own contribution claim is *"the first lattice-based ABSE
+  framework that supports multikeyword, Boolean, fuzzy, and numeric range
+  queries"* and its Merkle proofs are *"anchored on a blockchain"*. Both errors
+  understate a baseline in the proposed scheme's own comparison table. The
+  `ref35` and `ref41` rows are correct — including `ref41`'s Lattice/PQ `x`,
+  which is right on the maths (its security rests on **DBDH**, which Shor
+  breaks) despite the paper being titled "Post-Quantum". But the prose
+  CONTRADICTS that at two places, listing `ref41` among lattice/PQ approaches.
+  **[30] (Peony++) has no row at all** though it is a baseline in Exps. 1-5,
+  while `ref52` has one and is not in the repo. The other ten rows have no PDF
+  in `References/` and are unverifiable from here — two errors were found in
+  the one row audited closely.
+
+- **SVI's "q=5 conjunctive query used throughout this section" is
+  unachievable.** Read from the PDFs: [30] is single-keyword by construction
+  (*"query q = (w, alpha(u)) … single keyword queries"*, and it names
+  conjunctive search as an open problem it has not solved), and [41] likewise
+  (*"DU inputs … the keyword w_w they wish to search"*, one keyword per file
+  index). [35] and [54] are genuinely conjunctive/multikeyword. **The harnesses
+  are faithful in every case; the sentence is what must change** — SVI should
+  state the query shape per scheme.
+
+- **SVI Exp. 2's selectivity claim is unfalsifiable from banked data.** No
+  baseline records a match count: `n_eff` means matched entries for the
+  proposed scheme, `entries_traversed + forward_evals` for [35], tree nodes for
+  [30], candidates examined for [54], and [41] records none. Dividing a
+  traversal counter by N is not a selectivity. Add a `matched_records`
+  secondary to all five, or drop the "selectivity is kept constant" sentence.
+
+- **The PSA track omits the AIM authorization check that SVI puts inside the
+  measured path.** `PsaExp2` and `PsaExp3` run token derivation plus
+  `index.lookup`; Option D's Exp. 2/3 also run `verify_search_request`, and
+  Exp. 7-8 run it in both tracks. SVI Exp. 3: *"The AIM first validates the
+  current VAP and derives policy-state-aware tokens…"*. Wiring it in is Phase
+  III work (`PsaDeployment` has no AIM, VAP or resolver) and moves `psa_exp2`,
+  which is currently reportable.
+
+- **SV Exp. 6 needs two corrections.** The DIAS-vs-Incremental-All advantage is
+  in **delivered bytes, not latency** — measured 3.52 / 14.06 / 141.05 KB
+  (deterministic) against a ~2% latency gap that is noise in both directions.
+  And the narrowing toward a full affected-ratio is **not total**: evolution
+  work converges exactly (10x -> 1x) while delivery does not (40x -> 4x), so
+  the incremental advantage vanishes at 100% and the selective one survives.
+
+- **Exp. 5's `entries_rewritten` is 0 in banked data and 6 per record today.**
+  Three causes eliminated by direct execution: stale code (the banked commit
+  returns 6 too), topology (4- and 10-domain builds both rewrite), and message
+  construction. Isolated to the corpus path, which needs the AWS host —
+  `Dataset/derived/corpus.jsonl` is gitignored and exists only on the AMI.
+
+- **97 citations point at five deleted documents**: `SCHEME.md` (39),
+  `README.md` (21), `MANUSCRIPT_DIVERGENCE.md` (15), `PHASE_IV_PLAN.md` (13),
+  `PHASE_III_PLAN.md` (9). Section 8's "two prose files" rule exists because of
+  exactly this, and cites 338 from the `README.md` deletion as history — it is
+  not history. Every one of these sends a reader to a file that does not exist.
+
+- **The cross-node-forward metric is 0 for AASS by construction.**
+  `scheduler/aass.py` increments `forwards` only in the non-AASS branch, and
+  the three oblivious arms are handed a pool "deliberately not filtered by
+  `S_j`". So Fig. 8(c) measures the arm definitions rather than scheduler
+  quality. Either give all four arms the same eligibility filter and report the
+  honest difference, or drop the metric and SV's sentence reading it as
+  evidence. **Open decision, parked by the user 2026-09-10.**
+
+- **The construction question is DECIDED (2026-09-10): PSA.** The code
+  implements `T = H(w)`; the manuscript specifies
+  `T = H(w || PID || PV || Dom)`. These are two different schemes, and Fig. 1
+  was drawn from the PSA track while Figs. 2-8 came from Option D. Resolved in
+  the manuscript's favour: **PSA is canonical, `option_d` stops feeding any
+  figure, and every banked Option-D number behind Figs. 2-8 is superseded.**
+  `run_meta.json` now records `construction`, and `generate_plots.py` refuses a
+  figure that mixes two. Remaining work is tracked outside this file.
 
 ---
 
