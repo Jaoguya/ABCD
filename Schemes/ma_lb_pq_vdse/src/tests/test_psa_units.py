@@ -39,18 +39,32 @@ def config():
     return scheme_config.load()
 
 
+@pytest.fixture
+def source():
+    """The record source the corpus-backed PSA experiments need.
+
+    Exps. 3, 4 and 5 became corpus-backed on 2026-09-10 when they stopped
+    inventing `kw:00042` keywords and `hospital/pol0` policies. Exp. 6 takes one
+    for its vocabulary but stipulates its policy topology, so it is not
+    CORPUS_BACKED — see `PsaExp6AffectedRatio.policy_population`.
+    """
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as option_d_mod
+
+    return option_d_mod.SyntheticRecordSource()
+
+
 # ===========================================================================
 # Exp. 5 — the swept k must be the work done, in BOTH constructions
 # ===========================================================================
 @pytest.mark.parametrize("k", [100, 1000])
-def test_psa_exp5_retokenizes_the_k_it_was_asked_for(config, k):
+def test_psa_exp5_retokenizes_the_k_it_was_asked_for(config, source, k):
     """The x-axis is (keyword, document) pairs; so must the work be.
 
     Sized by affected entries rather than by total entries: records whose
     policy no governing authority touches are still built (the skip path is
     part of what Exp. 5 times) but do not count toward ``k``.
     """
-    experiment = psa.PsaExp5ReTokenization(config=config)
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     sample = experiment.measure(experiment.prepare(k))
     applied = sample.secondaries["entries_retokenized"]
     assert applied >= k, (
@@ -63,13 +77,13 @@ def test_psa_exp5_retokenizes_the_k_it_was_asked_for(config, k):
     assert applied < k + experiment.keywords_per_record
 
 
-def test_psa_exp5_still_exercises_the_unaffected_path(config):
+def test_psa_exp5_still_exercises_the_unaffected_path(config, source):
     """Sizing by affected entries must not turn the pool all-dependent.
 
     If every record were governed by the moved authority, eq:unaffected-policy
     would never be taken and Exp. 5 would silently stop measuring the skip.
     """
-    experiment = psa.PsaExp5ReTokenization(config=config)
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     prepared = experiment.prepare(experiment.values[0])
     world = prepared["world"]
     moved = sorted(world.authorities.values())[0]
@@ -81,7 +95,7 @@ def test_psa_exp5_still_exercises_the_unaffected_path(config):
 
 
 @pytest.mark.parametrize("k", [100, 1000])
-def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, k):
+def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, source, k):
     """The cross-check that makes the two Exp. 5 curves comparable.
 
     ``psa/__init__.py`` says the two curves "against the same ``k``" are the
@@ -93,7 +107,7 @@ def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, k):
     theirs = option_d.build_experiment(
         5, config, option_d.SyntheticRecordSource()
     )
-    ours = psa.PsaExp5ReTokenization(config=config)
+    ours = psa.PsaExp5ReTokenization(config=config, source=source)
     rewritten = theirs.measure(theirs.prepare(k)).secondaries["entries_rewritten"]
     retokenized = ours.measure(ours.prepare(k)).secondaries["entries_retokenized"]
     assert abs(rewritten - retokenized) <= ours.keywords_per_record, (
@@ -106,7 +120,7 @@ def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, k):
 # ===========================================================================
 # Exp. 6 — what the PRIMARY metric can and cannot separate
 # ===========================================================================
-def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
+def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config, source):
     """§VI Exp. 6, as an ordering the figure must show.
 
     The manuscript defines three configurations and claims a strict ranking:
@@ -122,7 +136,7 @@ def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
     """
     def arm(variant, ratio):
         import statistics
-        experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant)
+        experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant, source=source)
         prepared = experiment.prepare(ratio)
         for _ in range(2):
             experiment.measure(prepared)          # warm
@@ -165,7 +179,7 @@ def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
     # SV must therefore say the selective advantage is in BYTES, not in time.
 
 
-def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config):
+def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config, source):
     """§VI: the advantage "narrows because a larger portion of the system
     becomes dependency relevant".
 
@@ -189,7 +203,7 @@ def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config):
     def work_at(affected):
         out = {}
         for variant in (psa.VARIANT_DIAS, psa.VARIANT_FULL_STATE):
-            experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant)
+            experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant, source=source)
             prepared = experiment.prepare(affected)
             out[variant] = experiment.measure(prepared).secondaries
         return out
@@ -217,14 +231,14 @@ def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config):
     )
 
 
-def test_psa_exp6_fsns_touched_is_the_affected_node_set(config):
+def test_psa_exp6_fsns_touched_is_the_affected_node_set(config, source):
     """``F_k^aff``, the last link of the dependency chain — DISTINCT nodes.
 
     It accumulated `fan_out` per evolved policy before, reporting 160 "FSNs
     touched" on a four-node deployment. Option D's metric of the same name
     counts nodes, so the two were not the same quantity under one label.
     """
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -245,7 +259,7 @@ def test_psa_exp6_fsns_touched_is_the_affected_node_set(config):
     )
 
 
-def test_psa_exp6_full_state_redistributes_authority_state(config):
+def test_psa_exp6_full_state_redistributes_authority_state(config, source):
     """§VI: Full-State propagates the authorization/index state to ALL FSNs.
 
     The index half is the policy loop. The authorization half is every OTHER
@@ -258,7 +272,7 @@ def test_psa_exp6_full_state_redistributes_authority_state(config):
     payload is small next to 40 policies' entries, so a hardcoded KB figure
     would be brittle without being any more informative.
     """
-    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -273,9 +287,9 @@ def test_psa_exp6_full_state_redistributes_authority_state(config):
     )
 
 
-def test_psa_exp6_full_state_stays_flat_across_the_ratio(config):
+def test_psa_exp6_full_state_stays_flat_across_the_ratio(config, source):
     """Its cost does not depend on how little changed — that is the point."""
-    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     delivered = {
         round(full.measure(full.prepare(r)).secondaries["delivered_kb"], 3)
         for r in full.values
@@ -283,7 +297,7 @@ def test_psa_exp6_full_state_stays_flat_across_the_ratio(config):
     assert len(delivered) == 1, f"Full-State payload varied with the ratio: {delivered}"
 
 
-def test_psa_exp6_delivered_bytes_are_summed_per_delivery(config):
+def test_psa_exp6_delivered_bytes_are_summed_per_delivery(config, source):
     """Never `payload x fan_out` — the derivation experiments.py records as wrong.
 
     Measured per delivery, so an arm whose messages differ in size cannot be
@@ -291,7 +305,7 @@ def test_psa_exp6_delivered_bytes_are_summed_per_delivery(config):
     where DIAS sends it to the affected ones, so the ratio must track the node
     counts the run actually reports.
     """
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -486,7 +500,7 @@ def _source():
     return option_d_mod.SyntheticRecordSource()
 
 
-def test_psa_deployment_reads_the_same_source_as_option_d(config):
+def test_psa_deployment_reads_the_same_source_as_option_d(config, source):
     """The whole point of the seam.
 
     Before this, every PSA number came from `build_world()` — invented
@@ -555,7 +569,7 @@ def test_psa_exp2_issues_q_times_pu_tokens(config):
     assert issued % q == 0
 
 
-def test_psa_exp2_shares_fewer_posting_lists_than_option_d(config):
+def test_psa_exp2_shares_fewer_posting_lists_than_option_d(config, source):
     """The measured cost of D1 on index structure.
 
     Option D's `H(w)` shares one posting list across every record carrying the
@@ -643,7 +657,7 @@ def test_psa_exp7_shards_hold_psa_entries_and_tokens_scale_with_pu(config):
     assert len(trapdoor.tokens) > q
 
 
-def test_psa_exp7_uses_the_same_keyword_count_as_option_d(config):
+def test_psa_exp7_uses_the_same_keyword_count_as_option_d(config, source):
     """Otherwise the comparison measures two workloads, not two constructions.
 
     A draft took q=5 here while Option D's trace takes one keyword, and the
@@ -672,7 +686,7 @@ def test_psa_exp8_shares_the_ablation_and_its_metrics(config):
     assert ours.variable == theirs.variable
 
 
-def test_both_exp7_traces_use_the_published_q(config):
+def test_both_exp7_traces_use_the_published_q(config, source):
     """README §6 fixes q=5 from §VI; the trace used ONE keyword until 2026-09-06.
 
     Asserted for BOTH constructions, because the moment they differ the Exp. 7

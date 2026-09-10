@@ -42,10 +42,23 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
 
 ## A. Decided, not yet done
 
+> **DECIDED 2026-09-10 — migrate to PSA and retire `option_d`.** The twin
+> structure is a defect generator, not a safety net. Five defects this session
+> trace to it: the `collect()` bug (two folders per experiment number), a fix
+> that "never reached this twin" (`psa_experiments.py:559`), a cold-vs-warm
+> comparison across two different measurement boundaries, `parse_experiments`
+> diverging on 9 vs 10, and finding 1.A itself — Fig. 1 from PSA against
+> Figs. 2-8 from Option D.
+>
+> **Order matters: `option_d` currently produces seven of the eight manuscript
+> figures.** Deleting it before PSA covers all eight leaves the paper with no
+> figures. Sequence: **A2** (ports) -> **A7** (repoint) -> **B2** (campaign) ->
+> then delete `option_d` as A10.
 
-- [ ] **A2 Port `PsaExp3CrossDomainTokens`, `PsaExp4`, `PsaExp5`, `PsaExp6`**
-      onto `CorpusRecordSource` via `corpus_world()`.
-      (`PsaExp1/2/7/8` already are.)
+- [ ] **A10 Delete `option_d` once PSA covers all eight figures and B2 has
+      run.** Not before: it is the only track that works end to end today.
+
+
 - [ ] **A3 Re-source Fig. 6 from `psa_exp6_affected_ratio`.** §VI's Exp. 6 text
       and caption describe an affected-policy-ratio sweep (10–100%); the
       included figure is the δ = 10²–10⁵ sweep.
@@ -137,6 +150,41 @@ This is the first run that is *meaningfully* green. Earlier "green" runs were
 little. Both now assert exact quantities. Treat any failure from here as real.
 
 ## Done (kept as the evidence trail until this file is deleted)
+
+- [x] **Cross-node forwards, per §VI's definition, applied to ALL FOUR arms.**
+      The counter sat inside the non-AASS branch, so AASS scored 0 *by
+      construction*. Moved out; §VI's definition is scheduler-agnostic.
+      Measured after: **aass 0, no_lb 288, round_robin 168, least_loaded 288.**
+      AASS still reads 0 — but now because its eligibility guard never
+      misplaces a shard, which is a measurement rather than a tautology.
+- [x] **`matched_records` added to all five schemes' Exp. 2.** §VI claims
+      "query selectivity is kept constant" and nothing recorded the quantity
+      that claim is about: `n_eff` means matched entries for the proposed
+      scheme, `entries_traversed + forward_evals` for [35], tree nodes for [30],
+      candidates examined for [54], and [41] had none. All five now emit the
+      match count under one name, so selectivity is comparable across Fig. 2's
+      shared axis for the first time.
+      [41] needed its `Measurement`/`Run` widened to a third secondary and its
+      hardcoded CSV header extended. Verified in `results.csv`.
+      Regression **900 passed / 5 skipped / 0 failed**.
+
+- [x] **A2 the four PSA corpus ports.** `PsaExp3CrossDomainTokens`, `PsaExp4`
+      and `PsaExp5` are now `CORPUS_BACKED`, drawing policies and keywords from
+      the corpus instead of inventing `hospital/pol0` and `kw:00042`.
+      Verified: Exp. 3 tokens `q*d` (10 at d=2, 20 at d=4) with Option D flat at
+      q=5; Exp. 5 retokenizes 102 at k=100 and 1002 at k=1000, unchanged from
+      banked, so the port preserved behaviour.
+      Two hardcoded `keywords_per_record = 6` constants replaced by the source's
+      own figure — the frozen corpus's mean |W_i| is **31.70**, so both were
+      wrong by ~5x, and in Exp. 4 that constant sets the Merkle leaf count the
+      proof paths are measured against.
+      **`PsaExp6` is deliberately NOT `CORPUS_BACKED`** — it takes the corpus
+      vocabulary but must stipulate its policy topology, because it sets the
+      governing sets itself to make the affected ratio exact, and because
+      `extract` yields **8** policies at four domains where §VI's 10% step needs
+      at least ten. Documented in `policy_population`; §VI must say the arm's
+      policy dimension is constructed.
+      Regression **900 passed / 5 skipped / 0 failed**.
 
 - [x] **D1 Committed** as `3114495` — named columns, fingerprint, `domains: 4`,
       the UTF-8 crash, `parse_experiments`, `collect()` folder precedence and

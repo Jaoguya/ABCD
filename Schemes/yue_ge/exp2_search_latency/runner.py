@@ -62,7 +62,8 @@ from ..src.workload import build_workload, index_workload, seed_deletions, selec
 from infra import sweep
 
 EXPERIMENT_NAME = "exp2"
-SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio"]
+SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio",
+                   "matched_records"]
 
 VARIABLE_RANGE = [10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000]
 
@@ -185,6 +186,13 @@ def run(
                 "n_eff": out.nodes_traversed,
                 "entries_traversed": out.nodes_traversed + out.table_lookups,
                 "prune_ratio": round(prune, 6),
+                # SVI Exp. 2 claims "query selectivity is kept constant",
+                # and nothing recorded the quantity that claim is about.
+                # `n_eff` means something different in every scheme, so it could
+                # not be used to check it. This is the match count, defined the
+                # same way in all five, so selectivity is finally comparable
+                # across Fig. 2's shared axis.
+                "matched_records": len(out.result_ids),
             },
         )
 

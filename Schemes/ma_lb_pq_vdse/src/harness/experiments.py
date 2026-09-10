@@ -722,6 +722,12 @@ class Exp2SearchLatency:
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("n_eff", COUNT),
         MetricSpec("entries_traversed", COUNT),
+        # THE SAME QUANTITY AS `n_eff` HERE, under the name the other four
+        # schemes now use. `n_eff` is not comparable across schemes -- matched
+        # entries here, traversal counters in [30]/[35]/[54] -- so SVI Exp. 2's
+        # "query selectivity is kept constant" could not be checked against it
+        # in either direction. Emitted under a name that means one thing.
+        MetricSpec("matched_records", COUNT),
     )
 
     def __post_init__(self) -> None:
@@ -875,6 +881,7 @@ class Exp2SearchLatency:
             secondaries={
                 "n_eff": float(response.n_eff),
                 "entries_traversed": float(response.statistics.entries_traversed),
+                "matched_records": float(response.n_eff),
             },
         )
 

@@ -38,7 +38,8 @@ from infra import sweep
 
 
 EXPERIMENT_NAME = "exp2"
-SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio"]
+SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio",
+                   "matched_records"]
 
 # Index sizes — log scale from 10^4 to 10^6 (README §5)
 # CAPPED at 2*10^5 on 2026-08-29 -- a hardware limit, disclosed, not a choice.
@@ -326,6 +327,14 @@ def run(
                 "n_eff": n_eff,
                 "entries_traversed": search_result.entries_traversed,
                 "prune_ratio": round(prune_ratio, 6),
+                # SVI Exp. 2 claims "query selectivity is kept constant",
+                # and nothing in this repo recorded the quantity that claim is
+                # about. `n_eff` means something DIFFERENT in every scheme --
+                # matched entries here, traversal counters there -- so it could
+                # not be used to check it. This is the match count, defined the
+                # same way in all five schemes, so selectivity is finally
+                # comparable across the shared axis of Fig. 2.
+                "matched_records": len(search_result.result_ids),
             },
         )
 

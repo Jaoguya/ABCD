@@ -506,10 +506,16 @@ class PsaExp3CrossDomainTokens:
     """
 
     config: scheme_config.Configuration
+    source: Any
     name: str = "psa_exp3_crossdomain_tokens"
-    number: int = 3
+    number: int = 10
     variable: str = "domains"
     values: Tuple[Any, ...] = ()
+    #: Reads the corpus for its policies and vocabulary, so it inherits the
+    #: corpus provenance and can be reportable. It invented `hospital/pol0` and
+    #: `kw:00042` until 2026-09-10, which prices the CONSTRUCTION and nothing
+    #: else — which is why `psa_in_process` is refused by the reportability gate.
+    CORPUS_BACKED: ClassVar[bool] = True
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("tokens_issued", COUNT),
@@ -523,12 +529,33 @@ class PsaExp3CrossDomainTokens:
 
     def prepare(self, value: Any) -> Any:
         domain_count = int(value)
-        world = build_world(domains=domain_count, policies_per_domain=1)
-        keywords = [f"kw:{i:05d}" for i in range(self.config.defaults.keywords_per_query)]
+        # POLICIES AND KEYWORDS FROM THE CORPUS, not invented. `corpus_world`
+        # derives every governing set from the real `<domain>/polN` ids
+        # `extract` produces, so each `PV_ell` is the corpus's own.
+        world, vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS, domains=domain_count
+        )
+        q = max(1, int(self.config.defaults.keywords_per_query))
+        if len(vocabulary) < q:
+            raise RuntimeError(
+                f"corpus vocabulary has {len(vocabulary)} keywords, need {q}"
+            )
+        rng = DeterministicRNG(EXP1_KEYWORD_SEED).spawn(f"psa_exp3/d={value}")
+        keywords = list(rng.choice(list(vocabulary), size=q, replace=False))
+        # ONE AUTHORIZED POLICY PER DOMAIN, so |P_U| = d and the token count is
+        # q*d — the D9 contrast this experiment exists to report. Taking every
+        # corpus policy instead would make |P_U| = policies_per_domain * d and
+        # the curve would measure the corpus's policy density, not the token.
+        by_domain: Dict[str, str] = {}
+        for policy in world.policies:
+            by_domain.setdefault(policy.split("/", 1)[0], policy)
+        scopes = [
+            world.scope(by_domain[d]) for d in world.domains if d in by_domain
+        ]
         return dict(
             scheme=_keyed_scheme(),
             keywords=keywords,
-            scopes=[world.scope(p) for p in world.policies],
+            scopes=scopes,
             domains=domain_count,
         )
 
@@ -720,18 +747,26 @@ class PsaExp5ReTokenization:
     """
 
     config: scheme_config.Configuration
+    source: Any
     name: str = "psa_exp5_retokenization"
     number: int = 5
     variable: str = "keyword_document_pairs"
     values: Tuple[Any, ...] = ()
+    #: Reads the corpus, so it inherits corpus provenance.
+    CORPUS_BACKED: ClassVar[bool] = True
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("entries_retokenized", COUNT),
         MetricSpec("merkle_nodes_recomputed", COUNT),
         MetricSpec("commitments_rebuilt", COUNT),
     )
-    #: Keywords per record, matching the frozen corpus's mean |W_i|.
-    keywords_per_record: int = 6
+    #: WAS a hardcoded 6, commented "matching the frozen corpus's mean |W_i|".
+    #: The frozen corpus's mean is **31.70** (`dataset_manifest.json`), so the
+    #: constant was wrong by ~5x and this experiment sized its record pool from
+    #: it. Read from the source, which reports the manifest's own figure.
+    @property
+    def keywords_per_record(self) -> int:
+        return max(1, int(getattr(self.source, "keywords_per_record", 6)))
 
     def __post_init__(self) -> None:
         if not self.values:
@@ -739,8 +774,19 @@ class PsaExp5ReTokenization:
 
     def prepare(self, value: Any) -> Any:
         pairs = int(value)
-        world = build_world()
+        # REAL policies and REAL keyword co-occurrence. This invented both
+        # (`hospital/pol0`, `kw:00042`), which prices the construction and
+        # nothing else — the reason the banked runs are `psa_in_process`.
+        world, _vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            domains=int(self.config.defaults.domains),
+        )
         scheme = _keyed_scheme()
+        corpus_records = list(
+            self.source.records(
+                EXP1_SAMPLE_RECORDS, domains=int(self.config.defaults.domains)
+            )
+        )
         # The pool is sized by the AFFECTED entries, not by every entry built.
         # `measure` skips records no governing authority touched (that skip IS
         # eq:unaffected-policy), so sizing at ceil(k / |W_i|) records left the
@@ -757,14 +803,12 @@ class PsaExp5ReTokenization:
         rid = -1
         while affected_entries < pairs:
             rid += 1
-            policy = world.policies[rid % len(world.policies)]
+            corpus_record = corpus_records[rid % len(corpus_records)]
+            policy = corpus_record.policy_id
             domain = policy.split("/", 1)[0]
             pv = world.pv(policy)
             cid = f"bafyPSA{rid:08d}"
-            keywords = [
-                f"kw:{(rid * self.keywords_per_record + k) % 2006:05d}"
-                for k in range(self.keywords_per_record)
-            ]
+            keywords = list(dict.fromkeys(corpus_record.keywords))
             entries = [
                 psa_records.PolicyStateIndexEntry(
                     token=scheme.index_token(w, policy_id=policy, pv=pv, domain=domain),
@@ -784,7 +828,9 @@ class PsaExp5ReTokenization:
                 )
             )
             if moved in world.governance.governing(policy):
-                affected_entries += self.keywords_per_record
+                # The record's OWN entry count, not a nominal constant: with the
+                # corpus, |W_i| varies per record (5..64, mean 31.70).
+                affected_entries += len(entries)
         return dict(world=world, scheme=scheme, records=records, pairs=pairs)
 
     def measure(self, prepared: Any) -> Sample:
@@ -940,6 +986,9 @@ class PsaExp6AffectedRatio:
     """
 
     config: scheme_config.Configuration
+    #: Optional: supplies the keyword vocabulary. The policy topology is
+    #: stipulated regardless, so this arm is not CORPUS_BACKED.
+    source: Any = None
     name: str = "psa_exp6_affected_ratio"
     number: int = 6
     variable: str = "affected_policy_ratio"
@@ -953,6 +1002,26 @@ class PsaExp6AffectedRatio:
         MetricSpec("fsns_touched", COUNT),
     )
     #: Policy population. Large enough that a 10% step is a whole number.
+    #: The policy population the ratio is taken over.
+    #:
+    #: **WHY THIS IS STIPULATED AND NOT READ FROM THE CORPUS.** This experiment
+    #: sets the governing sets itself (`with_overrides` below) so that exactly
+    #: `ratio` of policies depend on the moved authority — that control IS the
+    #: measurement. It therefore cannot inherit the corpus's policy topology.
+    #:
+    #: It also cannot inherit its policy COUNT. `extract` assigns
+    #: `policies_per_domain=2`, so the corpus yields **8** policies at §VI's
+    #: four domains, and §VI Exp. 6 sweeps the affected ratio "from 10% to
+    #: 100%" — 10% of 8 is one policy, i.e. 12.5%. The sweep's lowest point is
+    #: not representable on the corpus's own policy set, so a population of 40
+    #: is stipulated to make 10% exact.
+    #:
+    #: Consequence, stated rather than hidden: this arm is **not**
+    #: `CORPUS_BACKED`. Its keywords are the corpus's (below), but its policy
+    #: dimension is constructed, so it prices the DIAS propagation rule and not
+    #: the corpus. That is legitimate for a proposed-scheme-only ablation —
+    #: §VI Exp. 6 compares three arms of one scheme, not five schemes — but it
+    #: means the run stays non-reportable and §VI must say so.
     policy_population: int = 40
     keywords_per_record: int = 6
     fog_search_nodes: int = 4
@@ -968,6 +1037,14 @@ class PsaExp6AffectedRatio:
         ratio = float(value)
         per_domain = self.policy_population // len(DOMAIN_NAMES)
         world = build_world(policies_per_domain=per_domain)
+        # Keywords from the corpus; policy topology stipulated — see
+        # `policy_population` for why the two cannot both come from the corpus.
+        _cw, vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            domains=int(self.config.defaults.domains),
+        ) if self.source is not None else (None, None)
+        if not vocabulary:
+            vocabulary = tuple(f"kw:{i:05d}" for i in range(2006))
         policies = list(world.policies)
         roster = sorted(world.authorities.values())
         moved, other = roster[0], roster[1]
@@ -988,7 +1065,12 @@ class PsaExp6AffectedRatio:
             domain = policy.split("/", 1)[0]
             pv = world.pv(policy)
             cid = f"bafyPSA{rid:08d}"
-            keywords = [f"kw:{rid:04d}:{k}" for k in range(self.keywords_per_record)]
+            # REAL keywords, so the hashed inputs are the corpus's own lengths
+            # and distribution even though the policy topology is stipulated.
+            keywords = [
+                vocabulary[(rid * self.keywords_per_record + k) % len(vocabulary)]
+                for k in range(self.keywords_per_record)
+            ]
             records.append(
                 dict(
                     cid=cid, policy=policy, domain=domain, keywords=keywords,
@@ -1368,17 +1450,25 @@ class PsaExp4Verification:
     #: backend, not the construction.
 
     config: scheme_config.Configuration
+    source: Any
     name: str = "psa_exp4_verification_overhead"
     number: int = 4
     variable: str = "returned_results"
     values: Tuple[Any, ...] = ()
+    #: Reads the corpus for its policies and keywords.
+    CORPUS_BACKED: ClassVar[bool] = True
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("proof_size", KB),
         MetricSpec("path_length", COUNT),
         MetricSpec("records_verified", COUNT),
     )
-    keywords_per_record: int = 6
+    #: WAS a hardcoded 6. The frozen corpus's mean |W_i| is **31.70**, and this
+    #: sets the Merkle tree's leaf count — so the constant understated the tree
+    #: height Exp. 4's proof paths are measured against. Read from the source.
+    @property
+    def keywords_per_record(self) -> int:
+        return max(1, int(getattr(self.source, "keywords_per_record", 6)))
 
     def __post_init__(self) -> None:
         if not self.values:
@@ -1386,7 +1476,12 @@ class PsaExp4Verification:
 
     def prepare(self, value: Any) -> Any:
         wanted = int(value)
-        world = build_world()
+        # Policies and keywords from the corpus, so the hashed inputs and the
+        # governing sets behind every `PV_i` are the corpus's own.
+        world, vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            domains=int(self.config.defaults.domains),
+        )
         scheme = _keyed_scheme()
         # ABCD_LEDGER decides, exactly as build_deployment decides it. `fabric`
         # refuses to fall back, so a run stamped Fabric-backed was Fabric-backed.
@@ -1400,7 +1495,10 @@ class PsaExp4Verification:
             entries = [
                 psa_records.PolicyStateIndexEntry(
                     token=scheme.index_token(
-                        f"kw:{rid:05d}:{k}", policy_id=policy, pv=pv, domain=domain
+                        vocabulary[
+                            (rid * self.keywords_per_record + k) % len(vocabulary)
+                        ],
+                        policy_id=policy, pv=pv, domain=domain,
                     ),
                     cid=cid, policy_id=policy, pv=pv,
                 )
@@ -1688,8 +1786,13 @@ def build(
         return cls(config=config, source=source)
     if number == 1 and variant:
         return cls(config=config, policy_scope=policy_scope_of(variant))
-    if number == 6 and variant:
-        return cls(config=config, variant=variant)
+    if number == 6:
+        # Exp. 6 is the one arm that takes a source WITHOUT being CORPUS_BACKED:
+        # it uses the corpus vocabulary but stipulates its policy topology, so
+        # it must not inherit corpus provenance. See `policy_population`.
+        if variant:
+            return cls(config=config, variant=variant, source=source)
+        return cls(config=config, source=source)
     return cls(config=config)
 
 

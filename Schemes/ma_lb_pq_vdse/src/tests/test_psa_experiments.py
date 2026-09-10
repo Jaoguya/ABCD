@@ -168,8 +168,8 @@ def test_psa_exp3_latency_issues_q_times_d_tokens(config, source):
 # ===========================================================================
 # D9 — the single-trapdoor property does not survive
 # ===========================================================================
-def test_exp3_token_count_grows_with_domains(config):
-    experiment = psa.PsaExp3CrossDomainTokens(config=config)
+def test_exp3_token_count_grows_with_domains(config, source):
+    experiment = psa.PsaExp3CrossDomainTokens(config=config, source=source)
     issued = [
         _run(experiment, d).secondaries["tokens_issued"] for d in experiment.values
     ]
@@ -180,7 +180,7 @@ def test_exp3_token_count_grows_with_domains(config):
     )
 
 
-def test_exp3_reports_the_option_d_baseline_alongside(config):
+def test_exp3_reports_the_option_d_baseline_alongside(config, source):
     """The panel's content is the contrast with a count that is FLAT in d.
 
     It asserted ``== 1.0`` until 2026-09-09, matching a hardcoded literal on the
@@ -194,7 +194,7 @@ def test_exp3_reports_the_option_d_baseline_alongside(config):
     fail if a regression ever makes the Option D side domain-dependent, which a
     literal on both sides could never do.
     """
-    experiment = psa.PsaExp3CrossDomainTokens(config=config)
+    experiment = psa.PsaExp3CrossDomainTokens(config=config, source=source)
     q = config.defaults.keywords_per_query
     baseline = []
     for d in experiment.values:
@@ -212,16 +212,16 @@ def test_exp3_reports_the_option_d_baseline_alongside(config):
 # ===========================================================================
 # D1 — re-tokenization is real work
 # ===========================================================================
-def test_exp5_retokenizes_and_rebuilds(config):
-    experiment = psa.PsaExp5ReTokenization(config=config)
+def test_exp5_retokenizes_and_rebuilds(config, source):
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     sample = _run(experiment, experiment.values[0])
     assert sample.secondaries["entries_retokenized"] > 0
     assert sample.secondaries["commitments_rebuilt"] > 0
     assert sample.secondaries["merkle_nodes_recomputed"] > 0
 
 
-def test_exp5_work_grows_with_k(config):
-    experiment = psa.PsaExp5ReTokenization(config=config)
+def test_exp5_work_grows_with_k(config, source):
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     small = _run(experiment, experiment.values[0])
     large = _run(experiment, experiment.values[1])
     assert (
@@ -230,9 +230,9 @@ def test_exp5_work_grows_with_k(config):
     )
 
 
-def test_exp5_skips_records_no_governing_authority_touched(config):
+def test_exp5_skips_records_no_governing_authority_touched(config, source):
     """eq:unaffected-policy, as an absence of work rather than an assertion."""
-    experiment = psa.PsaExp5ReTokenization(config=config)
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     prepared = experiment.prepare(experiment.values[-1])
     world = prepared["world"]
     moved = sorted(world.authorities.values())[0]
@@ -249,17 +249,17 @@ def test_exp5_skips_records_no_governing_authority_touched(config):
 # ===========================================================================
 # D8 — Exp. 6 over the affected-policy ratio
 # ===========================================================================
-def test_exp6_sweeps_the_ratio_not_an_update_count(config):
+def test_exp6_sweeps_the_ratio_not_an_update_count(config, source):
     """The axis that D8 is about."""
-    experiment = psa.PsaExp6AffectedRatio(config=config)
+    experiment = psa.PsaExp6AffectedRatio(config=config, source=source)
     assert experiment.variable == "affected_policy_ratio"
     assert experiment.values == psa.AFFECTED_RATIOS
     assert min(experiment.values) == pytest.approx(0.1)
     assert max(experiment.values) == pytest.approx(1.0)
 
 
-def test_exp6_dias_evolves_only_the_affected_fraction(config):
-    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+def test_exp6_dias_evolves_only_the_affected_fraction(config, source):
+    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     for ratio in experiment.values:
         sample = _run(experiment, ratio)
         evolved = sample.secondaries["policies_evolved"]
@@ -267,9 +267,9 @@ def test_exp6_dias_evolves_only_the_affected_fraction(config):
         assert evolved == pytest.approx(expected, abs=1)
 
 
-def test_exp6_full_state_ignores_the_ratio(config):
+def test_exp6_full_state_ignores_the_ratio(config, source):
     """Its cost is flat because it re-evolves everything however little changed."""
-    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     evolved = {
         _run(experiment, ratio).secondaries["policies_evolved"]
         for ratio in experiment.values
@@ -277,14 +277,14 @@ def test_exp6_full_state_ignores_the_ratio(config):
     assert evolved == {float(experiment.policy_population)}
 
 
-def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(config):
+def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(config, source):
     """The two halves of the claim, separated.
 
     Incremental-All ablates SELECTIVE delivery only: it evolves exactly the same
     policies as DIAS and differs solely in fan-out. If the two ever differ in
     `policies_evolved`, the arm has stopped being an ablation of one variable.
     """
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -295,11 +295,11 @@ def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(conf
         assert b.secondaries["delivered_kb"] > a.secondaries["delivered_kb"]
 
 
-def test_exp6_dias_advantage_over_full_state_narrows_toward_one(config):
+def test_exp6_dias_advantage_over_full_state_narrows_toward_one(config, source):
     """§VI: the advantage "narrows because a larger portion becomes dependency
     relevant". At 100% the two must coincide in work."""
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
-    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
+    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
 
     def advantage(ratio):
         """How many times more policies Full-State evolves than DIAS."""

@@ -78,6 +78,12 @@ class Run:
     primary: float
     secondary_1: Optional[float] = None
     secondary_2: Optional[float] = None
+    secondary_3: Optional[float] = None
+    #: Added 2026-09-10 so Exp. 2 can report `matched_records`. SVI Exp. 2
+    #: claims "query selectivity is kept constant" and no scheme recorded
+    #: the quantity that claim is about; `n_eff` denotes something different
+    #: in each scheme, so it could not be used to check it.
+    secondary_3: Optional[float] = None
     status: str = "ok"
     # "measured" = this run was executed. "projected" = this value was derived
     # from a measured unit cost (Ref[41]'s search is q*N*(2u+1) pairings with no
@@ -138,6 +144,7 @@ def measure_point(
                     primary=measurement.primary,
                     secondary_1=measurement.secondary_1,
                     secondary_2=measurement.secondary_2,
+                    secondary_3=measurement.secondary_3,
                     status="ok",
                 )
             )
@@ -256,7 +263,8 @@ def write_results(path: Path, result: ExperimentResult) -> None:
     header = (
         "variable_value,primary_mean,primary_ci95,"
         "secondary_1_mean,secondary_1_ci95,"
-        "secondary_2_mean,secondary_2_ci95,n_runs,measurement_type"
+        "secondary_2_mean,secondary_2_ci95,"
+        "secondary_3_mean,secondary_3_ci95,n_runs,measurement_type"
     )
     lines = [header]
 
@@ -291,7 +299,7 @@ def write_results(path: Path, result: ExperimentResult) -> None:
         primary_mean, primary_ci = mean_ci95([run.primary for run in ok])
         cells = [str(variable_value), _format(primary_mean), ci_cell(primary_ci)]
 
-        for attribute in ("secondary_1", "secondary_2"):
+        for attribute in ("secondary_1", "secondary_2", "secondary_3"):
             values = [
                 getattr(run, attribute)
                 for run in ok

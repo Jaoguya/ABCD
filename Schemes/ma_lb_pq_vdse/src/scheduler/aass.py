@@ -631,8 +631,24 @@ class Scheduler:
                     chosen = min(
                         pool, key=lambda node: (node.queue_length, node.node_id)
                     )
-                if shard not in chosen.index.policy_pairs:
-                    forwards += 1
+            # §VI'S DEFINITION, APPLIED TO EVERY ARM.
+            #
+            # §VI Exp. 8: "A cross-node forward occurs when a scheduler assigns
+            # a required shard to an FSN that does not maintain it, requiring
+            # redirection to an eligible node." That is scheduler-agnostic —
+            # any arm can score under it.
+            #
+            # This counter sat INSIDE the `else`, so the AASS branch never
+            # touched it: AASS read 0 by construction and the three oblivious
+            # arms read >0 by construction, and Fig. 8(c) measured the arm
+            # DEFINITIONS rather than scheduler quality. §V then read that
+            # figure as evidence that AASS "reduces unnecessary forwarding".
+            #
+            # Applied uniformly, AASS should still read 0 — but because its
+            # eligibility guard genuinely never misplaces a shard, which is a
+            # measurement, not a tautology.
+            if shard not in chosen.index.policy_pairs:
+                forwards += 1
             mapping.append((shard, chosen))
 
         return ShardAssignment(

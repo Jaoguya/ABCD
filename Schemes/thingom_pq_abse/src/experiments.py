@@ -306,6 +306,7 @@ def experiment_2(
     secondary_1  entries traversed
     secondary_1  wall-clock ms at P workers (primary is aggregate CPU ms)
     secondary_2  pairings computed
+    secondary_3  matched records (the conjunctive intersection)
     """
     result = ExperimentResult(
         scheme=SCHEME_NAME,
@@ -394,6 +395,10 @@ def experiment_2(
                 primary=timer.elapsed_ms,          # aggregate CPU ms
                 secondary_1=timer.wall_ms,         # wall-clock at P workers
                 secondary_2=float(pairings),
+                # The conjunctive intersection across the q trapdoors — the
+                # match count SVI Exp. 2's selectivity claim is about, and the
+                # only quantity comparable across all five schemes.
+                secondary_3=float(len(matches or ())),
             )
 
         result.runs.extend(
