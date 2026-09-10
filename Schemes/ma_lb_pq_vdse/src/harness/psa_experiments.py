@@ -59,6 +59,9 @@ from Common.timing import gc_quiesced  # noqa: E402
 from ..index import dsi as dsi_mod  # noqa: E402
 from ..aim import verification as authz_mod  # noqa: E402
 from ..user import token as token_mod  # noqa: E402
+from ..user import profile as profile_mod  # noqa: E402
+from ..scheduler import aass as aass_mod  # noqa: E402
+from .. import types as types_mod  # noqa: E402
 from . import experiments as experiments_mod  # noqa: E402
 from ..chain import outsourcing as out_mod  # noqa: E402
 from ..chain import select as chain_select  # noqa: E402
@@ -190,6 +193,13 @@ class PsaDeployment:
     records: List[Dict[str, Any]] = field(default_factory=list)
     corpus_type: str = "psa_in_process"
     corpus_sha256: Optional[str] = None
+    #: Phase I-III, shared with Option D so both constructions authorize the
+    #: same way. Without these the PSA track could not run the AIM check §VI
+    #: puts inside the measured path.
+    aim: Any = None
+    authorities: Dict[str, Any] = field(default_factory=dict)
+    owner_profile: Any = None
+    scaffold: Any = None
 
     @property
     def entry_count(self) -> int:
@@ -228,25 +238,36 @@ def psa_build_deployment(
     )
     scheme = _keyed_scheme()
 
-    # REAL DSI shards, not the dict `_PsaShard` Exp. 6 uses for delivery. Exp. 2
-    # measures the online search path -- authorization bitmap, Bloom prune,
-    # posting-list traversal -- and a dict lookup would measure none of it. The
-    # index needed no change to hold a PolicyStateIndexEntry; it keys on
-    # token/cid/policy_id and stores the entry opaquely.
-    node_count = min(config.topology.fog_search_nodes, len(names))
-    shards = []
-    for i in range(node_count):
-        served = [d for j, d in enumerate(names) if j % node_count == i]
-        shards.append((
-            f"FSN{i}", frozenset(served),
-            dsi_mod.DynamicSearchIndex.from_config(served, config),
-        ))
-    nodes = tuple(shards)
+    # REAL `FogSearchNode`s, sharing Option D's Phase I-III scaffolding.
+    #
+    # This built bare `(node_id, served, DynamicSearchIndex)` tuples, which gave
+    # the PSA track no AIM, no VAP and no scheduler — so `PsaExp2` and
+    # `PsaExp3` timed token derivation plus a posting-list lookup while §VI
+    # describes four stages: *"the Authorization Index Manager validates the
+    # current VAP and derives … AASS then assigns each required shard"*. Option
+    # D's Exp. 2/3 ran all four, so the two tracks were not measuring the same
+    # path and could not be compared. Exp. 7-8 ran the AIM check in BOTH tracks,
+    # so the PSA track was also inconsistent with itself.
+    #
+    # `build_deployment` with `records=0` yields exactly the scaffolding —
+    # context, ledger, AIM, real `Authority` objects, the FSN set and an owner
+    # VAP — with empty indexes for the PSA entries below. Reused rather than
+    # reimplemented because the AIM is construction-agnostic: it validates the
+    # authorization envelope (nonce, `AuthRoot_U`, version) and never inspects
+    # the keyword tokens.
+    scaffold = experiments_mod.build_deployment(
+        config=config, source=source, records=0, domains=domain_count
+    )
+    nodes = scaffold.nodes
 
     deployment = PsaDeployment(
         config=config, world=world, scheme=scheme, nodes=nodes,
         corpus_type=getattr(source, "corpus_type", "psa_in_process"),
         corpus_sha256=getattr(source, "corpus_sha256", None),
+        aim=scaffold.aim,
+        authorities=scaffold.authorities,
+        owner_profile=scaffold.owner_profile,
+        scaffold=scaffold,
     )
 
     seen: set = set()
@@ -267,9 +288,9 @@ def psa_build_deployment(
             record_id=record.record_id, cid=cid, entries=entries,
             policy_id=policy, pv=pv, auth_state=world.auth_state(policy),
         )
-        for _node_id, served, index in nodes:
-            if domain in served:
-                index.insert_record(entries, domain=domain)
+        for node in nodes:
+            if domain in node.domains:
+                node.index.insert_record(entries, domain=domain)
         deployment.records.append(
             dict(cid=cid, policy=policy, domain=domain,
                  keywords=list(record.keywords), entries=entries,
@@ -291,6 +312,51 @@ def psa_build_deployment(
 #: 4,000 is well above what is needed to see every policy (there are
 #: ``policies_per_domain x domains``) and yields a vocabulary in the thousands.
 EXP1_SAMPLE_RECORDS = 4000
+
+
+def psa_enrol(deployment, uid: str, domains: Sequence[str]):
+    """A Data User authorized across ``domains``, for the PSA track.
+
+    Mirrors ``experiments._enrol``, but reads the PSA deployment's own record
+    dicts (`policy`/`domain` keys) rather than Option D's ``record`` objects.
+    The AIM, the authorities and the VAP are the SAME objects Option D uses —
+    the authorization layer is construction-agnostic, because
+    ``verify_search_request`` validates the envelope (nonce, ``AuthRoot_U``,
+    version) and never inspects the keyword tokens.
+    """
+    authority_ids = [deployment.authorities[d].authority_id for d in domains]
+    attributes = sorted(
+        attr for d in domains for attr in deployment.authorities[d].attributes[:3]
+    )
+    profile = profile_mod.build_profile_from_aim(
+        deployment.aim, uid=uid, authority_ids=authority_ids,
+        attributes=attributes,
+    )
+    mapping = {
+        (uid, domain): tuple(sorted(
+            r["policy"] for r in deployment.records if r["domain"] == domain
+        ))
+        for domain in domains
+    }
+    return (
+        profile, authority_ids, attributes,
+        authz_mod.MappingPolicyResolver(mapping),
+    )
+
+
+def psa_search_token(profile, tokens):
+    """``ST = (T_Q, AuthRoot_U, VID_U, rho)`` carrying the PSA token set.
+
+    ``generate_search_token`` builds the trapdoor itself with Option D's
+    scheme, so the envelope is assembled directly here while the tokens come
+    from ``psa_tokens.generate_query_tokens``.
+    """
+    return types_mod.SearchToken(
+        tokens=tuple(tokens),
+        auth_root=profile.auth_root,
+        vid_u=profile.vid,
+        nonce=token_mod.fresh_nonce(),
+    )
 
 
 def corpus_world(source, *, records: int, domains: Optional[int] = None):
@@ -686,8 +752,15 @@ class PsaExp3CrossDomainLatency:
                 f"a cross-domain query needs at least one authorized policy"
             )
         pool = [r["keywords"] for r in deployment.records]
+        # Phase III enrolment across every participating domain — untimed, as
+        # session establishment is not per query.
+        profile, authority_ids, attributes, resolver = psa_enrol(
+            deployment, "DU-1", deployment.world.domains
+        )
         return dict(
             deployment=deployment, scopes=scopes, pool=pool, cursor=[0],
+            profile=profile, authority_ids=authority_ids,
+            attributes=attributes, resolver=resolver,
         )
 
     def measure(self, prepared: Any) -> Sample:
@@ -703,19 +776,48 @@ class PsaExp3CrossDomainLatency:
         searched: set = set()
         with gc_quiesced():
             started = time.perf_counter_ns()
+            # §VI Exp. 3: "The AIM first validates the current VAP and derives
+            # policy-state-aware tokens and the required authorized shard set
+            # S_Q. AASS then assigns each required shard to an eligible FSN."
+            # Both stages were outside the timed region until 2026-09-10.
+            all_tokens = tuple(
+                t for scope in prepared["scopes"]
+                for t in psa_tokens.generate_query_tokens(
+                    deployment.scheme, query, [scope]
+                )
+            )
+            decision = authz_mod.verify_search_request(
+                deployment.aim,
+                psa_search_token(prepared["profile"], all_tokens),
+                prepared["profile"],
+                authority_ids=prepared["authority_ids"],
+                attributes=prepared["attributes"],
+                resolver=prepared["resolver"],
+            )
+            if not decision.accepted:
+                raise RuntimeError(f"authorization rejected: {decision.reason}")
+            aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(
+                deployment.nodes,
+                aass_mod.SearchRequest(
+                    tokens=all_tokens,
+                    authorized=decision.authorized_shards,
+                    vid_u=prepared["profile"].vid,
+                    query_versions=decision.query_versions,
+                ),
+            )
             for scope in prepared["scopes"]:
                 scope_tokens = psa_tokens.generate_query_tokens(
                     deployment.scheme, query, [scope]
                 )
                 issued += len(scope_tokens)
-                for node_id, served, index in deployment.nodes:
-                    if scope.domain not in served:
+                for node in deployment.nodes:
+                    if scope.domain not in node.domains:
                         continue
-                    found, _stats = index.lookup(
+                    found, _stats = node.index.lookup(
                         scope_tokens, [(scope.domain, scope.policy_id)]
                     )
                     hits += len(found)
-                    searched.add(node_id)
+                    searched.add(node.node_id)
             elapsed = time.perf_counter_ns() - started
 
         return Sample(
@@ -1301,7 +1403,16 @@ class PsaExp2SearchLatency:
         # every run of every point, which measured the repeatability of one
         # query rather than search latency.
         pool = [r["keywords"] for r in deployment.records]
-        return dict(deployment=deployment, scopes=scopes, pool=pool, cursor=[0])
+        # Phase III enrolment, so the AIM check §VI puts inside the search path
+        # can actually run. Untimed: session establishment is not per query.
+        profile, authority_ids, attributes, resolver = psa_enrol(
+            deployment, "DU-1", deployment.world.domains
+        )
+        return dict(
+            deployment=deployment, scopes=scopes, pool=pool, cursor=[0],
+            profile=profile, authority_ids=authority_ids,
+            attributes=attributes, resolver=resolver,
+        )
 
     def measure(self, prepared: Any) -> Sample:
         deployment = prepared["deployment"]
@@ -1316,6 +1427,36 @@ class PsaExp2SearchLatency:
         issued = 0
         with gc_quiesced():
             started = time.perf_counter_ns()
+            # THE FOUR STAGES §VI NAMES, in its order. This timed only token
+            # derivation and the posting-list walk, so Figs. 2 and 3 excluded
+            # both of the paper's named contributions — the AIM's VAP
+            # validation and AASS's shard assignment — while Option D's Exp. 2
+            # timed all four and Exp. 7-8 timed the AIM check in BOTH tracks.
+            all_tokens = tuple(
+                t for scope in prepared["scopes"]
+                for t in psa_tokens.generate_query_tokens(
+                    deployment.scheme, query, [scope]
+                )
+            )
+            decision = authz_mod.verify_search_request(
+                deployment.aim,
+                psa_search_token(prepared["profile"], all_tokens),
+                prepared["profile"],
+                authority_ids=prepared["authority_ids"],
+                attributes=prepared["attributes"],
+                resolver=prepared["resolver"],
+            )
+            if not decision.accepted:
+                raise RuntimeError(f"authorization rejected: {decision.reason}")
+            aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(
+                deployment.nodes,
+                aass_mod.SearchRequest(
+                    tokens=all_tokens,
+                    authorized=decision.authorized_shards,
+                    vid_u=prepared["profile"].vid,
+                    query_versions=decision.query_versions,
+                ),
+            )
             # ONE CONJUNCTIVE LOOKUP PER AUTHORIZED POLICY, unioned.
             #
             # A PSA query is a disjunction ACROSS policies of a conjunction
@@ -1335,10 +1476,10 @@ class PsaExp2SearchLatency:
                     deployment.scheme, query, [scope]
                 )
                 issued += len(scope_tokens)
-                for _node_id, served, index in deployment.nodes:
-                    if scope.domain not in served:
+                for node in deployment.nodes:
+                    if scope.domain not in node.domains:
                         continue
-                    found, stats = index.lookup(
+                    found, stats = node.index.lookup(
                         scope_tokens, [(scope.domain, scope.policy_id)]
                     )
                     hits += len(found)
@@ -1346,7 +1487,7 @@ class PsaExp2SearchLatency:
             elapsed = time.perf_counter_ns() - started
 
         entries = deployment.entry_count
-        distinct = sum(ix.token_count for _, _, ix in deployment.nodes)
+        distinct = sum(node.index.token_count for node in deployment.nodes)
         return Sample(
             primary=elapsed / 1e6,
             secondaries={

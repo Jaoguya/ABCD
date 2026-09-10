@@ -550,9 +550,12 @@ def test_psa_shards_are_real_indexes_not_dicts(config):
         config=config, source=_source(), records=80
     )
     total = 0
-    for _node_id, served, index in ours.nodes:
-        assert hasattr(index, "authorized_bitmap"), "not a DynamicSearchIndex"
-        total += index.entry_count
+    # PSA nodes are real `FogSearchNode`s since 2026-09-10, sharing Option D's
+    # Phase I-III scaffolding — that is what lets the AIM check and AASS run
+    # inside the timed path, as §VI Exp. 2 and Exp. 3 describe.
+    for node in ours.nodes:
+        assert hasattr(node.index, "authorized_bitmap"), "not a DynamicSearchIndex"
+        total += node.index.entry_count
     assert total == ours.entry_count > 0
 
 
@@ -609,7 +612,7 @@ def test_psa_exp2_survives_the_multiprocess_replay_boundary(config):
     ours = psa_mod.psa_build_deployment(
         config=config, source=_source(), records=40
     )
-    index = ours.nodes[0][2]
+    index = ours.nodes[0].index
     assert pickle.loads(pickle.dumps(index)).entry_count == index.entry_count
     entry = ours.records[0]["entries"][0]
     assert pickle.loads(pickle.dumps(entry)) == entry

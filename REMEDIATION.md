@@ -77,8 +77,12 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
       `option_d` in `main.py` and `generate_plots.py`.
 - [ ] **A8 Retire `test_exp3_trapdoor_count_does_not_scale_with_domains`** at
       the PSA switch — it asserts an Option-D property PSA contradicts by design.
-- [ ] **A9 Exp. 4** — `require_version_match` returns with the PSA port; §V
-      gains the `check_chain_integrity` disclosure sentence.
+- [ ] **A9 Exp. 4** — §V gains the `check_chain_integrity` disclosure sentence.
+      *(`require_version_match` is a §VI item now: the AIM's freshness check is
+      `VID_i == VID_U`, a SCALAR, and PSA's policy state is a vector digest.
+      §VI Phase VI/VIII specify comparing `V_U` components. Recorded as a
+      manuscript+code item rather than silently enabling a check that compares
+      the wrong thing.)*
 
 ## B. Runs (in order, after A)
 
@@ -150,6 +154,19 @@ This is the first run that is *meaningfully* green. Earlier "green" runs were
 little. Both now assert exact quantities. Treat any failure from here as real.
 
 ## Done (kept as the evidence trail until this file is deleted)
+
+- [x] **Step 4 — AIM and AASS wired into `PsaExp2` and `PsaExp3`.** §VI names a
+      four-stage path (*"the AIM validates the current VAP and derives … AASS
+      then assigns each required shard"*); the PSA track timed only token
+      derivation and a posting-list walk, while Option D timed all four and
+      Exps. 7-8 timed the AIM check in BOTH tracks — so the PSA track was
+      inconsistent with §VI *and* with itself.
+      `psa_build_deployment` now reuses Option D's Phase I-III scaffolding via
+      `build_deployment(records=0)`, so both constructions share one AIM, one
+      authority set and real `FogSearchNode`s instead of bare 3-tuples.
+      Measured after wiring: PsaExp2 6.51 ms; PsaExp3 78.45 ms at d=2 and
+      123.39 ms at d=4, tokens still `q*d`.
+      Regression **900 passed / 5 skipped / 0 failed**.
 
 - [x] **Cross-node forwards, per §VI's definition, applied to ALL FOUR arms.**
       The counter sat inside the non-AASS branch, so AASS scored 0 *by
