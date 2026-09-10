@@ -1,11 +1,11 @@
-"""The eight experiments of README §5, as measurable objects.
+"""The eight experiments of global.yaml, as measurable objects.
 
 Each declares its sweep variable, its primary and secondary metrics, an **untimed**
 ``prepare`` and a **timed** ``measure``. The split is the measurement boundary: what
 ``measure`` touches is what the reported number covers, and each class's docstring
 quotes the rule it implements.
 
-The boundaries, from README §5 and ``SCHEME.md``:
+The boundaries, from ``SystemConfiguration.md`` section 5:
 
 * Exp. 1 — online trapdoor generation only; ML-KEM encapsulation excluded.
 * Exp. 2 — AIM check → AASS selection → shard search → response assembly; index
@@ -94,7 +94,7 @@ class SyntheticRecordSource:
     """In-process records with the frozen corpus's shape but none of its content.
 
     ``corpus_type`` is ``"synthetic"``, which makes every run built on it
-    non-reportable — README §4 admits only ``synthea``. This exists so the harness
+    non-reportable — dataset.yaml admits only ``synthea``. This exists so the harness
     can be written and tested while the v2 manifest is missing, not as a substitute
     for the corpus: keyword co-occurrence here is arbitrary, and Exp. 2's ``n_eff``
     depends on exactly that.
@@ -144,23 +144,23 @@ class CorpusRecordSource:
     do not care which one they were given, but with three real differences:
 
     * ``corpus_type`` is ``"synthea"`` and ``corpus_sha256`` is the verified
-      digest, so runs built on it can actually satisfy README §4/§15.
+      digest, so runs built on it can actually satisfy dataset.yaml/§15.
     * Keyword co-occurrence is the corpus's own. Exp. 2's ``n_eff`` depends on
       exactly that, which is why the synthetic source can never stand in for a
       reportable number.
     * It **streams**. ``load_verified_corpus()`` materialises all 1.14M records
-      (~1-2 GB per process — README §14 issue #9); every experiment here needs
+      (~1-2 GB per process); every experiment here needs
       only the first ``count``, so this verifies the digest and then reads
       lazily, taking what it needs and stopping.
 
     DOMAIN LIMIT — a real constraint, deliberately not papered over. The frozen
     corpus carries exactly ``len(per_domain_counts)`` domains (4: balanced
-    whole-organization buckets, README §4). Exp. 3 sweeps ``d = 2..10``. For
+    whole-organization buckets, dataset.yaml). Exp. 3 sweeps ``d = 2..10``. For
     ``d <= 4`` each record keeps its real ``dom``, which is the point of using
     the corpus at all. For ``d > 4`` the corpus simply has no such partition,
     and inventing one by re-bucketing ``rid`` would silently replace real
     institutional boundaries with a synthetic split *while still reporting
-    ``corpus_type: synthea``* — the exact class of misrepresentation README §13
+    ``corpus_type: synthea``* — the exact class of misrepresentation SystemConfiguration.md
     forbids. So it raises instead, naming the decision.
     """
 
@@ -230,7 +230,7 @@ class CorpusRecordSource:
                 f"requested. Splitting it further would replace real "
                 f"institutional boundaries with a synthetic partition while "
                 f"still reporting corpus_type={self.corpus_type!r}, which "
-                f"README §13 forbids. This needs a recorded benchmark decision: "
+                f"SystemConfiguration.md forbids. This needs a recorded benchmark decision: "
                 f"either cap Exp. 3 at d<={self._available_domains}, or "
                 f"regenerate the corpus with more domains and re-freeze "
                 f"(results-affecting), or state in §VI that d>"
@@ -709,7 +709,7 @@ class Exp2SearchLatency:
 
     All four stages are inside ``measure``; the index is built in ``prepare``.
     ``n_eff`` is reported alongside latency because it is "the only thing that can
-    demonstrate the paper's claim" (README §5).
+    demonstrate the paper's claim".
     """
 
     config: scheme_config.Configuration
@@ -1133,7 +1133,7 @@ class Exp4Verification:
                 prepared["bundles"],
                 auth_root=prepared["auth_root"],
                 # Phase VIII Step 2's VID_i = VID_U compares two different
-                # counters; see SCHEME.md. Skipped so the measurement is of the
+                # counters. Skipped so the measurement is of the
                 # cryptographic work rather than of a check that rejects every
                 # record.
                 require_version_match=False,
@@ -1292,12 +1292,12 @@ class Exp6AuthorizationSync:
 
     **Boundary.** Phase VII Step 5 (anchoring ``BC_i'``) is OUTSIDE this
     measurement: no ledger is passed to ``synchronize``, so nothing is anchored on
-    the timed path. That matches README §5, whose Exp. 6 boundary ends at "until
+    the timed path. That matches global.yaml, whose Exp. 6 boundary ends at "until
     all affected FSNs report the new ``VID``", and ``tab:cost``'s authorization-
     synchronization row ``O(delta)T_H + O(log d)T_MT``, which carries no chain
     term. Anchoring is also identical across all three variants, so including it
     could not change which one wins — only add a constant. §VI must state the
-    exclusion and report the anchor cost separately, the way README §5 already
+    exclusion and report the anchor cost separately, the way global.yaml already
     handles ML-KEM encapsulation for Exp. 1.
 
     **What ``fsns_touched`` can and cannot show.** ``assign_domains_to_fsns`` gives
@@ -1305,7 +1305,7 @@ class Exp6AuthorizationSync:
     domain, so selective delivery touches exactly one node for ANY ``d`` and ``m``.
     Under ``ias`` the metric is therefore a constant 1 BY CONSTRUCTION, and is
     evidence of nothing unless read against ``broadcast``'s ``m``. Every run before
-    2026-09-03 reported it alone, which is why README §5's "selective propagation
+    2026-09-03 reported it alone, which is why global.yaml's "selective propagation
     is the claim" had no measurement behind it.
 
     **Why ``delivered_kb`` is measured and not derived.** It is the quantity the
@@ -1433,7 +1433,7 @@ class _WorkloadOutcome:
 
 
 def _default_ramp_seconds() -> float:
-    """README §7's ramp, from global.yaml with a hard fallback.
+    """global.yaml's ramp, from global.yaml with a hard fallback.
 
     Resolved once at import rather than per call so there is a single name to
     override -- the test suite zeroes RAMP_SECONDS in conftest, and reading the
@@ -1446,7 +1446,7 @@ def _default_ramp_seconds() -> float:
     return 30.0 if configured is None else float(configured)
 
 
-#: README §7: "Cold vs warm. Defaults: Exp. 1-6 warm, Exp. 7-8 warm after a 30 s
+#: global.yaml: "Cold vs warm. Defaults: Exp. 1-6 warm, Exp. 7-8 warm after a 30 s
 #: ramp." Applied once per sweep point, inside prepare(), which run_point()
 #: excludes from every timing.
 RAMP_SECONDS = _default_ramp_seconds()
@@ -1456,7 +1456,7 @@ RAMP_SECONDS = _default_ramp_seconds()
 class SchedulerAblation:
     """The shared engine for Exp. 7 and Exp. 8.
 
-    README §5: "Exp. 7 and Exp. 8 report different metrics over **the same
+    global.yaml: "Exp. 7 and Exp. 8 report different metrics over **the same
     recorded arrival trace**, replayed once per experiment per variant." The
     trace is recorded once in prepare() and both experiments record the same
     one; they do NOT share a replay. Each runs its own, so the two differ by
@@ -1464,7 +1464,7 @@ class SchedulerAblation:
     specific Exp. 7 throughput. The per-point cross-variant comparison the
     figures show is unaffected.
 
-    **Not reportable, for two reasons beyond the λ sweep.** README §1 requires each
+    **Not reportable, for two reasons beyond the λ sweep.** SystemConfiguration.md requires each
     FSN to be an independent process; this replays in one interpreter, so a
     concurrency figure would not measure the stated topology. Both reasons are
     recorded in ``run_meta.json``.
@@ -1475,7 +1475,7 @@ class SchedulerAblation:
     variant: str = aass_mod.VARIANT_AASS
 
     #: Set False only to compare against the legacy single-interpreter path.
-    #: README §1 requires independent FSN processes and
+    #: SystemConfiguration.md requires independent FSN processes and
     #: provenance.reportability() blocks a concurrency result without them.
     independent_processes: bool = True
 
@@ -1494,7 +1494,7 @@ class SchedulerAblation:
     def _replay_multiprocess(
         self, deployment: Deployment, requests, concurrency: int
     ) -> _WorkloadOutcome:
-        """Each FSN in its own OS process, as README §1 requires.
+        """Each FSN in its own OS process, as SystemConfiguration.md requires.
 
         The scheduler still chooses the node in the parent — that decision IS
         the thing Exp. 7-8 ablate. What changes is that the chosen node then
@@ -1673,7 +1673,7 @@ class SchedulerAblation:
         term of the previous manuscript revision. ``eq:search-cost`` has four
         and the code was aligned to it on 2026-09-07.)
 
-        **Benchmark choice, not published.** Neither §VI nor README fixes how many
+        **Benchmark choice, not published.** Neither §VI nor SystemConfiguration.md fixes how many
         domains one query spans; §VI fixes only d=4. Uniform over subset sizes
         1..d with the starting domain rotated is the neutral choice — it spans
         the range from single-domain queries (where authorization locality
@@ -1719,7 +1719,7 @@ class SchedulerAblation:
         return population
 
     def _ramp(self, deployment: Deployment, requests, concurrency: int) -> None:
-        """README §7: "Exp. 7-8 warm after a 30 s ramp."
+        """global.yaml: "Exp. 7-8 warm after a 30 s ramp."
 
         Here rather than in ``measure`` because ``run_point`` calls ``prepare``
         once per point and excludes it from every timing — which is what "warm
@@ -1748,7 +1748,7 @@ class SchedulerAblation:
         itself is never reproducible.
         """
         concurrency = int(value)
-        # README §6 fixes index_size at 10^5 for every experiment that does not
+        # global.yaml fixes index_size at 10^5 for every experiment that does not
         # sweep it, and Exp. 7-8 sweep concurrency. This built `records=32` —
         # 8 entries per shard, 3,125x under the default. Measured consequence:
         # execute_search is linear in shard size while select() is flat, so at
@@ -1756,9 +1756,14 @@ class SchedulerAblation:
         # variant could saturate a node, because the work unit was cheaper than
         # the IPC round-trip delivering it. At 8,000 records the same search is
         # 297us. Sized as Exp. 2 sizes it, so "N" means the same thing in both.
-        record_count = max(
-            1, int(self.config.defaults.index_size) // self.source.keywords_per_record
-        )
+        # N IN RECORDS, as Exp. 2 sizes it and as §VI's axis reads.
+        #
+        # This divided by `keywords_per_record`, so at the frozen corpus's
+        # |W_i| = 31.70 the default `index_size: 100000` became ~3,125 records
+        # — a 32x smaller index than Exp. 2 builds at the same configured value.
+        # The comment claimed "sized as Exp. 2 sizes it", which stopped being
+        # true when Exp. 2 dropped its own division on 2026-09-07.
+        record_count = max(1, int(self.config.defaults.index_size))
         deployment = build_deployment(
             config=self.config, source=self.source, records=record_count
         )
@@ -1779,7 +1784,7 @@ class SchedulerAblation:
             if not pool_for_domain:
                 continue
             record = pool_for_domain[index % len(pool_for_domain)]
-            # q KEYWORDS, per README §6 and §VI's "each query contains five
+            # q KEYWORDS, per global.yaml and §VI's "each query contains five
             # keywords". This was `[keywords[0]]` -- one keyword, uncommented --
             # so Exp. 7's throughput and Exp. 8's spread were both measured on a
             # q=1 workload and reported against a paper that says 5. Same class
@@ -2104,9 +2109,9 @@ def build_experiment(
     source: Optional[SyntheticRecordSource] = None,
     variant: Optional[str] = None,
 ):
-    """Instantiate one experiment by its README §5 number.
+    """Instantiate one experiment by its global.yaml number.
 
-    ``variant`` selects the scheduler for Exp. 7-8, which README §5 defines as a
+    ``variant`` selects the scheduler for Exp. 7-8, which global.yaml defines as a
     four-way ablation (no_lb / round_robin / least_loaded / aass). It was
     reachable only by editing the dataclass default, so every campaign so far
     measured `aass` alone and the ablation the paper claims had never been run.
@@ -2119,7 +2124,7 @@ def build_experiment(
     """
     if number not in EXPERIMENTS:
         raise KeyError(
-            f"no experiment {number}; README §5 defines 1-8, and Exp. 9 is "
+            f"no experiment {number}; global.yaml defines 1-8, and Exp. 9 is "
             f"the tamper-granularity companion to Exp. 4"
         )
     kwargs = dict(config=config, source=source or SyntheticRecordSource())

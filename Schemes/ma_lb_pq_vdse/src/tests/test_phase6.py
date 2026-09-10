@@ -489,7 +489,11 @@ def test_scheduler_refuses_a_reportable_aass_run_while_weights_are_pending():
             aass_mod.VARIANT_AASS, config=pending_cfg, reportable=True
         )
     except config_mod.SchedulerWeightsPendingError as exc:
-        assert "issue #5" in str(exc)
+        assert "scheduler.yaml" in str(exc), (
+            "the message must name where the fix lives; it used to cite "
+            "an issue number in the deleted operator guide, whose numbering "
+            "no longer exists"
+        )
         return
     raise AssertionError("a reportable AASS run must be refused while pending")
 

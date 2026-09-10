@@ -1,4 +1,4 @@
-"""Ref[41] experiments 1, 2 and 3 (SCHEME.md).
+"""Ref[41] experiments 1, 2 and 3.
 
 Ref[41] does not participate in Exp. 4-8.
 
@@ -8,14 +8,14 @@ TWO CONSTRUCTION READINGS ARE FORCED HERE, BOTH RECORDED IN run_meta.json
    (eq. 15, Ref[41].md:328) and its search tests one keyword (eq. 18, :344).
    The construction has no conjunctive form. A q-keyword query is therefore
    run as q independent trapdoors and q independent searches with client-side
-   intersection — the same native-mode rule SCHEME.md already applies to
+   intersection — the same native-mode rule already applied to
    Exp. 3's domains, for the same reason. ``trapdoors_issued`` is reported as
    a secondary metric so the mechanism is visible rather than buried in the
    latency.
 
    Note this diverges from the paper's OWN asymptotic claim: Ref[41] Table III
    (:485) gives trapdoor generation as ``(u+e)L_h + (u+e)L_m + L_e``, linear
-   in u+e, which no construction in the paper produces. Per README §13 the
+   in u+e, which no construction in the paper produces. Per SystemConfiguration.md the
    published CONSTRUCTION is implemented; the table is an unsupported claim
    and the divergence is reported, not engineered away.
 
@@ -33,7 +33,7 @@ per single run, before the 10 repetitions. This is not a bug and not a slow
 implementation — it is what the construction says. ``max_seconds_per_run``
 bounds each point and records over-budget points as ``status=failed`` with
 the reason, rather than letting a sweep run for days or, worse, tempting an
-analytical shortcut that README §13 forbids.
+analytical shortcut that SystemConfiguration.md forbids.
 """
 
 from __future__ import annotations
@@ -53,6 +53,9 @@ from .harness import (
 )
 from .lsss import and_gate_policy
 
+#: §VI Exp. 3's fixed per-domain index size; see `experiment_3`.
+PER_DOMAIN_INDEX_SIZE = 10_000
+
 SCHEME_NAME = "thingom_pq_abse"
 
 
@@ -61,7 +64,7 @@ SCHEME_NAME = "thingom_pq_abse"
 # ---------------------------------------------------------------------------
 # Computes the exact same per-entry search_with_plan() calls a single-
 # threaded loop would (same pairing count, same match set) across
-# _SEARCH_PROCESSES forked workers instead of one. Disclosed in SCHEME.md's
+# _SEARCH_PROCESSES forked workers instead of one. Disclosed in this module's
 # Feasibility section: this changes Thingom's implicit deployment model from
 # "one thread serves one query" to "one query gets ~2 cores" on the pinned
 # host, which the published construction does not itself describe — that is
@@ -186,7 +189,7 @@ def build_workload(
     keywords: Sequence[str],
     seed: int,
 ) -> Workload:
-    """Setup + key generation. Not timed (README §5: Exp. 1 is online only)."""
+    """Setup + key generation. Not timed (global.yaml: Exp. 1 is online only)."""
     params, msk = scheme.setup(backend)
 
     # One attribute category per policy row. Categories and values are drawn
@@ -211,7 +214,7 @@ def build_index(
 ) -> List[scheme.KeywordIndex]:
     """Construct ``size`` keyword indexes over one policy.
 
-    Offline per README §5 ("Index construction is offline"), so it is outside
+    Offline per global.yaml ("Index construction is offline"), so it is outside
     every timer. It is still the dominant wall-clock cost of Exp. 2 at large
     N: each entry is 2u exponentiations plus a pairing.
     """
@@ -234,7 +237,7 @@ def experiment_1(
 ) -> ExperimentResult:
     """Online trapdoor generation only.
 
-    ML-KEM is excluded — Ref[41] does not use a KEM at all, and README §5's
+    ML-KEM is excluded — Ref[41] does not use a KEM at all, and global.yaml's
     Exp. 1 rule excludes session establishment from the curve regardless.
 
     primary      latency of generating the q trapdoors, ms
@@ -299,7 +302,7 @@ def experiment_2(
 
     Ref[41] has no authorization filter and no early termination, so every
     entry is evaluated. ``entries_traversed`` equals N by construction, which
-    is exactly the point of reporting it: README §5 asks for it as the
+    is exactly the point of reporting it: global.yaml asks for it as the
     secondary that explains the latency curve.
 
     primary      search latency, ms
@@ -625,7 +628,7 @@ def experiment_3(
 ) -> ExperimentResult:
     """Native mode: d independent trapdoors, d independent searches.
 
-    SCHEME.md: "Does not natively support cross-domain search. Run d
+    Ref[41] does not natively support cross-domain search: run d
     independent trapdoors and d independent searches, with client-side result
     aggregation." Ref[41] has no notion of a domain, so each domain is an
     independent shard searched with its own freshly generated trapdoor.
@@ -653,7 +656,7 @@ def experiment_3(
     d=2 to d=10, and a clean run measures ~922 ms — i.e. the slope is the
     mechanism, not overhead. (An earlier parallelised version added ~1.8 s of
     pool-startup cost on top of that, inflating the slope with a harness
-    artifact; see the note above.) This is the whole point of the experiment (README §5: "count
+    artifact; see the note above.) This is the whole point of the experiment (global.yaml: "count
     trapdoors issued so the mechanism is visible"). An earlier version passed
     a pre-multiplied, domain-count-independent shard size, which made total
     work scale linearly with d instead of staying flat — fixed 2026-08-27.
@@ -675,7 +678,12 @@ def experiment_3(
 
     keyword = workload.keywords[0]
     for domains in domain_counts:
-        shard_size = max(1, total_index_size // domains)
+        # §VI Exp. 3 fixes the PER-DOMAIN index size, not the total. This
+        # divided a fixed total by `domains`, so each shard shrank as `d` grew
+        # — the opposite of what a cross-domain scalability sweep should hold
+        # constant, and it is why this scheme's Exp. 3 curve flattened.
+        # RESULTS-AFFECTING for this baseline's Exp. 3. (2026-09-10)
+        shard_size = max(1, PER_DOMAIN_INDEX_SIZE)
         # parallel=False: experiment_3 runs single-threaded (see its docstring)
         estimate = _estimated_seconds(workload, shard_size * domains, q, parallel=False)
         if estimate > max_seconds_per_run:
@@ -738,7 +746,7 @@ def _estimated_seconds(
     """Rough wall-clock estimate for one run, from a measured unit pairing.
 
     Used ONLY to decide whether to attempt a point. It never becomes a
-    reported number — README §13 forbids deriving measurements analytically,
+    reported number — SystemConfiguration.md forbids deriving measurements analytically,
     and a point that is attempted is measured end to end.
 
     ``parallel`` must match how the caller actually executes. The unit pairing

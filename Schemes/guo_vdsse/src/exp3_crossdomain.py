@@ -4,18 +4,18 @@ Variable:  domains ``d`` = 2 → 10
 Primary:   latency (ms)
 Secondary: trapdoors issued, cross-node messages
 
-Measurement boundary (README §5, Exp. 3):
+Measurement boundary (global.yaml, Exp. 3):
     Baselines run in native mode: ``d`` independent trapdoors + ``d``
     independent searches, client-side result aggregation.
 
 For Guo:
-  - Does NOT natively support cross-domain search (SCHEME.md line 19).
+  - Does NOT natively support cross-domain search.
   - Each of ``d`` independent EDB instances holds 1/d of the corpus
     (the domain's shard), so total data is constant as d varies.
   - Trapdoors issued = d (always).
   - Cross-node messages = 0 (no inter-node communication).
 
-Defaults: N = 10^5, q = 5 (README §6).
+Defaults: N = 10^5, q = 5.
 """
 
 from __future__ import annotations
@@ -44,6 +44,20 @@ SECONDARY_NAMES = ["trapdoors_issued", "cross_node_messages"]
 
 VARIABLE_RANGE = list(range(2, 11))  # d = 2 → 10
 DEFAULT_N = 100_000
+
+# §VI Exp. 3 fixes the PER-DOMAIN index size, not the total:
+# "The query size and per-domain index size are fixed to isolate cross-domain
+# search overhead." This fixed the TOTAL at 100,000 and sharded it by `d`, so
+# each domain's shard SHRANK from 50,000 at d=2 to 10,000 at d=10 — which is
+# why this scheme's Exp. 3 latency FELL across a sweep that is supposed to show
+# cross-domain cost rising. The proposed scheme meanwhile fixed per-domain at 4
+# records, so at d=10 the two sat on one axis with a 2,500x data disparity and
+# curve directions set by the two designs rather than by the schemes.
+#
+# All five now hold per-domain fixed at this value; total grows with `d`.
+# RESULTS-AFFECTING for this baseline's Exp. 3. (2026-09-10)
+PER_DOMAIN_INDEX_SIZE = 10_000
+
 DEFAULT_Q = 5
 
 
@@ -84,7 +98,10 @@ def run(
     actual_range = sweep.select(VARIABLE_RANGE, points)
 
     # Use at most DEFAULT_N records
-    subset = records[:min(DEFAULT_N, len(records))]
+    # Per-domain fixed: take `PER_DOMAIN_INDEX_SIZE * d`, so each of the `d`
+    # shards holds the same number of records at every sweep point.
+    wanted = PER_DOMAIN_INDEX_SIZE * max(actual_range)
+    subset = records[:min(wanted, len(records))]
 
     # Pre-build per-d sharded EDBs — not timed
     per_d_setups: Dict[int, List[Tuple[Any, Any]]] = {}

@@ -1,18 +1,18 @@
 """CLI entry point for the MA-LB-PQ-VDSE experiment harness.
 
-Documented in ``SCHEME.md``::
+Documented in ``SystemConfiguration.md`` section 7::
 
     python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment all \
         --config "Experiment Configuration/global.yaml" \
-        --dataset Dataset/derived --runs 30
+        --dataset Dataset/derived --runs 10
 
 Writes ``raw_runs.csv``, ``results.csv`` and ``run_meta.json`` into each
-experiment's folder, per README §9.
+experiment's folder, per ``SystemConfiguration.md`` section 7.
 
 **Nothing this produces is reportable today**, and the reasons travel with the
 output rather than living only here: ``run_meta.json`` carries
 ``not_reportable_because``, populated by ``harness.provenance.reportability``.
-The blockers are listed in ``SCHEME.md`` — the missing v2 dataset manifest, the
+The blockers — the missing v2 dataset manifest, the
 absent Type-III pairing backend, the undecided keyed/unkeyed ``H``, and the
 unswept λ weights. ``--require-reportable`` refuses to run rather than producing
 output that could be mistaken for results.
@@ -50,7 +50,7 @@ FOLDERS = {
 }
 
 #: Output folders for the ``psa`` construction — the manuscript's
-#: policy-state-aware form (MANUSCRIPT_DIVERGENCE.md D1-D9). Separate names, not
+#: policy-state-aware form (divergences D1-D9). Separate names, not
 #: a ``__psa`` suffix on the folders above, because these are not another arm of
 #: the same measurement: Exp. 1 and psa_exp1 time different functions, and
 #: psa_exp6 sweeps a different variable entirely. Sharing a directory family
@@ -93,8 +93,8 @@ def _run_notes(
         notes.append(f"scheduler_variant={variant}")
     if construction == "psa":
         notes.append(
-            "policy-state-aware construction (MANUSCRIPT_DIVERGENCE.md D1-D9); "
-            "measures token/commitment cost, NOT end-to-end search"
+            "policy-state-aware construction (divergences D1-D9): "
+            "T = H(w || PID || PV || Dom), PV a version-VECTOR digest"
         )
         if number == 4:
             # The LIVE selection, not a literal: a psa Exp. 4 stamped 'fabric'
@@ -139,18 +139,18 @@ def parse_experiments(value: str, construction: str = "option_d") -> List[int]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m Schemes.ma_lb_pq_vdse.src.main",
-        description="Run the MA-LB-PQ-VDSE experiments (README §5).",
+        description="Run the MA-LB-PQ-VDSE experiments.",
     )
     parser.add_argument("--experiment", default="all", help="all, 2, or 1,2,5")
     parser.add_argument("--config", default=None, help="path to global.yaml (informational)")
     parser.add_argument("--dataset", default=None, help="derived corpus directory")
     parser.add_argument(
         "--runs", type=int, default=None,
-        help="retained runs per point (README §7 fixes 10)",
+        help="retained runs per point (global.yaml fixes 10)",
     )
     parser.add_argument(
         "--warmups", type=int, default=None,
-        help="discarded warm-up runs (README §7 fixes 5)",
+        help="discarded warm-up runs (global.yaml fixes 5)",
     )
     parser.add_argument(
         "--output", default=None,
@@ -171,8 +171,8 @@ def build_parser() -> argparse.ArgumentParser:
             "which construction to measure. 'option_d' (default) is the "
             "implemented scheme: T = H(w), the banked results. 'psa' is the "
             "current manuscript's policy-state-aware form, "
-            "T = H(w || PID || PV || Dom) -- see MANUSCRIPT_DIVERGENCE.md "
-            "D1-D9. The two write to different directories and are NOT arms of "
+            "T = H(w || PID || PV || Dom), divergences D1-D9. The two write "
+            "to different directories and are NOT arms of "
             "one measurement; psa covers experiments "
             + ", ".join(str(n) for n in sorted(PSA_FOLDERS))
             + " only."
@@ -235,7 +235,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         source = experiments_mod.SyntheticRecordSource()
         log(f"corpus unavailable ({type(exc).__name__}: {exc})")
         log("  falling back to SyntheticRecordSource -- runs will be marked "
-            "NOT REPORTABLE (README §4 admits only corpus_type 'synthea')")
+            "NOT REPORTABLE (dataset.yaml admits only corpus_type 'synthea')")
         if args.require_reportable:
             log("REFUSED: --require-reportable was passed but the verified "
                 "corpus could not be loaded")
@@ -255,7 +255,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         group_faithful = False
         log(f"pairing: no faithful Type-III backend ({type(exc).__name__}: {exc})")
 
-    # Evidence for the README §1 topology gate. Independent FSN processes need
+    # Evidence for the SystemConfiguration.md topology gate. Independent FSN processes need
     # fork (fsn/pool.py); on a platform without it the harness falls back to the
     # single-interpreter path, and reporting a process count here would assert a
     # topology the run did not use.

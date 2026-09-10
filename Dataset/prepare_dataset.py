@@ -9,14 +9,14 @@ peer-reviewed and citable:
     for generating synthetic patients and the synthetic electronic health
     care record", JAMIA 25(3), 2018. doi:10.1093/jamia/ocx079
 
-Emits the derived artefact README §4 describes — keyword set ``W_i`` plus
+Emits the derived artefact dataset.yaml describes — keyword set ``W_i`` plus
 metadata ``(PID_i, VID_i, Dom_i, TS_i)`` per record.
 
 NOT THE SAME AS ``synthetic_generator.py``
 ------------------------------------------
 Both produce records without real patients, but they are different kinds of
 thing. ``synthetic_generator.py`` draws keywords from a fitted Zipf law with
-no clinical structure and is barred from reportable results (README §4).
+no clinical structure and is barred from reportable results.
 Synthea produces module-driven co-occurrence — a diabetes condition really
 does pull metformin — and is a citable instrument, so ``corpus_type:
 synthea`` IS reportable. Keep the distinction when reading a manifest.
@@ -365,7 +365,7 @@ def main(argv: List[str] | None = None) -> int:
                         help="output directory")
     parser.add_argument("--manifest", type=Path,
                         default=REPO_ROOT / "Dataset" / "dataset_manifest.json",
-                        help="manifest path; README §4 keeps it in Dataset/ "
+                        help="manifest path; dataset.yaml keeps it in Dataset/ "
                              "(committed provenance) while the corpus itself "
                              "stays git-ignored under derived/")
     parser.add_argument("--domains", type=int, default=None, help="default: dataset.yaml")
@@ -377,7 +377,7 @@ def main(argv: List[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true",
                         help="overwrite an existing corpus. The corpus is meant to "
                              "be built ONCE and reused; regenerating it mid-campaign "
-                             "makes earlier results incomparable (README §14)")
+                             "makes earlier results incomparable")
     args = parser.parse_args(argv)
 
     config = load(DATASET_CONFIG_PATH)
@@ -399,7 +399,7 @@ def main(argv: List[str] | None = None) -> int:
             f"  sha256: {existing}\n\n"
             f"The corpus is built ONCE and reused by every scheme on every\n"
             f"instance. Regenerating it now would make any results already\n"
-            f"produced incomparable (README §14).\n\n"
+            f"produced incomparable.\n\n"
             f"If you genuinely want to rebuild, pass --force — and then re-run\n"
             f"EVERY scheme, and clear freeze.expected_corpus_sha256 in\n"
             f"Experiment Configuration/dataset.yaml."
@@ -492,7 +492,7 @@ def main(argv: List[str] | None = None) -> int:
         factor = 1_000_000 / ceiling
         floor = cfg["keyword_filter"].get("min_keywords_per_record", 1)
         print(
-            f"\n  NOTE: {ceiling:,} records, below the 10^6 top of README §4's\n"
+            f"\n  NOTE: {ceiling:,} records, below the 10^6 top of dataset.yaml's\n"
             f"  range. Not a hard ceiling — scale the patient count by\n"
             f"  ~{factor:.2f}x and regenerate (this run's yield already\n"
             f"  accounts for min_keywords_per_record={floor}).",

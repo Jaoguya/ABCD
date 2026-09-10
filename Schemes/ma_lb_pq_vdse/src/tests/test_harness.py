@@ -8,9 +8,9 @@ these tests target the properties that would let a wrong number look right:
 * warm-ups are discarded and never recorded;
 * a failed run is recorded AND re-run, so n reaches 30 rather than 29;
 * nothing trims outliers;
-* the output columns are exactly README §9's;
+* the output columns are exactly global.yaml's;
 * every reportability blocker is named in ``run_meta.json``;
-* each experiment's ``measure`` covers the boundary its README §5 rule states.
+* each experiment's ``measure`` covers the boundary its global.yaml rule states.
 
 Runs standalone with no test framework::
 
@@ -139,7 +139,7 @@ def test_ci_is_computed_from_the_sample_alone():
 
 
 def test_stats_module_offers_no_trimming():
-    """README §7: keep outliers. A trimming helper would invite using it."""
+    """global.yaml: keep outliers. A trimming helper would invite using it."""
     names = {n for n in dir(stats) if not n.startswith("_")}
     assert not {
         "trim", "trimmed_mean", "winsorize", "drop_outliers", "filter_outliers",
@@ -226,14 +226,14 @@ def test_runner_discards_warmups_without_recording_them():
 
 
 def test_runner_prepares_once_per_point():
-    """Setup is untimed and must not re-run per measurement (README §5)."""
+    """Setup is untimed and must not re-run per measurement."""
     experiment = ScriptedExperiment(samples=[1.0])
     runner.run_point(experiment, 1, runs=8, warmups=2, confidence=0.95, scheme="s")
     assert experiment.prepared_count == 1
 
 
 def test_runner_records_a_failure_and_reruns_to_restore_n():
-    """README §7: record status=failed and re-run, rather than reporting n=29."""
+    """global.yaml: record status=failed and re-run, rather than reporting n=29."""
     experiment = FlakyExperiment(samples=[1.0], failures=3)
     point = runner.run_point(
         experiment, 1, runs=10, warmups=0, confidence=0.95, scheme="s"
@@ -275,7 +275,7 @@ def test_runner_summarises_secondaries():
 
 
 # ===========================================================================
-# runner.py — output format, README §9
+# runner.py — output format, global.yaml
 # ===========================================================================
 def written_outputs(experiment, *, runs=6, warmups=1):
     metadata = metadata_for(experiment.name, runs=runs, warmups=warmups)
@@ -298,7 +298,7 @@ def test_raw_runs_columns_match_readme_section_9():
 
 
 def test_raw_runs_leaves_unused_secondary_columns_blank():
-    """README §9: "Blank secondary columns where a metric doesn't apply"."""
+    """global.yaml: "Blank secondary columns where a metric doesn't apply"."""
     directory, _ = written_outputs(ScriptedExperiment(samples=[1.0, 2.0]))
     with (directory / "raw_runs.csv").open() as handle:
         rows = list(csv.DictReader(handle))
@@ -547,7 +547,7 @@ def test_provenance_refuses_a_corpus_that_is_not_the_frozen_one():
     Regression guard. reportability() used to only check that a SHA-256 was
     *present*, while its own message claimed it had been "verified against the
     frozen pin" — so a run on any other corpus passed the gate. That is the
-    silent data swap dataset.yaml's freeze pin exists to prevent (README §13).
+    silent data swap dataset.yaml's freeze pin exists to prevent.
     """
     import dataclasses
 
@@ -603,15 +603,41 @@ def test_synthetic_source_can_never_be_reportable():
 # ===========================================================================
 # experiments.py — measurement boundaries
 # ===========================================================================
+#: Exp. 7-8 build `defaults.index_size` RECORDS since 2026-09-10 (they divided
+#: by |W_i| before, giving ~3,125 where Exp. 2 built 100,000 at the same
+#: configured value). That is correct for a campaign and far too slow for a test
+#: suite: one `Exp7Throughput.prepare` measured **58.3 s** at the production
+#: size. These tests assert BEHAVIOUR — throughput ordering, utilisation spread,
+#: forward counts — none of which needs a 100,000-record index.
+#:
+#: Shrunk here rather than in `global.yaml`, so the production value stays the
+#: one §VI describes and only the tests pay a smaller bill.
+_TEST_INDEX_SIZE = 2_000
+
+
+def _config_for(number: int):
+    """CONFIG, with a test-sized index for the two experiments that build one."""
+    if number not in (7, 8):
+        return CONFIG
+    import dataclasses
+
+    return dataclasses.replace(
+        CONFIG,
+        defaults=dataclasses.replace(
+            CONFIG.defaults, index_size=_TEST_INDEX_SIZE
+        ),
+    )
+
+
 def measure_once(number: int, value: Any = None):
-    experiment = exp_mod.build_experiment(number, CONFIG, SOURCE)
+    experiment = exp_mod.build_experiment(number, _config_for(number), SOURCE)
     point = experiment.values[0] if value is None else value
     prepared = experiment.prepare(point)
     return experiment, experiment.measure(prepared)
 
 
 def test_all_experiments_are_defined():
-    """1-8 are README §5; 9 is the tamper-granularity companion to Exp. 4,
+    """1-8 are global.yaml; 9 is the tamper-granularity companion to Exp. 4,
     added 2026-09-03. Pinned as a list so a new experiment cannot be added
     without a test author noticing."""
     assert sorted(exp_mod.EXPERIMENTS) == [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -701,7 +727,7 @@ def test_exp1_latency_grows_with_q():
 
 
 def test_exp2_reports_n_eff():
-    """README §5: n_eff "is the only thing that can demonstrate the paper's claim".
+    """global.yaml: n_eff "is the only thing that can demonstrate the paper's claim".
 
     `>= 0` until 2026-09-07, which passes on the empty result set -- the defect
     that went undetected in guo's Exp. 2 for 150 banked runs and in psa_exp2 at
@@ -731,19 +757,20 @@ def test_exp2_sweeps_records_not_index_entries():
         )
 
 
-def test_exp3_trapdoor_count_does_not_scale_with_domains():
-    """The Exp. 3 claim, across the sweep.
+def test_exp3_trapdoor_count_is_an_option_d_property_only():
+    """d-independence is OPTION D's property, and the manuscript's scheme drops it.
 
-    The claim is **d-independence**, not the literal 1: §VI's point is that the
-    proposed scheme issues one trapdoor where a baseline issues one per domain.
-    So the assertion is that the count is CONSTANT as d grows, and equals the
-    keyword count -- which is what makes it fail if a trapdoor ever becomes
-    domain-bound (it would read q*d).
+    This asserted that Exp. 3's `trapdoors_issued` is constant as `d` grows —
+    true under `T = H(w)`, where one trapdoor serves every domain. It is FALSE
+    under the manuscript's `T = H(w || PID || PV || Dom)`: a token names its
+    policy and domain, so a query spanning `d` domains issues `q*d` of them.
+    That is divergence D9, and `PsaExp3CrossDomainLatency` measures it directly
+    (10 tokens at d=2, 20 at d=4).
 
-    This asserted `== 1.0` until 2026-09-08, against a `measure` that returned
-    the literal `1.0`. Both sides were hardcoded, so the experiment's headline
-    secondary was unfalsifiable in exactly the place a regression would show.
-    `measure` now counts `len(token.tokens)`; this now reads it.
+    Kept, narrowed to Option D, and renamed, rather than deleted: it is the
+    regression guard for the construction it describes, and §VI's Exp. 3 text
+    never claimed the single-trapdoor property in the first place — that claim
+    lived only in the harness docstring and this secondary.
     """
     counts = {}
     for domains in (2, 4, 6):
@@ -751,20 +778,14 @@ def test_exp3_trapdoor_count_does_not_scale_with_domains():
         counts[domains] = sample.secondaries["trapdoors_issued"]
         assert sample.secondaries["nodes_searched"] >= 1
     assert len(set(counts.values())) == 1, (
-        f"trapdoors_issued must not depend on d, got {counts} -- a trapdoor "
-        f"that scales with domains refutes the Exp. 3 claim outright"
+        f"under Option D the token is H(w), so the count cannot depend on d; "
+        f"got {counts}"
     )
-    # And it is the KEYWORD COUNT, read from the config rather than pinned to a
-    # literal. Exp. 3 issued q=1 against §VI's "each query contains five
-    # keywords" until 2026-09-09; this assertion said `== {1.0}` and so agreed
-    # with the defect instead of catching it. Sourcing q from global.yaml means
-    # the two move together and neither can silently go stale.
     q = float(config_mod.load().defaults.keywords_per_query)
     assert set(counts.values()) == {q}, (
         f"expected one token per queried keyword (q={q:g} from global.yaml), "
         f"got {counts}"
     )
-
 
 def test_exp4_reports_proof_size_in_kb_and_path_length():
     experiment, sample = measure_once(4, 10)
@@ -804,7 +825,7 @@ def test_exp8_primary_is_a_utilization_spread():
 
 
 def test_exp7_and_exp8_share_one_workload_engine():
-    """README §5: both metric sets come from the SAME runs."""
+    """global.yaml: both metric sets come from the SAME runs."""
     assert issubclass(exp_mod.Exp7Throughput, exp_mod.SchedulerAblation)
     assert issubclass(exp_mod.Exp8LoadBalance, exp_mod.SchedulerAblation)
     assert exp_mod.Exp7Throughput.replay is exp_mod.SchedulerAblation.replay
@@ -936,7 +957,7 @@ def test_dirty_marker_ignores_a_runs_own_output():
         "Experiment Configuration/global.yaml",
         "Common/crypto/config.py",
         "infra/fleet.sh",
-        "README.md",
+        "SystemConfiguration.md",
         # A result dir holding something OTHER than the three known artifacts
         # is not recognised output and must still count.
         "Schemes/ma_lb_pq_vdse/exp7_search_throughput__aass/patch.py",
@@ -970,7 +991,7 @@ def test_dirty_paths_asks_git_for_untracked_files_not_directories():
 
 
 def test_exp7_and_exp8_record_the_same_arrival_trace():
-    """README §5: both experiments replay "the same recorded arrival trace".
+    """global.yaml: both experiments replay "the same recorded arrival trace".
 
     They share the engine (above) but each calls prepare() separately, so
     "the same workload" is a property of prepare() being deterministic, not a
@@ -1043,7 +1064,7 @@ def test_ablation_covers_the_four_variants():
 
 
 def test_scheduler_ablation_ramps_before_measuring(monkeypatch):
-    """README §7: "Exp. 7-8 warm after a 30 s ramp."
+    """global.yaml: "Exp. 7-8 warm after a 30 s ramp."
 
     The ramp belongs in prepare(), which run_point() calls once per point and
     excludes from every timing. Putting it in measure() would ramp 30 times per

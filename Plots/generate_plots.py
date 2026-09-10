@@ -3,15 +3,15 @@
     python3 Plots/generate_plots.py --input Schemes --output Plots/output
 
 Walks ``Schemes/*/exp<N>_*/results.csv`` and emits one figure per experiment
-(README §10). Schemes with no ``results.csv`` for an experiment are skipped,
+(SystemConfiguration.md). Schemes with no ``results.csv`` for an experiment are skipped,
 so a partial campaign still plots — that is deliberate: the campaign runs
 per-scheme on separate instances and finishes at different times.
 
 TWO FIGURE FAMILIES
 -------------------
-``--construction option_d`` (the default) draws README §10's eight figures from
+``--construction option_d`` (the default) draws SystemConfiguration.md's eight figures from
 ``exp<N>_*/``. ``--construction psa`` draws the manuscript's policy-state-aware
-track (MANUSCRIPT_DIVERGENCE.md D6-D9) from ``psa_exp<N>_*/``, into separate
+track (divergences D6-D9) from ``psa_exp<N>_*/``, into separate
 ``fig_psa_exp*.pdf`` filenames. They are never merged: the two constructions
 time DIFFERENT functions at the same experiment number, psa_exp6 sweeps a
 different variable entirely, and every psa run is built on in-process synthetic
@@ -19,7 +19,7 @@ data and so is non-reportable by construction. The flag takes the same words as
 ``Schemes/ma_lb_pq_vdse/src/main.py --construction``, which writes those
 directories.
 
-FIGURE CONVENTIONS (README §10, followed exactly)
+FIGURE CONVENTIONS (SystemConfiguration.md, followed exactly)
 -------------------------------------------------
 * Vector PDF, single-column width.
 * 8 pt minimum type size anywhere on the figure.
@@ -32,7 +32,7 @@ FIGURE CONVENTIONS (README §10, followed exactly)
 WHAT THIS SCRIPT DELIBERATELY DOES NOT DO
 -----------------------------------------
 It does not aggregate, derive, interpolate or smooth. Every plotted value is
-read verbatim from a ``results.csv`` cell, so that README §15's "every numeric
+read verbatim from a ``results.csv`` cell, so that SystemConfiguration.md's "every numeric
 claim in §VI traces to a results.csv cell" stays literally true. A missing or
 malformed row is reported and skipped, never filled in.
 
@@ -62,7 +62,7 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
-# Figure specifications — README §5 (metrics) and §10 (filenames, log axes)
+# Figure specifications — global.yaml (metrics) and §10 (filenames, log axes)
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class PanelSpec:
@@ -181,18 +181,20 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # those keywords must be encoded." So the proposed scheme contributes FOUR
     # curves (one per scope, from psa_exp1_token_generation__pu<N>/) and each
     # baseline one (from its own exp1_trapdoor_generation/). See collect_mixed.
-    ExperimentSpec(1, "exp1_trapdoor_generation", "fig_exp1_trapdoor.pdf",
+    ExperimentSpec(1, "psa_exp1_token_generation", "fig_exp1_trapdoor.pdf",
                    "Queried keywords $q$", "Token generation latency (ms)",
                    log_y=True,   # 4.82 decades — see LOG_Y_DECADES
                    proposed_prefix="psa_",
                    proposed_variants=PSA_EXP1_VARIANTS,
                    restrict_x=(1, 5, 10, 15, 20)),
-    ExperimentSpec(2, "exp2_search_latency", "fig_exp2_search.pdf",
+    ExperimentSpec(2, "psa_exp2_search_latency", "fig_exp2_search.pdf",
                    "Index size $N$ (records)", "Search latency (ms)",
-                   log_x=True, log_y=True),
-    ExperimentSpec(3, "exp3_crossdomain_scalability", "fig_exp3_crossdomain.pdf",
+                   log_x=True, log_y=True,
+                   proposed_prefix="psa_"),
+    ExperimentSpec(3, "psa_exp3_crossdomain_latency", "fig_exp3_crossdomain.pdf",
                    "Domains $d$", "Cross-domain search latency (ms)",
-                   log_y=True),
+                   log_y=True,
+                   proposed_prefix="psa_"),
     # TWO PANELS. Exp. 4 asks what verification COSTS and what it BUYS, and the
     # second question is a different sweep: `r` returned ciphertexts against `t`
     # tampered ones. Merged 2026-09-05 -- panel (b) was a standalone Exp. 9
@@ -205,7 +207,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # both baselines and a log axis cannot draw a zero, so the complement is
     # what stays plottable. It carries the same fact -- discarding exactly `t`
     # is localizing exactly `t` and retaining the rest.
-    ExperimentSpec(4, "exp4_verification_overhead", "fig_exp4_verify.pdf",
+    ExperimentSpec(4, "psa_exp4_verification_overhead", "fig_exp4_verify.pdf",
                    "Returned results $r$", "Verification latency (ms)",
                    log_y=True,   # 2.66 decades — see LOG_Y_DECADES
                    panels=(
@@ -215,10 +217,12 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                                  folder="exp9_verification_granularity",
                                  xlabel="Tampered records $t$",
                                  log_x=True, log_y=True),
-                   )),
-    ExperimentSpec(5, "exp5_keyword_update", "fig_exp5_update.pdf",
+                   ),
+                   proposed_prefix="psa_"),
+    ExperimentSpec(5, "psa_exp5_retokenization", "fig_exp5_update.pdf",
                    "Updated (keyword, document) pairs $k$", "Update latency (ms)",
-                   log_x=True, log_y=True),
+                   log_x=True, log_y=True,
+                   proposed_prefix="psa_"),
     # TWO PANELS, because Exp. 6's ablation makes two DIFFERENT claims and
     # only one of them is visible in latency.
     #
@@ -230,7 +234,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # the per-update cost is all sender-side (authorization evolution, index
     # evolution, Merkle path update, message build). A latency-only figure
     # would leave the SELECTIVE half of the claim with no evidence at all,
-    # which is exactly what README S5's "selective propagation is the claim"
+    # which is exactly what SystemConfiguration.md's "selective propagation"
     # asks the experiment to show.
     #
     # Panel (b) is the DELIVERED PAYLOAD: bytes leaving the AIM per update,
@@ -244,7 +248,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     #
     # Section VI must state that the selective saving is in DELIVERY VOLUME, not
     # in sender-side latency, and why: an in-process harness models no network.
-    ExperimentSpec(6, "exp6_authorization_sync", "fig_exp6_sync.pdf",
+    ExperimentSpec(6, "psa_exp6_affected_ratio", "fig_exp6_sync.pdf",
                    "Authorization updates $\\delta$", "Synchronization latency (ms)",
                    log_x=True, log_y=True,
                    panels=(
@@ -255,9 +259,11 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                        # evenly apart and both gaps read at a glance.
                        PanelSpec(3, "DIAS payload delivered (KB)", "b",
                                  log_y=True),
-                   )),
-    ExperimentSpec(7, "exp7_search_throughput", "fig_exp7_throughput.pdf",
-                   "Concurrent queries", "Throughput (queries/s)"),
+                   ),
+                   proposed_prefix="psa_"),
+    ExperimentSpec(7, "psa_exp7_search_throughput", "fig_exp7_throughput.pdf",
+                   "Concurrent queries", "Throughput (queries/s)",
+                   proposed_prefix="psa_"),
     # Exp. 9 is the Exp. 4 companion: Exp. 4 asks what verification COSTS,
     # Exp. 9 what it BUYS. Log-log because the gap is the story -- ours tracks
     # t exactly while the accumulator schemes sit flat at the full result-set
@@ -267,7 +273,7 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
     # panel is drawn. Panel (c) is why -- it carried this label for runs whose
     # secondary_2 was peak queue depth, because `cross_node_forwards` had been
     # dropped from the metric list and nothing tied the label to the column.
-    ExperimentSpec(8, "exp8_load_balance", "fig_exp8_balance.pdf",
+    ExperimentSpec(8, "psa_exp8_load_balance", "fig_exp8_balance.pdf",
                    "Concurrent queries", "FSN utilization std. dev.",
                    panels=(
                        PanelSpec(0, "Utilization std. dev.", "a"),
@@ -275,7 +281,8 @@ EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
                                  metric_name="max_node_utilization"),
                        PanelSpec(2, "Cross-node forwards", "c",
                                  metric_name="cross_node_forwards"),
-                   )),
+                   ),
+                   proposed_prefix="psa_"),
 )
 
 #: The PSA track's Exp. 6 arms. Same three claims as EXP6_VARIANTS, but the
@@ -291,7 +298,7 @@ PSA_EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
 )
 
 
-#: THE POLICY-STATE-AWARE TRACK (MANUSCRIPT_DIVERGENCE.md D6-D9).
+#: THE POLICY-STATE-AWARE TRACK (divergences D6-D9).
 #:
 #: A SEPARATE figure family, selected with `--construction psa`, never merged
 #: into the eight above. Three reasons, all of them the reason the runner keeps
@@ -304,7 +311,7 @@ PSA_EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
 #:   (10%-100%), not an update count -- which is divergence D8.
 #: * Every psa run is built on in-process synthetic data, so `reportable` is
 #:   false by construction. These figures are for deciding whether to adopt
-#:   D1-D5; README §4 admits only `synthea` for anything quoted in §VI, and
+#:   D1-D5; dataset.yaml admits only `synthea` for anything quoted in §VI, and
 #:   `--require-reportable` drops the whole family accordingly.
 #:
 #: Filenames carry `psa_` for the same reason the directories do: a figure
@@ -473,7 +480,7 @@ CONSTRUCTIONS: Dict[str, Tuple[ExperimentSpec, ...]] = {
 # enforced rather than becoming a comment about what was once true.
 #: Reportable repetition count, read from the campaign config rather than
 #: hardcoded here. `Experiment Configuration/global.yaml` is the single source of
-#: truth (README §7); a literal in this file is how the n_runs warning kept
+#: truth; a literal in this file is how the n_runs warning kept
 #: citing 30 after the campaign moved to 10. yaml is not imported at module
 #: scope because this script must run in a bare matplotlib environment, so the
 #: value is parsed with a regex and falls back to the documented default.
@@ -512,7 +519,7 @@ SCHEME_LABELS: Dict[str, str] = {
     "perera_lv_pqabse": "Scheme [54]",
 }
 
-# Marker AND linestyle both vary, so the figures survive grayscale (README §10).
+# Marker AND linestyle both vary, so the figures survive grayscale.
 # The proposed scheme is pinned to index 0 so it is visually consistent across
 # all eight figures rather than shifting when a baseline is absent.
 STYLE_ORDER: Tuple[str, ...] = (
@@ -559,7 +566,7 @@ ABLATION_STYLE_SLOT: Dict[str, int] = {
     # should read that way: slot 0 (the proposed scheme's blue circle) is
     # |P_U| = 1, the baseline scope, and the rest step up from there. Without
     # these four entries all four curves drew in one colour and the figure
-    # could not be read at all in grayscale, which README §10 requires.
+    # could not be read at all in grayscale, which SystemConfiguration.md requires.
     "$|P_U| = 1$": 0,
     "$|P_U| = 2$": 1,
     "$|P_U| = 4$": 2,
@@ -584,7 +591,7 @@ def style_for(scheme: str) -> Dict[str, object]:
     color = COLORS[idx % len(COLORS)]
     if scheme in PROPOSED_FAMILY:
         # Marker and linestyle still step with the slot, so the family stays
-        # separable in grayscale (README §10).
+        # separable in grayscale.
         color = COLORS[0]
     return {
         "marker": MARKERS[idx % len(MARKERS)],
@@ -809,7 +816,7 @@ def read_results(path: Path, scheme: str) -> Optional[Series]:
         except (OSError, json.JSONDecodeError, AttributeError) as exc:
             series.problems.append(f"{meta}: unreadable ({type(exc).__name__})")
     else:
-        series.problems.append(f"{meta}: missing (README §9 requires it)")
+        series.problems.append(f"{meta}: missing (global.yaml requires it)")
     return series
 
 
@@ -823,7 +830,7 @@ ABLATION_VARIANTS: Tuple[Tuple[str, str], ...] = (
 
 #: Exp. 6 ablates DIAS PROPAGATION, not the scheduler, so it has its own
 #: vocabulary. Added 2026-09-03 -- before that Exp. 6 plotted one series with no
-#: comparison, so README §5's "selective propagation is the claim" had nothing to
+#: comparison, so global.yaml's "selective propagation is the claim" had nothing to
 #: read it against.
 #:
 #: LEFT is the on-disk slug, RIGHT is the legend text. They differ on purpose:
@@ -1098,6 +1105,21 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
         # Preferring the declared folder makes the spec's own `folder` field
         # load-bearing rather than decorative; the glob stays as the fallback
         # it was written to be.
+        # THE PROPOSED SCHEME FOLLOWS `proposed_prefix`; the baselines do not.
+        #
+        # `proposed_prefix` only took effect through `collect_mixed`, which runs
+        # only when `proposed_variants` is also set. So a spec that named a
+        # `psa_` folder and set `proposed_prefix` — every manuscript spec after
+        # the 2026-09-10 repoint — still globbed `exp<N>_*` for the proposed
+        # scheme and silently drew OPTION D. Verified: Fig. 3's proposed series
+        # came back as 0.076/0.106/0.123 ms, the pre-fix Option D numbers, under
+        # a spec whose folder said `psa_exp3_crossdomain_latency`.
+        #
+        # The baselines have no `psa_` directories, so the prefix must apply to
+        # the proposed scheme alone.
+        prefix = spec.prefix
+        if spec.proposed_prefix and scheme_dir.name == PROPOSED_SCHEME:
+            prefix = spec.proposed_prefix
         declared = scheme_dir / spec.folder
         matches = [declared] if declared.is_dir() else []
         # The fallback must never reach ANOTHER spec's declared folder. Merely
@@ -1107,7 +1129,7 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
         # had none.
         claimed = _folders_claimed_by_other_specs(spec)
         matches += [
-            m for m in sorted(scheme_dir.glob(f"{spec.prefix}exp{spec.number}_*"))
+            m for m in sorted(scheme_dir.glob(f"{prefix}exp{spec.number}_*"))
             if m != declared and m.name not in claimed
         ]
         used: Optional[Path] = None
@@ -1132,7 +1154,7 @@ def collect(input_root: Path, spec: ExperimentSpec) -> List[Series]:
 # ---------------------------------------------------------------------------
 # Plotting
 # ---------------------------------------------------------------------------
-# IEEE single-column is 3.5 in. 8 pt is README §10's stated minimum, so every
+# IEEE single-column is 3.5 in. 8 pt is SystemConfiguration.md's stated minimum, so every
 # text element is set at or above it.
 plt.rcParams.update({
     "font.size": 8,
@@ -1496,7 +1518,7 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
                 f"exp{spec.number}: {series.scheme} has no readable run_meta.json"
             )
         # Read from the config, not a literal. This said `< 30` and cited
-        # "README §9 requires 30" until 2026-09-04 -- eight months after the
+        # "global.yaml requires 30" until 2026-09-04 -- eight months after the
         # campaign moved to 10 -- so it fired on EVERY series of EVERY figure
         # at the correct count. A warning that is always wrong is worse than
         # none: it trains the reader to scroll past the ones that are right.
@@ -1505,7 +1527,7 @@ def _draw_panel(ax, spec: ExperimentSpec, series_list: Sequence[Series],
         if short:
             warnings.append(
                 f"exp{spec.number}: {series.scheme} has points with "
-                f"n_runs<{required} (min {min(short)}) — README §9 requires "
+                f"n_runs<{required} (min {min(short)}) — global.yaml requires "
                 f"{required} for reportable data"
             )
         warnings.extend(series.problems)
@@ -1723,7 +1745,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     parser = argparse.ArgumentParser(
         prog="python3 Plots/generate_plots.py",
-        description="Generate the manuscript's eight figures (README §10).",
+        description="Generate the manuscript's eight figures.",
     )
     parser.add_argument("--input", default="Schemes",
                         help="root containing <scheme>/exp<N>_*/results.csv")
@@ -1732,7 +1754,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument("--construction", default="option_d",
                         choices=sorted(CONSTRUCTIONS),
                         help="which figure family to draw. 'option_d' (the "
-                             "default) is README §10's eight figures, from "
+                             "default) is SystemConfiguration.md's eight figures, from "
                              "exp<N>_*/. 'psa' is the manuscript's "
                              "policy-state-aware track (D6-D9), from "
                              "psa_exp<N>_*/ -- a separate family with its own "
@@ -1746,7 +1768,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                              "is not reportable:true")
     parser.add_argument("--format", default="pdf",
                         help="output format(s), comma-separated, e.g. 'pdf' or "
-                             "'pdf,png'. README §10 wants vector for the paper, "
+                             "'pdf,png'. SystemConfiguration.md wants vector for the paper, "
                              "so pdf stays the default. With MORE THAN ONE "
                              "format each goes in its own subdirectory "
                              "(<output>/pdf/, <output>/png/) so a raster copy "

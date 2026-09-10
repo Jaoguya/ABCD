@@ -666,7 +666,7 @@ def test_lifecycle_outsource_search_verify():
     )
     result = proof_mod.verify_bundle(
         bundle,
-        auth_root=system.owner_profile.auth_root,   # AuthRoot_DO, per SCHEME.md
+        auth_root=system.owner_profile.auth_root,   # AuthRoot_DO
         require_version_match=False,
         chain_check=vledger_mod.chain_checker(system.ledger),
     )

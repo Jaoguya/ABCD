@@ -1,6 +1,6 @@
 """Exp. 3 — Cross-Domain Search Scalability. Ref[55], native mode.
 
-Variable:  domains ``d`` = 2 -> 10 (README §5)
+Variable:  domains ``d`` = 2 -> 10
 Primary:   total latency (ms) across ``d`` domains
 Secondary: trapdoors issued, cross-node messages
 
@@ -9,7 +9,7 @@ NATIVE MODE
 Ref[55] has no cross-domain notion at all. Its system model (§V) is a single
 data owner, a single cloud server, and a hierarchy of users — there is no
 federation, no inter-server protocol, and no shared index across administrative
-boundaries. So the honest treatment is README §3's native-mode rule, the same
+boundaries. So the honest treatment is SystemConfiguration.md's native-mode rule, the same
 one applied to ``guo_vdsse`` and ``thingom_pq_abse``:
 
     issue ``d`` independent tokens, run ``d`` independent searches, aggregate
@@ -17,13 +17,13 @@ one applied to ``guo_vdsse`` and ``thingom_pq_abse``:
 
 Latency is therefore expected to grow linearly in ``d``, and ``cross_node_msgs``
 is identically 0 because no such message exists in the construction. Counting
-trapdoors issued is what makes the mechanism visible in the plot (README §5,
+trapdoors issued is what makes the mechanism visible in the plot (global.yaml,
 Exp. 3: "Count trapdoors issued so the mechanism is visible").
 
 TOTAL INDEX IS HELD CONSTANT ACROSS d
 -------------------------------------
 ``d`` is the only variable, so the total amount of indexed data must not move
-with it. A fixed subset of ``N = 10^5`` records (README §6's default index size)
+with it. A fixed subset of ``N = 10^5`` records (global.yaml's default index size)
 is sharded into ``d`` parts, exactly as ``guo_vdsse``'s Exp. 3 does
 ("each of ``d`` independent EDB instances holds 1/d of the corpus ... so total
 data is constant as d varies").
@@ -39,7 +39,7 @@ deployments are ~12 GB against a 16 GiB host.
 
 Sharding by ``rec.dom % d`` keeps shards aligned to real institutional
 boundaries wherever ``d`` divides the corpus's 10 domains, and never invents a
-domain the corpus does not have — README §4's constraint is about not
+domain the corpus does not have — dataset.yaml's constraint is about not
 FABRICATING domains, which sharding a fixed subset does not do.
 """
 
@@ -74,9 +74,23 @@ SECONDARY_NAMES = ["trapdoors_issued", "cross_node_msgs", "results_returned"]
 
 VARIABLE_RANGE = list(range(2, 11))
 
-# README §6 default index size. Held constant across the whole d sweep so
+# global.yaml default index size. Held constant across the whole d sweep so
 # that d is the only variable — see the module docstring.
 TOTAL_INDEX_SIZE = 100_000
+
+# §VI Exp. 3 fixes the PER-DOMAIN index size, not the total:
+# "The query size and per-domain index size are fixed to isolate cross-domain
+# search overhead." This fixed the TOTAL at 100,000 and sharded it by `d`, so
+# each domain's shard SHRANK from 50,000 at d=2 to 10,000 at d=10 — which is
+# why this scheme's Exp. 3 latency FELL across a sweep that is supposed to show
+# cross-domain cost rising. The proposed scheme meanwhile fixed per-domain at 4
+# records, so at d=10 the two sat on one axis with a 2,500x data disparity and
+# curve directions set by the two designs rather than by the schemes.
+#
+# All five now hold per-domain fixed at this value; total grows with `d`.
+# RESULTS-AFFECTING for this baseline's Exp. 3. (2026-09-10)
+PER_DOMAIN_INDEX_SIZE = 10_000
+
 
 
 def run(
@@ -94,7 +108,10 @@ def run(
     rng = DeterministicRNG(seed).spawn("exp3_crossdomain")
 
     # The fixed total index, held constant across every d.
-    subset = list(records[:min(TOTAL_INDEX_SIZE, len(records))])
+    # Per-domain fixed (§VI): `PER_DOMAIN_INDEX_SIZE * d` records, so each of
+    # the `d` shards holds the same number at every sweep point.
+    _wanted = PER_DOMAIN_INDEX_SIZE * max(actual_range)
+    subset = list(records[: min(_wanted, len(records))])
     if len(subset) < TOTAL_INDEX_SIZE:
         print(
             f"  NOTE: corpus holds {len(subset):,} records; total index is "

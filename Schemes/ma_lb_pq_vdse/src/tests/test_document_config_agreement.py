@@ -188,3 +188,123 @@ def test_operator_guide_states_the_configured_repetitions_in_prose():
         f"SystemConfiguration.md says {stated.group(1)} measured runs; "
         f"global.yaml says {configured}"
     )
+#: Prose documents deleted in the 2026-09-07/08 cull. A comment naming one of
+#: these sends a reader to a path that does not exist. `SystemConfiguration.md`
+#: section 8 holds the resolver table that replaced them.
+DELETED_DOCS = (
+    "SCHEME.md",
+    "MANUSCRIPT_DIVERGENCE.md",
+    "PHASE_III_PLAN.md",
+    "PHASE_IV_PLAN.md",
+)
+
+#: Files allowed to name a deleted document, and why. Each is an account of the
+#: deletion rather than a pointer at the deleted thing, so rewriting them would
+#: erase the history that explains the rule.
+_HISTORY = (
+    "test_document_config_agreement.py",   # this file
+    "test_repetition_count_agreement.py",  # three comments, all past tense
+    "DECISIONS.md",                    # closed archive, per CLAUDE.md
+    "SKILL.md",                        # records that README.md is gone
+    "bench-coder.md",                  # records when README.md was deleted
+)
+
+#: Every name above is reachable, so every entry does work. Nothing here names
+#: a repo-root document: root prose is not scanned (see ``_source_files``), so
+#: an entry for one would be decoration -- and decoration in an exclusion list
+#: is how a guard comes to look like it covers something it does not.
+
+#: ``.md`` is included deliberately. Leaving it out would make every ``.md``
+#: entry in ``_HISTORY`` inert and the guard would look like it covered
+#: prose while covering none of it -- the shape of defect this whole sweep
+#: was about.
+_SOURCE_SUFFIXES = (".py", ".yaml", ".yml", ".sh", ".csv", ".md")
+
+
+def _source_files():
+    # Repo-root code and config, but NOT root prose. The two surviving prose
+    # documents are covered by ``test_documents_cite_only_paths_that_exist``,
+    # and a document whose subject IS the deletion has to be free to name what
+    # was deleted. This guard is for source.
+    for path in sorted(REPO.glob("*")):
+        if path.is_file() and path.suffix in _SOURCE_SUFFIXES:
+            if path.suffix != ".md" and path.name not in _HISTORY:
+                yield path
+    for root in _REPO_DIRS:
+        base = REPO / root.rstrip("/")
+        if not base.is_dir() or root == "References/":
+            continue
+        for path in base.rglob("*"):
+            if path.suffix not in _SOURCE_SUFFIXES:
+                continue
+            if "__pycache__" in path.parts or ".venv" in path.parts:
+                continue
+            if path.name in _HISTORY:
+                continue
+            yield path
+
+
+def test_no_source_file_cites_a_deleted_document():
+    """A comment citing a deleted file is a reader sent nowhere.
+
+    This is the guard for the 2026-09-10 sweep: 79 such citations across 48
+    files, none of which any test could see. The prose half is covered by
+    ``test_documents_cite_only_paths_that_exist``; nothing covered source
+    comments, which is where the great majority of them were.
+
+    ``README.md`` is deliberately NOT in ``DELETED_DOCS``: ``.pytest_cache`` and
+    ``References/`` legitimately contain one, and the bare ``README section N``
+    form is tracked separately.
+    """
+    offenders = []
+    for path in _source_files():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for doc in DELETED_DOCS:
+            if doc in text:
+                offenders.append(f"{path.relative_to(REPO).as_posix()} -> {doc}")
+    assert not offenders, (
+        "these cite documents deleted in the 2026-09-07/08 cull: "
+        + ", ".join(sorted(offenders))
+        + ". Cite the surviving section of SystemConfiguration.md, or keep the "
+        "decision reference and drop the path (see its section 8)."
+    )
+#: Any spelling of a reference to a section of the deleted ``README.md``:
+#: "README §5", "README's §7", "README section 5", and the mojibake "README S6"
+#: that a non-UTF-8 write left behind. All four were live in the tree on
+#: 2026-09-10.
+_README_SECTION = re.compile(r"README(?:\.md)?(?:'s)?\s*(?:§|S|section)\s?\d+")
+
+
+def test_no_source_file_cites_a_section_of_the_deleted_readme():
+    """The number is the part that rots, and it had already rotted.
+
+    333 of these were live across 87 files. README.md was recovered from
+    ``e503655^`` to check them and its own numbering had drifted: ~20 cites of
+    "§14" meant the Ground Rules, which is §13 in the recovered file, while
+    §14 was Open Issues. So a fifth of them pointed at the wrong section
+    *before* the file was deleted, and nothing here could see it.
+
+    Facts a config file owns now cite that file (``global.yaml``,
+    ``dataset.yaml``) so a wrong reference is checkable rather than merely
+    stale; the rest cite ``SystemConfiguration.md`` with no section number,
+    which cannot develop the same fault.
+    """
+    offenders = []
+    for path in _source_files():
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for match in _README_SECTION.finditer(text):
+            offenders.append(
+                "%s -> %r" % (path.relative_to(REPO).as_posix(), match.group(0))
+            )
+    assert not offenders, (
+        "these cite a section of the deleted README.md: "
+        + ", ".join(sorted(set(offenders)))
+        + ". Cite the config file that owns the value, or SystemConfiguration.md "
+        "with no section number."
+    )

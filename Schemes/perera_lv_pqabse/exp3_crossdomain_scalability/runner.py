@@ -1,6 +1,6 @@
 """Exp. 3 — Cross-Domain Search Scalability. Ref[54], native mode.
 
-Variable:  domains ``d`` = 2 -> 10 (README §5)
+Variable:  domains ``d`` = 2 -> 10
 Primary:   total latency (ms) across ``d`` domains
 Secondary: trapdoors issued, cross-node messages, results returned
 
@@ -10,13 +10,13 @@ Ref[54]'s system model is one Trusted Authority, one fog tier, no federation
 and no inter-server protocol — there is no cross-domain notion in the paper at
 all. crypto.yaml records the decision (``cross_domain.mode:
 independent_trapdoors``, 2026-08-29): issue ``d`` independent trapdoors, run
-``d`` independent searches, aggregate on the client. That is README §3's
+``d`` independent searches, aggregate on the client. That is SystemConfiguration.md's
 native-mode rule, already applied to ``guo_vdsse`` and ``thingom_pq_abse``.
 
 Latency is therefore expected to grow roughly linearly in ``d``, and
 ``cross_node_msgs`` is identically 0 because no such message exists in the
 construction. Counting trapdoors issued is what makes the mechanism visible
-(README §5, Exp. 3).
+(global.yaml, Exp. 3).
 
 TOTAL INDEX IS HELD CONSTANT ACROSS d
 -------------------------------------
@@ -57,6 +57,20 @@ SECONDARY_NAMES = ["trapdoors_issued", "cross_node_msgs", "results_returned"]
 
 VARIABLE_RANGE = list(range(2, 11))
 TOTAL_INDEX_SIZE = 100_000
+
+# §VI Exp. 3 fixes the PER-DOMAIN index size, not the total:
+# "The query size and per-domain index size are fixed to isolate cross-domain
+# search overhead." This fixed the TOTAL at 100,000 and sharded it by `d`, so
+# each domain's shard SHRANK from 50,000 at d=2 to 10,000 at d=10 — which is
+# why this scheme's Exp. 3 latency FELL across a sweep that is supposed to show
+# cross-domain cost rising. The proposed scheme meanwhile fixed per-domain at 4
+# records, so at d=10 the two sat on one axis with a 2,500x data disparity and
+# curve directions set by the two designs rather than by the schemes.
+#
+# All five now hold per-domain fixed at this value; total grows with `d`.
+# RESULTS-AFFECTING for this baseline's Exp. 3. (2026-09-10)
+PER_DOMAIN_INDEX_SIZE = 10_000
+
 DEFAULT_Q = 5
 
 
@@ -73,7 +87,10 @@ def run(
 ) -> None:
     rng = DeterministicRNG(seed).spawn("exp3_crossdomain")
     actual_range = sweep.select(VARIABLE_RANGE, points)
-    subset = list(records[: min(TOTAL_INDEX_SIZE, len(records))])
+    # Per-domain fixed (§VI): `PER_DOMAIN_INDEX_SIZE * d` records, so each of
+    # the `d` shards holds the same number at every sweep point.
+    _wanted = PER_DOMAIN_INDEX_SIZE * max(actual_range)
+    subset = list(records[: min(_wanted, len(records))])
     if len(subset) < TOTAL_INDEX_SIZE:
         print(
             f"  NOTE: corpus holds {len(subset):,} records; total index is "

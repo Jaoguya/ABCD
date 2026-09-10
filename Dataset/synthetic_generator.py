@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate a statistically-matched synthetic corpus.
 
-DEVELOPMENT ONLY. README §4: "Results produced from the synthetic corpus are
+DEVELOPMENT ONLY. dataset.yaml: "Results produced from the synthetic corpus are
 for development only and must not be reported in the paper." Every corpus
 this script writes is stamped ``corpus_type: synthetic`` and
 ``reportable: false`` in its manifest.
@@ -247,7 +247,7 @@ def main(argv: List[str] | None = None) -> int:
                         help="PRNG seed (default: dataset.yaml)")
     parser.add_argument("--manifest", type=Path,
                         default=REPO_ROOT / "Dataset" / "dataset_manifest.json",
-                        help="manifest path; README §4 keeps it in Dataset/ "
+                        help="manifest path; dataset.yaml keeps it in Dataset/ "
                              "(committed provenance) while the corpus itself "
                              "stays git-ignored under derived/")
     parser.add_argument("--force", action="store_true",
@@ -331,7 +331,7 @@ def main(argv: List[str] | None = None) -> int:
         f"  |W_i| mean  : {manifest['keywords_per_record']['mean']:.2f}\n"
         f"  fitted zipf : {manifest['frequency_profile']['fitted_exponent']}\n"
         f"  sha256      : {manifest['corpus_sha256']}\n"
-        f"\n  NOT REPORTABLE — development corpus (README §4).",
+        f"\n  NOT REPORTABLE — development corpus.",
         file=sys.stderr,
     )
     return 0
