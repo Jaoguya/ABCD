@@ -61,8 +61,15 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
 > figures. Sequence: **A2** (ports) -> **A7** (repoint) -> **B2** (campaign) ->
 > then delete `option_d` as A10.
 
-- [ ] **A10 Delete `option_d` once PSA covers all eight figures and B2 has
-      run.** Not before: it is the only track that works end to end today.
+- [ ] **A10 Retire the `option_d` EXPERIMENT TRACK — classes Exp1-Exp6 and
+      Exp9 plus their `EXPERIMENTS` registry entries — after B2.**
+      *(Scope and timing DECIDED by the user 2026-09-10.)* Not a deletion of
+      `option_d`: step 4 wired PSA onto its `build_deployment`,
+      `SchedulerAblation`, `Exp7/8` and `index/dsi.py`, so the shared Phase I-V
+      scaffolding stays. Retiring after the campaign keeps a working fallback
+      and a comparison baseline while PSA produces its first numbers. Until
+      then the twin-drift hazard is contained by the `construction` field and
+      the homogeneity guard, which refuse to draw both on one axis.
 
 
 - [ ] **A9 Exp. 4** — §V gains the `check_chain_integrity` disclosure sentence.
@@ -77,37 +84,73 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
 - [ ] **B1 λ re-sweep** over the four-term cost on
       `workload/exp78_sweep_holdout.yaml`; commit the output and fill
       `determined_on` / `determined_by`.
-- [ ] **B2 One campaign** — re-measure Figs. 2–8 under PSA.
+- [ ] **B2a PROBE FIRST — one point per experiment on the pinned host.**
+      *(DECIDED by the user 2026-09-10.)* **The campaign cannot be priced from
+      this repo.** `runtime_estimates.csv` holds exactly ONE measured row for
+      the proposed scheme (`exp7_8`, 2026-08-29) and a TOTAL row that guesses
+      *"exp1-6 ~0.25h"* with no basis; experiments 1-6 have no estimate at all.
+      That row predates A5 (`Exp7.prepare` 2 s -> 58.3 s), Exp. 3's per-domain
+      sizing (40 records -> 10,000 x d) and the PSA port. The four baselines
+      ARE measured: 47.8 h for a full re-measure, 17.9 h of it Exp. 3 alone.
+      The probe also exercises the PSA path on real corpus data for the first
+      time, and **closes E2**, which needs exactly this host and corpus.
+- [ ] **B2 One campaign** — re-measure Figs. 2–8 under PSA, priced from B2a.
       **NEEDS AWS SPEND APPROVAL.** Never launch Ref[41] Exp. 2 above N=10⁴.
+      Run one point through `--require-reportable` first; the guards now
+      hard-fail rather than drawing an unverified panel.
 - [ ] **B3 Regenerate all figures**; the Step 1 guards must pass unaided.
 
 ## C. Manuscript (after B)
 
-- [ ] **C1 Table I — `ref54` row, two wrong cells.** Blockchain ✗→✓ (p1, p3:
-      Merkle proofs "anchored on a blockchain"); Multi-Keyword ✗→✓ (p3: "the
-      first lattice-based ABSE framework that supports multikeyword, Boolean,
-      fuzzy, and numeric range queries").
-- [ ] **C2 Drop `ref41` from the lattice/PQ prose lists** at tex:139 and
-      tex:332. The table's ✗ is correct (its security rests on DBDH, which Shor
-      breaks); the prose contradicts it twice.
-- [ ] **C3 Add a `ref30` row to Table I.** Peony++ is a baseline in Exps. 1–5
-      and has no row.
-- [ ] **C4 Verify the ten Table I rows whose PDFs are absent** from
-      `References/`. Two errors were found in the one row audited closely.
-- [ ] **C5 §VI query arity.** "the same q=5 conjunctive query used throughout
-      this section" (tex:2544) is unachievable — [30] and [41] are
-      single-keyword *by construction*. State the query shape per scheme.
-- [ ] **C6 §VI Exp. 2 selectivity.** No baseline records a match count, so the
-      "selectivity is kept constant" claim is unfalsifiable. Add a
-      `matched_records` secondary to all five, or drop the sentence.
-- [ ] **C7 §V Exp. 6, two corrections.** The selective advantage is in **bytes,
-      not time** (DIAS vs Incremental-All latency differs by ~2%, noise). And
-      the narrowing at a full ratio is **not total**: work converges (10×→1×)
-      but delivery does not (40×→4×).
+- [ ] **C5 §VI query arity — DECIDED (a), user 2026-09-10: name the exception
+      at tex:2179; leave tex:2544 alone.** Two sites carry the claim, and
+      tex:2179 is the one that covers every scheme: *"Unless otherwise
+      specified, each query contains five keywords."* Schemes [30] and [41] are
+      single-keyword **by construction** — Ge et al. p7 defines queries as
+      `q = (w, alpha(u))`, "single keyword queries", and calls conjunctive
+      Boolean "an interesting open problem"; Thingom's Search phase takes "the
+      keyword w_w" and builds one `CS_w` per file. The harness is faithful in
+      all four cases, so only the prose changes. Agreed wording:
+      *"...each query contains five keywords; Schemes~\cite{ref30} and
+      ~\cite{ref41} are single-keyword constructions and are evaluated at
+      $q=1$."* tex:2544 needs no change: Exps. 7-8 are a proposed-scheme-only
+      ablation, where $q=5$ is true.
+
+- [ ] **C6 §VI Exp. 2 selectivity — DEFERRED TO THE DATA (user, 2026-09-10).**
+      `matched_records` now exists in all five schemes, so "query selectivity
+      is kept constant" is checkable for the first time — but only once B2 has
+      run. The user will edit §VI to match the measured result rather than
+      deciding the sentence in advance.
+
 - [ ] **C8 §VI environment.** Host is unpinned (`pin_configured: false`), BLAS
       was never pinned in any banked run, and §VI claims one `m6i.xlarge`.
-- [ ] **C9 §V Exp. 4** — re-derive the "within 2% at every r" sentence from
-      `raw_runs.csv`; two datasets disagree.
+- [ ] **C9 §V Exp. 4 — the "within 2% at every $r$" sentence (tex:2419) is not
+      supported. RE-DERIVED 2026-09-10; the wording is yours.**
+      Two independent failures, from banked `raw_runs.csv`, n=10 per point:
+
+      **1. The tolerance is exceeded at three of five points, and the gaps are
+      real, not noise.** Per-result cost (primary / r), psa vs option_d:
+      r=10 +1.67% (p=0.05, CIs overlap) · **r=50 −3.09%** (p=4e-06, DISJOINT) ·
+      **r=100 −2.30%** (p=5e-05, DISJOINT) · **r=500 −2.28%** (p=1e-31,
+      DISJOINT) · r=1000 −0.40% (p=0.45, overlap). Note the sign: PSA is
+      *faster*, which the sentence's reasoning does not predict either.
+
+      **2. The two runs are not comparable, which is why.**
+      `exp4_verification_overhead` is `reportable: true` on the frozen corpus;
+      `psa_exp4_verification_overhead` is **`reportable: false`** —
+      `corpus_type='psa_in_process'`, no corpus SHA-256 — and was taken at a
+      different commit (`4ebbcb6` vs `74472f1`). The giveaway is in the data:
+      PSA's `path_length` is **exactly 3.000, ci95 0, at every r**, while
+      option_d's moves 5.60 → 4.78. A Merkle path constant across a 100x change
+      in `r` means the fixture rebuilt the same 8-leaf tree every time;
+      option_d verified against ~27 leaves. Its proof is 1.87x larger at every
+      point (153.9 KB vs 96.7 KB at r=1000). **So the −2 to −3% is tree size,
+      not the commitment fields**, and §V's stated mechanism ("dominated by the
+      per-record ledger lookup") is not what the numbers measure.
+
+      **B2 settles it.** Once both constructions run on the frozen corpus under
+      one commit the comparison becomes valid and the sentence can be written
+      to the result — same treatment as C6. Until then it should not ship.
 
 ## D. Hygiene
 
@@ -115,12 +158,13 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
 
 ## E. Blocked / pending someone else
 
-- [ ] **E1 ⏰ DECISION PARKED (user, 2026-09-10) — cross-node forwards.**
-      `aass.py:635` increments `forwards` only in the non-AASS branch, so AASS
-      scores 0 *by construction* and the others >0 *by construction*.
-      Fig. 8(c) measures the arm definitions, not scheduler quality. Either
-      give all four arms the same eligibility filter and report the honest
-      difference, or drop the metric and §V's sentence.
+- [x] **E1 RESOLVED — keep the cross-node-forward metric and §V's reading.**
+      *(DECIDED by the user 2026-09-10.)* The counter was moved out of the
+      non-AASS branch, so §VI's scheduler-agnostic definition now applies to
+      all four arms: **aass 0, no_lb 288, round_robin 168, least_loaded 288.**
+      AASS still reads 0, but because its eligibility guard never misplaces a
+      shard — a measurement rather than a tautology. No manuscript change.
+
 - [ ] **E2 Exp. 5 `entries_rewritten == 0`** — three causes eliminated (stale
       code, topology, message construction); isolated to the corpus path.
       **Needs the AWS host**: `Dataset/derived/corpus.jsonl` is gitignored and
@@ -138,6 +182,57 @@ This is the first run that is *meaningfully* green. Earlier "green" runs were
 little. Both now assert exact quantities. Treat any failure from here as real.
 
 ## Done (kept as the evidence trail until this file is deleted)
+
+- [x] **C7 CLOSED — no change (user, 2026-09-10). Exp. 6's design is correct;
+      the concern was overstated here.** Two claims in the earlier entry were
+      wrong and are withdrawn:
+      1. *"The policy topology is stipulated, so Exp. 6 does not price the
+         corpus."* The **keywords are the corpus's** (`psa_experiments.py`:
+         *"REAL keywords, so the hashed inputs are the corpus's own lengths"*),
+         so the timed cryptographic work uses real input sizes.
+      2. *"Constructing the governance is a defect."* It is the **swept
+         variable**: `affected_count = round(ratio * len(policies))` and the
+         overrides set exactly that many policies to depend on the moved
+         authority. An affected ratio cannot be read off a corpus; it has to be
+         set. The code also controls the obvious confound — "every policy keeps
+         two governors, so the arms differ only in propagation scope and not in
+         per-policy work."
+      The 10%-vs-12.5% arithmetic is real but harmless: with 40 policies the
+      figure shows exactly the 10%->100% sweep §VI describes, so **text and
+      figure agree**. What remains is a gate misfiring — `corpus_type != synthea`
+      marks the run non-reportable, but that gate exists to stop *cross-scheme*
+      comparisons mixing corpora, and Exp. 6 compares three arms of one scheme.
+      **It does not gate B2.** That was true only of the option being argued
+      against (raising `policies_per_domain`, which would have reshaped the
+      index for Exps. 2, 4 and 5).
+      The two §V corrections stand independently, for whenever §V is next
+      touched: the selective advantage is in **bytes, not time** (the
+      DIAS-vs-Incremental-All latency gap is ~2%, noise in both directions),
+      and the narrowing at a full ratio is **not total** — work converges
+      10x->1x but delivery only 40x->4x.
+
+- [x] **C1 + C3 + C4 — Table I rebuilt and applied to the manuscript by the
+      user, 2026-09-10.** All thirteen rows re-verified against the papers, a
+      `ref30` row added, and a third symbol `$	riangle$` introduced for partial
+      support. **10 of 13 rows changed, 20 cells** — 15 upgrades, 5 downgrades.
+      Every prediction made from the paper titles held: `ref54` Blockchain and
+      Multi-Keyword ✗→✓ (C1, both), `ref52` Multi-Authority and Multi-Keyword
+      ✗→✓, `ref53` Multi-Authority ✗→✓. `ref35` was unchanged, matching the
+      independent 7/7 PDF check.
+      The `ref30` row is the one cell-set taken from this side:
+      `✓ ✓ ✗ ✓ ✗ ✗ ✗`, Blockchain resting on Ref[55].pdf p5 *"In this work, we
+      design a new verification algorithm based on the Ethereum smart
+      contract"*. `$	riangle$` needs no new package — `amssymb` is already
+      loaded.
+      *Verified mechanically against the user's grid:* 14 rows in citation
+      order, 7 cells each, 0 unrecognised, environments balanced, no baseline
+      row full even counting partials — so §II's "first to unify" claim at
+      tex:332 still holds (closest: `ref54` 4.5/7, `ref48` 4.0/7).
+- [x] **C2 RESOLVED by the new table — keep `ref41` in the lattice/PQ prose.**
+      The recommendation to drop it from tex:139 and tex:332 rested on Table I
+      marking it ✗ for Lattice/PQ. The verified table marks it **partial**, so
+      the prose listing it among post-quantum approaches is defensible and the
+      `$	riangle$` carries the qualification. No manuscript change.
 
 - [x] **Rule 3 restored — the D4 guard had come to cite this file.** Two lines
       of `test_document_config_agreement.py` named `REMEDIATION.md`: an entry in

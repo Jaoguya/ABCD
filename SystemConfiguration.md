@@ -51,9 +51,40 @@ prose, so it is not "code beats docs", it is "the manifest beats everything".
 And under Question B the code never wins on its own: it is a claim about the
 paper, not proof of it.
 
-**Note on the reference extractions.** `Ref[NN].md` is lossy OCR of the PDF —
-`λ` renders as `?`, `10⁻⁴` as `10? 4`. Fine for locating a passage, not for
-reading an equation. For anything load-bearing, open the PDF.
+**Note on the reference extractions.** **Read `Ref[NN].md`. It is the working
+source for these papers, and it is not corrupt.** This entry said the opposite
+until 2026-09-10 — "lossy OCR", with `λ` as `?` and `10⁻⁴` as `10? 4` — and that
+was checked and found false in every part.
+
+What the check showed:
+
+- All four PDFs are **born-digital with real text layers** (6,219 characters on
+  Ref[35] page 1), so most of the conversion involved no optical recognition at
+  all. Each `_meta.json` records the method per page: **pdftext for 55 of 59
+  pages**, the OCR model on **four** — Ref[35] pp. 2 and 5, Ref[54] p. 2,
+  Ref[55] p. 9. Ref[41] used none.
+- The named symptoms do not occur: **zero** `λ`-as-`?`, **zero** `10? 4`, **zero**
+  U+FFFD, across all four files. `λ` appears literally in Ref[54] and Ref[55].
+- **Even the OCR pages beat raw extraction.** 96-99% of substantive words from
+  those four pages appear in the `.md`, and the residue is not loss: it is the
+  IEEE download footer, which the conversion correctly strips, plus tokens
+  `pypdf` glues together around italic variables (`withop`, `integert`,
+  `wherel`) that the `.md` separates properly.
+- **Equations survive.** Ref[41]'s DBDH assumption — the single most
+  load-bearing formula in the Table I audit, since it is the whole basis for
+  that row's Lattice/PQ cross — renders complete and correct, pairing tuple
+  included: `$(i, i^a, i^b, i^c, e(i, i)^{abc})$`.
+
+One real limitation remains, and it is inherent to any text form: **figures are
+extracted to sibling `.jpeg` files**, so anything stated only inside a figure is
+not in the `.md`. Open the image, or the PDF, for those.
+
+The larger gap is coverage, not fidelity: **only four references have any
+material here** — Ref[35], Ref[41], Ref[54] and Ref[55]. Ten of Table I's
+fourteen rows cite papers with no PDF and no extraction in this repo, so those
+rows cannot be verified from the tree at all. Note also that `References/Ref[55]/`
+holds the paper the manuscript cites as **`ref30`** (Ge et al., Peony++); the
+manuscript's actual `ref55` is a different paper (Cao et al.) with nothing here.
 
 ---
 
@@ -519,6 +550,16 @@ Verified 2026-09-08 against the repo, not carried over from the previous version
   untouched on purpose** — they are machine-written records of what the code
   said at run time, and editing them would falsify provenance; the string's
   source in `main.py` is fixed, so future runs carry the new wording.
+
+- **§V's Exp. 4 "within 2% at every r" claim compares two incomparable runs.**
+  `exp4_verification_overhead` is reportable on the frozen corpus;
+  `psa_exp4_verification_overhead` is `reportable: false`
+  (`corpus_type='psa_in_process'`, no corpus SHA-256) and was taken at a
+  different commit. PSA's `path_length` is exactly 3.000 at every `r` while
+  option_d's moves 5.60 to 4.78 — an 8-leaf fixture tree against ~27 real
+  leaves — so PSA's proof is 1.87x smaller and its per-result cost 2-3% lower
+  at three of five points, with disjoint CIs. That difference is tree size, not
+  the commitment fields. Re-derive after both run on the frozen corpus.
 
 - **The cross-node-forward metric is 0 for AASS by construction.**
   `scheduler/aass.py` increments `forwards` only in the non-AASS branch, and
