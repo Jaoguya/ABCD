@@ -1,6 +1,6 @@
 """Experiment execution framework for Yue Ge Peony++.
 
-Handles the mechanical parts of running benchmark experiments per README §7:
+Handles the mechanical parts of running benchmark experiments per global.yaml:
   - Warm-up discarding (5 runs)
   - Per-run recording to raw_runs.csv
   - Aggregation to results.csv (mean ± 95% CI from 10 retained runs)
@@ -53,7 +53,7 @@ def measure_ns(fn: Callable[[], Any]) -> tuple[float, Any]:
     """Time a zero-argument callable.
 
     Returns (elapsed_ms, fn_return_value).
-    Uses ``time.perf_counter_ns()`` per README §7.
+    Uses ``time.perf_counter_ns()`` per global.yaml.
     """
     start = time.perf_counter_ns()
     result = fn()
@@ -83,7 +83,7 @@ def run_experiment(
     ``runner_fn(value)`` is called each time and must return a RunResult
     with ``primary_metric`` and ``secondary_metrics`` populated.
 
-    The warm-up / retained split follows README §7:
+    The warm-up / retained split follows global.yaml:
       "10 runs per point after 5 discarded warm-ups."
     """
     all_results: List[RunResult] = []
@@ -109,7 +109,7 @@ def write_raw_runs(
     results: List[RunResult],
     secondary_names: List[str],
 ) -> None:
-    """Write raw_runs.csv — one row per run, never aggregated (README §9)."""
+    """Write raw_runs.csv — one row per run, never aggregated."""
     path.parent.mkdir(parents=True, exist_ok=True)
     sec_cols = [f"secondary_metric_{i + 1}" for i in range(len(secondary_names))]
     fieldnames = [
@@ -147,7 +147,7 @@ def aggregate_results(
     results: List[RunResult],
     secondary_names: List[str],
 ) -> List[Dict[str, Any]]:
-    """Aggregate raw runs into mean ± 95% CI (README §7).
+    """Aggregate raw runs into mean ± 95% CI.
 
     Uses the t-distribution with df = n-1 for the confidence interval,
     computed via scipy.stats.t.  No hardcoded t-values.
@@ -245,7 +245,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
     corpus_type = manifest.get("corpus_type", "")
     if corpus_type != "synthea":
         reasons.append(
-            f"corpus_type={corpus_type!r} is not reportable; README §4 admits "
+            f"corpus_type={corpus_type!r} is not reportable; dataset.yaml admits "
             f"only 'synthea'"
         )
 
@@ -268,7 +268,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
             reasons.append(
                 f"corpus SHA-256 {actual[:12]}... does not match dataset.yaml's "
                 f"frozen pin {pinned[:12]}...; results from a different corpus "
-                f"are not comparable to the campaign (README §13)"
+                f"are not comparable to the campaign"
             )
 
     try:
@@ -279,7 +279,7 @@ def _reportability_blockers(manifest: Dict[str, Any]) -> List[str]:
             reasons.append(
                 f"not running on the pinned AWS experiment host: expected "
                 f"{host['expected_instance_type']!r}, detected "
-                f"{host['detected_instance_type'] or 'not EC2'!r} (README §1)"
+                f"{host['detected_instance_type'] or 'not EC2'!r}"
             )
     except Exception as exc:  # noqa: BLE001 - reported, not swallowed
         reasons.append(f"could not verify the experiment host: {exc}")
@@ -292,11 +292,11 @@ def write_run_meta(
     manifest: Dict[str, Any],
     experiment_name: str,
 ) -> None:
-    """Write run_meta.json — provenance per README §7.
+    """Write run_meta.json — provenance per global.yaml.
 
     Records ``reportable`` and the reasons it is not, matching every other
     scheme here. Without it this scheme could emit numbers with no blocker
-    trail: README §15 requires reportable runs to use the frozen synthea
+    trail: SystemConfiguration.md requires reportable runs to use the frozen synthea
     corpus on the pinned host, and "reportable: false" with no reason is not
     provenance.
     """

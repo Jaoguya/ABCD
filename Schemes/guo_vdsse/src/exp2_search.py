@@ -4,12 +4,12 @@ Variable:  index size ``N`` = 10^4 → 10^6 (log scale)
 Primary:   latency (ms)
 Secondary: entries traversed (n_eff), prune ratio
 
-Measurement boundary (README §5, Exp. 2):
+Measurement boundary (global.yaml, Exp. 2):
     Full online path: token generation → server inverted-index retrieval →
     forward-index filtering → client final eval → result assembly.
     Index construction is offline (not timed).
 
-Defaults: q = 5 keywords, d = 4 domains (README §6).
+Defaults: q = 5 keywords, d = 4 domains.
 """
 
 from __future__ import annotations
@@ -41,7 +41,7 @@ EXPERIMENT_NAME = "exp2"
 SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio",
                    "matched_records"]
 
-# Index sizes — log scale from 10^4 to 10^6 (README §5)
+# Index sizes — log scale from 10^4 to 10^6
 # CAPPED at 2*10^5 on 2026-08-29 -- a hardware limit, disclosed, not a choice.
 #
 # Guo's forward index stores a t-punctured GGM key per document, sized
@@ -79,7 +79,7 @@ SECONDARY_NAMES = ["n_eff", "entries_traversed", "prune_ratio",
 # hardware disclosure, not a caveat about the result.
 VARIABLE_RANGE = [10_000, 50_000, 100_000, 500_000, 1_000_000]
 
-# Default query size (README §6: "each query contains five keywords")
+# Default query size (global.yaml: "each query contains five keywords")
 DEFAULT_Q = 5
 
 

@@ -44,7 +44,7 @@ EXPERIMENTS = {
 def _synthetic_records(n: int, seed: int = 7) -> List[Record]:
     """Stand-in corpus with the shape of the real one.
 
-    Vocabulary and keyword-count distribution are chosen to resemble README §4's
+    Vocabulary and keyword-count distribution are chosen to resemble dataset.yaml's
     description (2,102-word vocabulary, median |W_i| = 4, 4 domains) so the
     plumbing is exercised realistically. The VALUES are meaningless — this
     exists to prove the code runs, not to produce a number.

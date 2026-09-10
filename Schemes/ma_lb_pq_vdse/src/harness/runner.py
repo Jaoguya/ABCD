@@ -1,23 +1,23 @@
-"""The measurement loop and output writer — README §7 and §9.
+"""The measurement loop and output writer — global.yaml and §9.
 
 One place that decides how a point is measured, so no experiment can quietly use
 a different repetition count, discard a run, or invent an interval.
 
-What README §7 requires, and where it is enforced:
+What global.yaml requires, and where it is enforced:
 
 * **10 runs after 5 discarded warm-ups.** :func:`run_point`. Warm-ups are executed
   and thrown away, never recorded — a warm-up in ``raw_runs.csv`` would be a run
   that never happened at the stated cache state.
 * **Keep outliers.** Nothing here trims. A run that raises is recorded with
-  ``status=failed`` and **re-run** to restore n = 30, which is the README's rule
-  rather than dropping it and reporting n = 29.
+  ``status=failed`` and **re-run** to restore n = 10, which is global.yaml's rule
+  rather than dropping it and reporting n = 9.
 * **Mean ± 95% CI from the sample.** ``stats.summarise``; the runner passes only
   the retained values.
 * **``perf_counter_ns`` for latency, wall clock for throughput.** Each experiment
   reports its own primary value, because Exp. 7's primary is a rate — a runner
   that timed every call would silently convert it into a latency.
 
-Output is exactly README §9: ``raw_runs.csv`` (one row per run, never aggregated),
+Output is exactly global.yaml: ``raw_runs.csv`` (one row per run, never aggregated),
 ``results.csv`` (the aggregate the plotting script reads), and ``run_meta.json``.
 """
 
@@ -36,7 +36,7 @@ from .. import config as scheme_config  # noqa: E402
 from . import stats  # noqa: E402
 from .provenance import RunMetadata  # noqa: E402
 
-#: The row order README §9 fixes for ``raw_runs.csv``.
+#: The row order global.yaml fixes for ``raw_runs.csv``.
 RAW_COLUMNS = (
     "scheme",
     "experiment",
@@ -48,7 +48,7 @@ RAW_COLUMNS = (
     "status",
 )
 
-#: README §9 illustrates both CSVs with exactly two secondaries, and the writers
+#: global.yaml illustrates both CSVs with exactly two secondaries, and the writers
 #: below took that as a CAP: ``[:2]`` on the metric names, ``range(1, 3)`` on the
 #: columns. An experiment declaring a third recorded it in memory and then had it
 #: dropped on the way to disk, with no warning — the same silent-loss class of
@@ -58,7 +58,7 @@ RAW_COLUMNS = (
 #: The column count now follows the experiment, floored here so that every
 #: experiment declaring two or fewer keeps the exact shape §9 prints. §9's header
 #: line is therefore still literally correct for all of them, and a run with more
-#: writes a superset. README §9 should say so; that edit is the user's.
+#: writes a superset. global.yaml should say so; that edit is the user's.
 MIN_SECONDARY_COLUMNS = 2
 
 
@@ -77,7 +77,7 @@ def raw_columns(secondaries: Sequence[Any]) -> Tuple[str, ...]:
 STATUS_OK = "ok"
 STATUS_FAILED = "failed"
 
-#: A run is retried this many times before the point is abandoned. README §7 says
+#: A run is retried this many times before the point is abandoned. global.yaml says
 #: to re-run a failure "to restore n=10"; a bound stops a deterministic failure
 #: from looping forever, and the abandoned point keeps its failed rows so the
 #: gap is visible rather than silent.
@@ -128,7 +128,7 @@ class RunRecord:
             row[f"secondary_metric_{index}"] = (
                 "" if value is None else f"{value:.6f}"
             )
-        # README §9: "Blank secondary columns where a metric doesn't apply."
+        # global.yaml: "Blank secondary columns where a metric doesn't apply."
         for index in range(len(secondary_names) + 1,
                            _secondary_count(secondary_names) + 1):
             row[f"secondary_metric_{index}"] = ""
@@ -137,7 +137,7 @@ class RunRecord:
 
 @dataclass(frozen=True)
 class MetricSpec:
-    """A reported metric and its unit — README §9 fixes ms, KB, queries/s."""
+    """A reported metric and its unit — global.yaml fixes ms, KB, queries/s."""
 
     name: str
     unit: str
@@ -173,7 +173,7 @@ class PointResult:
 
     @property
     def retained(self) -> int:
-        """``n_runs`` — README §9 requires 30 for reportable data."""
+        """``n_runs`` — global.yaml requires 30 for reportable data."""
         return sum(1 for record in self.records if record.status == STATUS_OK)
 
     @property
@@ -213,7 +213,7 @@ def run_point(
 ) -> PointResult:
     """Measure one sweep point: warm-ups, then ``runs`` retained runs.
 
-    Setup is called once per point and excluded from every timing — README §5
+    Setup is called once per point and excluded from every timing — global.yaml
     puts index construction offline, and re-preparing per run would put it in the
     curve.
     """
@@ -378,7 +378,7 @@ def run_experiment(
 
 
 # ===========================================================================
-# Output — README §9
+# Output — global.yaml
 # ===========================================================================
 def write_raw_runs(result: ExperimentResult, path: Path) -> Path:
     """``raw_runs.csv`` — one row per run, never aggregated."""
@@ -459,7 +459,7 @@ def write_results(result: ExperimentResult, path: Path) -> Path:
 def write_outputs(
     result: ExperimentResult, output_dir: Path
 ) -> Dict[str, Path]:
-    """Write all three files README §9 requires for one experiment."""
+    """Write all three files global.yaml requires for one experiment."""
     output_dir = Path(output_dir)
     from datetime import datetime, timezone
 

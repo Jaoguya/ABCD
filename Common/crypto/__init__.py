@@ -2,7 +2,7 @@
 
 One implementation of each primitive, used by all five schemes, so that a
 latency difference between two schemes is attributable to their constructions
-and not to two different AES wrappers (README §1, environment parity).
+and not to two different AES wrappers (SystemConfiguration.md, environment parity).
 
     from Common.crypto import hashes, symmetric, merkle
     ct = symmetric.encrypt(key, b"record")
@@ -17,7 +17,7 @@ WHAT DOES NOT
 -------------
 Anything a paper CONTRIBUTES: Guo's forward index, Zhuang's attribute key
 derivation, Thingom's LSSS policy encoding, our PDSI/AASS/DIAS. Those live in
-``Schemes/<name>/src/`` and stay independent per README §14.
+``Schemes/<name>/src/`` and stay independent per SystemConfiguration.md.
 
 WHICH SCHEME USES WHAT
 ----------------------
@@ -59,7 +59,7 @@ __all__ = [
 
 
 def environment_report() -> dict:
-    """Snapshot of the crypto environment, for ``run_meta.json`` (README §7).
+    """Snapshot of the crypto environment, for ``run_meta.json``.
 
     Records library versions, the live pairing and ML-KEM backends, and the
     config-file hashes. A reviewer tracing a number back gets the exact

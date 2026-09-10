@@ -56,7 +56,7 @@ class DeterministicRNG:
     NOT CRYPTOGRAPHICALLY SECURE. This wraps numpy's PCG64 so that a corpus or
     a workload trace regenerates byte-identically on any machine — which is
     what lets all four scheduler variants in Exp. 7-8 see "byte-identical
-    workloads" (README §5).
+    workloads".
     """
 
     def __init__(self, seed: int) -> None:

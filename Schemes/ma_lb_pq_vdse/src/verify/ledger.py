@@ -28,7 +28,7 @@ has never been updated has no anchor. :func:`verify_blockchain_consistency`
 reports that as a failed check rather than silently passing: an unanchored record
 is precisely what Step 3 exists to detect.
 
-Exp. 4 counts this step (README §5: "Merkle proof, ``Commit_i*`` recomputation,
+Exp. 4 counts this step (global.yaml: "Merkle proof, ``Commit_i*`` recomputation,
 **chain consistency**"), while IPFS fetch and decryption are excluded.
 """
 

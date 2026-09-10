@@ -7,7 +7,7 @@
     Phase 5  Retrieval + Verification      (Algorithm 3, RetrieveVerify)
 
 Single Trusted Authority — the paper never claims multi-authority, and
-``SCHEME.md`` records that not repeating README §3's mislabelling of Ref[41] as
+A recorded decision: not repeating the mislabelling of Ref[41] as
 "multi-authority" is deliberate.
 
 THE HYBRID COMBINER IS THE POINT

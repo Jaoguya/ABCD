@@ -10,9 +10,9 @@ A run is REPORTABLE only when every one of these holds:
     with ``corpus_type: synthea``, and
   * this process is actually running on the pinned AWS experiment host
     (``global.yaml``'s ``environment.instance_type``), not a development
-    laptop or any other machine (README §1).
+    laptop or any other machine.
 
-Anything else still runs — development on Windows is expected (README §1) —
+Anything else still runs — development on Windows is expected —
 but ``run_meta.json`` records ``reportable: false`` together with the reasons,
 so a development artefact cannot be mistaken for a paper number later.
 """
@@ -37,9 +37,9 @@ from .harness import write_all, write_raw_runs, write_results
 
 from infra import sweep
 
-# README §6 defaults. These live here rather than in a config file because
-# "Experiment Configuration/global.yaml" — referenced by SCHEME.md and
-# README §8 — does not exist in the repository yet. Every value that affects
+# global.yaml defaults. These live here rather than in a config file because
+# "Experiment Configuration/global.yaml" — referenced by
+# SystemConfiguration.md — does not exist in the repository yet. Every value that affects
 # a NUMBER (attribute count, pairing curve) is read from crypto.yaml instead,
 # so it is covered by the config hash in run_meta.json.
 DEFAULT_REPETITIONS = 10
@@ -50,12 +50,12 @@ DEFAULT_SEED = 20260804
 EXP1_Q_VALUES = list(range(1, 21))
 
 # Capped 2026-08-27, raised 2026-08-28, to fit a 24h-per-track wall-clock
-# budget on the pinned AWS host (README §1). Ref[41] has no index structure
+# budget on the pinned AWS host. Ref[41] has no index structure
 # or early termination — every candidate costs a real 2u+1 pairings — so the
 # published 10^4-10^6 sweep is far out of budget even measured (not
 # guessed). 2026-08-28: search parallelized across 2 forked processes
 # (hardware-utilization detail, not an algorithmic change — see
-# experiments.py's _parallel_search and SCHEME.md's Feasibility section for
+# experiments.py's _parallel_search and its Feasibility notes for
 # the disclosure). Measured 1.94-1.95x speedup in isolation, verified correct
 # (identical pairing counts and match sets vs. single-threaded) on both
 # Exp.2's and Exp.3's actual call shapes.
@@ -178,7 +178,7 @@ def resolve_experiments(spec: str) -> List[str]:
     unknown = [item for item in selected if item not in OUTPUT_DIRS]
     if unknown:
         raise SystemExit(
-            f"Ref[41] runs experiments 1, 2 and 3 only (SCHEME.md); "
+            f"Ref[41] runs experiments 1, 2 and 3 only; "
             f"got {', '.join(unknown)}"
         )
     return selected
@@ -203,7 +203,7 @@ def load_keywords(
         if manifest.get("corpus_type") != "synthea":
             blockers.append(
                 f"corpus_type is {manifest.get('corpus_type')!r}, not 'synthea' "
-                f"(README §15)"
+                f""
             )
         return universe, manifest, blockers
     except Exception as exc:  # noqa: BLE001 - reported, not swallowed
@@ -258,7 +258,7 @@ def resolve_backend(dev: bool) -> Tuple[Any, List[str]]:
         raise SystemExit(
             f"No pairing backend is installed.\n  {exc}\n\n"
             f"Ref[41] needs charm-crypto for its published Type-I SS512 curve "
-            f"(README §1). It is Linux-only."
+            f". It is Linux-only."
         ) from exc
 
     if backend.pairing_type != "type-1":
@@ -328,7 +328,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             f"not running on the pinned AWS experiment host: expected "
             f"{host['expected_instance_type']!r}, detected "
             f"{host['detected_instance_type'] or 'not EC2'!r} on "
-            f"{host['platform']!r} (README §1)"
+            f"{host['platform']!r}"
         )
 
     blockers = backend_blockers + corpus_blockers + host_blockers
@@ -359,8 +359,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             "client-side intersection (Ref[41] is single-keyword)"
         ),
         # Provenance for the two 2026-08-28 decisions that change what a
-        # reported number MEANS. SCHEME.md prose is not machine-readable
-        # provenance (README §15), and neither fact is otherwise recoverable
+        # reported number MEANS. Prose is not machine-readable
+        # provenance, and neither fact is otherwise recoverable
         # from the outputs: exp3's variable is d, so the held index size
         # appears in no results.csv column at all.
         "exp2_search_processes": experiments._SEARCH_PROCESSES,

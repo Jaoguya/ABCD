@@ -319,11 +319,11 @@ perera_lv_pqabse:
     # DECIDED 2026-08-29: 10, matching thingom_pq_abse.attributes.u so the two
     # attribute-based baselines are compared at the same policy size. That is
     # the precedent already set between thingom and the dropped zhuang, and it
-    # is the choice SCHEME.md proposed. Not results-affecting for Exp. 1/2/3
+    # is the choice the scheme note proposed. Not results-affecting for Exp. 1/2/3
     # (see abe_on_measured_path below), so it costs nothing to align.
     universe_size: 10
   abe_on_measured_path: false
-  # MEASUREMENT BOUNDARY, decided 2026-08-29 and disclosed in SCHEME.md.
+  # MEASUREMENT BOUNDARY, decided 2026-08-29.
   #
   # Exp. 1 times trapdoor generation, which in this scheme is PRF tokenization
   # plus a Dilithium3 signature -- the paper's own headline claim (Table II:

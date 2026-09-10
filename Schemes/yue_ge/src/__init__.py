@@ -3,7 +3,7 @@
 Verifiable multilevel dynamic searchable encryption with forward and Type-II
 backward privacy. See ``References/Ref[55]/Ref[55].md`` for the construction
 summary, published parameters, and the legitimacy assessment; see
-``../SCHEME.md`` for the experiment mapping.
+``SystemConfiguration.md`` section 5 for the experiment mapping.
 
 Module layout follows the paper's own sectioning:
 

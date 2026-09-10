@@ -17,10 +17,10 @@ RE-ANCHORED to the eight-phase manuscript, which merged the old seven steps into
 five: old Steps 2-3 became Step 2, old Step 4 became Step 3, old Steps 5-6 became
 Step 4, and old Step 7 became Step 5. The step NUMBERS moved; the work this module
 does did not. Two record shapes in the manuscript did change, and this module
-still implements the old ones -- see ``MANUSCRIPT_DIVERGENCE.md`` D1 and D2.
+still implements the old ones -- divergences D1 and D2.
 
 This is the phase Exp. 5 and Exp. 6 measure, so what it must *not* do matters as
-much as what it does. README §5: "Exp. 5 — incremental update only. A global
+much as what it does. global.yaml: "Exp. 5 — incremental update only. A global
 rebuild means Phase VII is implemented wrong."
 
 **Option D removes Step 2's re-tokenization entirely.** As published, Step 2
@@ -29,14 +29,14 @@ keyword. Under the matching relation chosen on 2026-08-10 the token is ``H(w)``
 alone, so a policy or version change **touches no token and no posting list** —
 only the entry payload and two bitmap bits move. That is the difference between
 Exp. 5 measuring an incremental update and Exp. 5 measuring a re-tokenization of
-the whole domain (``PHASE_IV_PLAN.md`` §1.3 put that at ~9.0M entries per
+the whole domain (Phase IV §1.3 put that at ~9.0M entries per
 authority version bump).
 
 **Revocation touches no index entry at all.** A revoke changes the authority's
 ``RevRoot_k`` and ``VID_k`` and therefore ``C_k^auth``, which propagates to the
 FSNs as authorization state. The record entries are untouched, because the
 authority's version and a record's version are different counters
-(``PHASE_IV_PLAN.md`` §1.4). This is what lets Exp. 6 measure the DIAS mechanism
+(Phase IV §1.4). This is what lets Exp. 6 measure the DIAS mechanism
 rather than re-indexing.
 
 **Notation caveat in Step 5.** The three ``Delta`` terms are not the same kind of
@@ -409,7 +409,7 @@ def evolve_commitment(
 
     Insert and Delete change the leaf count, and a Merkle tree cannot grow or
     shrink by a path update — so that record's tree is rebuilt. Bounded by
-    ``|W_i|`` (mean 31.7, capped at 64), **not** by the index: README §5's rule
+    ``|W_i|`` (mean 31.7, capped at 64), **not** by the index: global.yaml's rule
     forbids a global rebuild, and a per-record rebuild of ~32 leaves is not one.
     ``rebuilt`` says which happened, so a reported figure can never silently
     conflate the two.
@@ -510,7 +510,7 @@ class DIASMessage(Record):
 
     @property
     def size_kb(self) -> float:
-        """README §9 reports sizes in KB."""
+        """global.yaml reports sizes in KB."""
         return self.size_bytes / 1024.0
 
     @property
@@ -730,7 +730,7 @@ def synchronize(
 ) -> DIASReceipt:
     """Phase VII Steps 2-7 end to end — the path Exp. 6 times.
 
-    README §5: "DIAS end-to-end: commitment recomputation → Merkle path update →
+    global.yaml: "DIAS end-to-end: commitment recomputation → Merkle path update →
     DIAS message → selective FSN propagation **until all affected FSNs report the
     new VID**." The final clause is a postcondition, so this verifies it rather
     than assuming delivery succeeded.
@@ -789,7 +789,7 @@ def synchronize(
         for node in targets
     )
 
-    # The postcondition README §5 states: propagation continues "until all
+    # The postcondition global.yaml states: propagation continues "until all
     # affected FSNs report the new VID". Verified rather than assumed — a node
     # with a delivery gap cannot reach the current version from a delta alone
     # (see apply_dias), and that must surface here rather than leaving a node on a

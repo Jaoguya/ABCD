@@ -1,8 +1,8 @@
-"""The one-time AASS weight sweep (README §6, §14 issue #5).
+"""The one-time AASS weight sweep (global.yaml, §14 issue #5).
 
     python3 -m Schemes.ma_lb_pq_vdse.src.harness.lambda_sweep
 
-README §6: the λ weights are "not in the paper — must be fixed", and must be
+global.yaml: the λ weights are "not in the paper — must be fixed", and must be
 chosen "once by a documented procedure (e.g. a sweep on a held-out workload),
 commit that output, and leave them alone." ``scheduler.yaml`` specifies that
 procedure exactly; this executes it and nothing else.
@@ -23,7 +23,7 @@ WHY THE CONSTRAINT EXISTS
 -------------------------
 Maximizing throughput alone would let the scheduler pin one node at saturation
 while posting good aggregate numbers — exactly what Exp. 8 exists to expose
-(README §5). Including utilization spread in the objective means the weight
+(global.yaml). Including utilization spread in the objective means the weight
 vector cannot be chosen to flatter Exp. 7 at Exp. 8's expense.
 
 This writes ``lambda_sweep.csv`` (every vector, so the choice is auditable) and

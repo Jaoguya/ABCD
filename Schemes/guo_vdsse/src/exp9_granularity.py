@@ -27,7 +27,7 @@ fresh proofs per sub-batch, which Alg. 3 does not define. `scheme.py` is used
 here EXACTLY as Exp. 4 uses it; the only thing this experiment adds is the
 tamper and the accounting of what a failure costs.
 
-`SCHEME.md` Exp. 4: "Use this scheme's own verification mechanism as published."
+Exp. 4 rule: use this scheme's own verification mechanism as published.
 The same rule governs here.
 
 THE TAMPER

@@ -199,7 +199,7 @@ def update_record_commitment(
     Exp. 5 secondary metric "Merkle nodes recomputed", measured by
     ``merkle.update_leaf`` rather than derived as ``log2(N)``.
 
-    Rebuilding the whole tree here would be the Phase VII bug README §5's Exp. 5
+    Rebuilding the whole tree here would be the Phase VII bug global.yaml's Exp. 5
     rule calls out, so this refreshes only the affected authentication path.
     """
     tree = commitment.tree

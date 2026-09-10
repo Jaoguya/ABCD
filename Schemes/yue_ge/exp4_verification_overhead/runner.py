@@ -1,6 +1,6 @@
 """Exp. 4 — Verification Overhead. Ref[55] §VI-A, ``Verify``.
 
-Variable:  records verified ``r`` = 10 -> 1000 (README §5)
+Variable:  records verified ``r`` = 10 -> 1000
 Primary:   verification latency (ms)
 Secondary: proof size (KB), entries combined (path length)
 
@@ -22,7 +22,7 @@ folding in the deletion digest, hashing the returned result set, and comparing.
 That is ordinary CPU work which runs identically on- or off-chain; only the
 *transaction* is chain-bound.
 
-This mirrors how README §5 already scopes Exp. 4 for the proposed scheme —
+This mirrors how global.yaml already scopes Exp. 4 for the proposed scheme —
 "client-side verification only: Merkle proof, ``Commit_i*`` recomputation, chain
 consistency. IPFS fetch and decryption excluded."
 

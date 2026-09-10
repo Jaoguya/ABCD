@@ -205,7 +205,7 @@ def make_cid(state: OwnerState, file_id: int) -> bytes:
     BENCHMARK NOTE: this repo's corpus carries record identifiers and keyword
     sets, not document bodies (``Dataset.corpus.Record``). ``C_id`` is therefore
     the encryption of the identifier rather than of a file payload. Exp. 4 is
-    scoped to verification computation only (README §5), so no measured quantity
+    scoped to verification computation only, so no measured quantity
     depends on the plaintext length — but the substitution is recorded here
     rather than left implicit.
     """

@@ -11,6 +11,6 @@ This package implements the published construction faithfully:
   - Non-interactive conjunctive query
 
 Shared primitives (SHA-256, HMAC, AES-GCM, t-Pun-PRF) come from
-Common/crypto/; scheme-specific logic stays here. See README §8 for the
+Common/crypto/; scheme-specific logic stays here. See SystemConfiguration.md for the
 separation principle.
 """

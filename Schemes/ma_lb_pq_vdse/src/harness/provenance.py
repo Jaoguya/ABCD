@@ -1,4 +1,4 @@
-"""``run_meta.json`` — provenance for every result, per README §7.
+"""``run_meta.json`` — provenance for every result, per global.yaml.
 
 "Each ``results.csv`` gets a ``run_meta.json``: git commit, instance type, Python
 and library versions, dataset SHA-256, corpus type, config hashes, UTC start
@@ -146,7 +146,7 @@ def library_versions() -> Dict[str, str]:
 
 @dataclass
 class RunMetadata:
-    """Everything README §7 requires, plus why the run is or is not reportable."""
+    """Everything global.yaml requires, plus why the run is or is not reportable."""
 
     scheme: str
     experiment: str
@@ -242,7 +242,7 @@ def _expected_corpus_sha256() -> Optional[str]:
 #: repo's history, not a tunable, which is why it lives here rather than in
 #: config: 5cf65f9 fixed three such defects in Exp. 7-8 -- every arm paid AASS's
 #: cost vector, the queue feedback loop was dead so `least_loaded` collapsed onto
-#: `no_lb`, and prepare() built 32 records against README §6's 10^5. Numbers from
+#: `no_lb`, and prepare() built 32 records against global.yaml's 10^5. Numbers from
 #: before it are not comparable with numbers from after it.
 #:
 #: Judged at READ time from the commit the record already carries. A stamped
@@ -339,7 +339,7 @@ def reportability(
 ) -> Tuple[bool, List[str]]:
     """Every condition a quotable number must satisfy, and which ones failed.
 
-    Each entry corresponds to a decision recorded in ``SCHEME.md``. Collected in
+    Each entry corresponds to a recorded author decision. Collected in
     one place so a runner cannot report a figure by forgetting a check, and so the
     reasons land in ``run_meta.json`` where a reader can see them.
     """
@@ -351,12 +351,12 @@ def reportability(
             f"not running on the pinned AWS experiment host: expected "
             f"{host['expected_instance_type']!r}, detected "
             f"{host['detected_instance_type'] or 'not EC2'!r} on "
-            f"{host['platform']!r} (README §1)"
+            f"{host['platform']!r}"
         )
 
     if corpus_type not in config.corpus["reportable_types"]:
         reasons.append(
-            f"corpus_type={corpus_type!r} is not reportable; README §4 admits "
+            f"corpus_type={corpus_type!r} is not reportable; dataset.yaml admits "
             f"only {list(config.corpus['reportable_types'])}"
         )
     if corpus_sha256 is None:
@@ -369,7 +369,7 @@ def reportability(
         # nothing here performed one: a run against a DIFFERENT corpus than the
         # campaign was frozen on would have passed this gate and been marked
         # reportable, which is precisely the silent data swap
-        # dataset.yaml's freeze pin exists to prevent (README §13, "The corpus
+        # dataset.yaml's freeze pin exists to prevent (SystemConfiguration.md, "The corpus
         # is frozen"). Dataset/corpus.py guards its own loader, but a scheme
         # that obtains a digest another way bypassed that entirely. Checked
         # here so the gate matches what it claims. Added 2026-08-28.
@@ -379,7 +379,7 @@ def reportability(
                 f"corpus SHA-256 {corpus_sha256[:12]}... does not match "
                 f"dataset.yaml's frozen pin {pinned[:12]}...; results from a "
                 f"different corpus are not comparable to the campaign "
-                f"(README §13). Either restore the frozen corpus or re-freeze "
+                f". Either restore the frozen corpus or re-freeze "
                 f"and re-run EVERY scheme."
             )
 
@@ -395,23 +395,23 @@ def reportability(
     # that fires when it should not trains readers to ignore it.
     #
     # Exp. 6 WAS listed here (451df65, 2026-08-28) on the grounds that it "times
-    # DIAS through to blockchain anchoring (README §5, Phase VII Step 5)". Removed
+    # DIAS through to blockchain anchoring (global.yaml, Phase VII Step 5)". Removed
     # 2026-09-03: that justification cited a PROTOCOL STEP, not a measurement
     # boundary, and it does not hold against the code. ``sync/ias.py::synchronize``
     # takes ``ledger`` as OPTIONAL and anchors only inside ``if ledger is not
     # None``; Exp. 6's runner has never passed one, so Step 7 is not on its timed
-    # path. Two independent sources agree it is outside the boundary: README §5
+    # path. Two independent sources agree it is outside the boundary: global.yaml
     # ends Exp. 6 at "until all affected FSNs report the new VID", and
     # ``tab:cost``'s authorization-synchronization row is O(delta)T_H +
     # O(log d)T_MT with no chain term. Exp. 4 keeps the gate because §5 puts
     # "chain consistency" INSIDE its boundary in as many words.
     #
     # §VI must state the exclusion and report anchoring separately -- the treatment
-    # README §5 already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 5
+    # global.yaml already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 5
     # is ever brought inside the boundary, the runner must pass a ledger and
     # ``exp6_authorization_sync`` must come back into this tuple.
     if _experiment_number(experiment) == 4 and not ledger_faithful:
-        # README §1 states the ledger is Hyperledger Fabric v2.5, but the
+        # SystemConfiguration.md states the ledger is Hyperledger Fabric v2.5, but the
         # harness runs chain.ledger.InProcessLedger -- whose OWN docstring says
         # it is "NOT a substitute for Fabric once Fog Search Nodes become
         # independent processes" and that "Exp. 4 is where it starts to be
@@ -423,7 +423,7 @@ def reportability(
         # 2026-08-28.
         reasons.append(
             "the ledger is an in-process hash chain, not the Hyperledger "
-            "Fabric v2.5 deployment README §1 specifies; Exp. 4's chain-"
+            "Fabric v2.5 deployment SystemConfiguration.md specifies; Exp. 4's chain-"
             "consistency cost is therefore understated (see "
             "chain/ledger.py::InProcessLedger)"
         )
@@ -440,7 +440,7 @@ def reportability(
         if not config.scheduler.weights.is_fixed:
             reasons.append(
                 f"AASS weights are {config.scheduler.weights.status!r}; "
-                f"README §14 issue #5 requires the documented hold-out sweep first"
+                f"scheduler.yaml requires the documented hold-out sweep first"
             )
         # Was an UNCONDITIONAL blocker: the harness had no multi-process path,
         # so declaring the requirement in global.yaml could only ever fail it.
@@ -451,7 +451,7 @@ def reportability(
         # cannot be asserted by a caller that did not spawn them.
         if config.topology.independent_processes and not fsn_processes:
             reasons.append(
-                "README §1 requires each FSN to be an independent process; this "
+                "SystemConfiguration.md requires each FSN to be an independent process; this "
                 "run executed them in one interpreter, so a concurrency result "
                 "would not measure the stated topology"
             )

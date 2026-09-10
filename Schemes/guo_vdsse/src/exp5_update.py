@@ -4,7 +4,7 @@ Variable:  (keyword, document) pairs ``k`` = 10^2 → 10^5
 Primary:   latency (ms)
 Secondary: entries rewritten (Ti insertions + Tf insertions)
 
-Measurement boundary (README §5, Exp. 5):
+Measurement boundary (global.yaml, Exp. 5):
     Incremental update only — NOT a full rebuild.
 
 For Guo, each update(add, id, W_id) writes:
@@ -46,7 +46,7 @@ SECONDARY_NAMES = ["entries_rewritten", "index_entries_before"]
 VARIABLE_RANGE = [100, 200, 500, 1_000, 2_000, 5_000, 10_000, 20_000,
                   50_000, 100_000]
 
-# README §6 default index size, matching exp3_crossdomain.DEFAULT_N.
+# global.yaml default index size, matching exp3_crossdomain.DEFAULT_N.
 DEFAULT_N = 100_000
 
 
@@ -116,7 +116,7 @@ def run(
 
     iteration_counter: Dict[int, int] = {k: 0 for k in actual_range}
 
-    # ---- base index: built ONCE, over the README §6 default N. Untimed. ----
+    # ---- base index: built ONCE, over the global.yaml default N. Untimed. ----
     #
     # This used to be rebuilt INSIDE runner(), over the ENTIRE corpus, on every
     # run: 15 runs x 4 k-values = 60 rebuilds of 1,143,792 records (it was

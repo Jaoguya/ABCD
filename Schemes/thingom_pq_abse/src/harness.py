@@ -1,8 +1,8 @@
-"""Measurement, aggregation and output, per README §7 and §9.
+"""Measurement, aggregation and output, per global.yaml and §9.
 
-Timing uses ``time.perf_counter_ns()`` (README §7). Warm-ups are discarded
+Timing uses ``time.perf_counter_ns()``. Warm-ups are discarded
 before the retained runs begin. Failed runs are recorded with
-``status=failed`` and are NOT dropped — README §7 is explicit that a failure
+``status=failed`` and are NOT dropped — global.yaml is explicit that a failure
 is re-run to restore n=10 rather than deleted, so the row has to survive to
 be visible.
 """
@@ -161,7 +161,7 @@ def measure_point(
 
 
 class Timer:
-    """``perf_counter_ns`` span, reported in milliseconds (README §9 units)."""
+    """``perf_counter_ns`` span, reported in milliseconds (global.yaml units)."""
 
     __slots__ = ("_start", "elapsed_ms")
 
@@ -219,7 +219,7 @@ class CpuTimer:
 
 
 # ---------------------------------------------------------------------------
-# Output — README §9
+# Output — global.yaml
 # ---------------------------------------------------------------------------
 def _format(value: Optional[float]) -> str:
     if value is None:
@@ -230,7 +230,7 @@ def _format(value: Optional[float]) -> str:
 
 
 def write_raw_runs(path: Path, result: ExperimentResult) -> None:
-    """``raw_runs.csv`` — one row per run, never aggregated (README §9)."""
+    """``raw_runs.csv`` — one row per run, never aggregated."""
     lines = [
         "scheme,experiment,variable_value,run_id,primary_metric,"
         "secondary_metric_1,secondary_metric_2,status"
@@ -254,7 +254,7 @@ def write_raw_runs(path: Path, result: ExperimentResult) -> None:
 
 
 def write_results(path: Path, result: ExperimentResult) -> None:
-    """``results.csv`` — aggregated means with 95% CI (README §9).
+    """``results.csv`` — aggregated means with 95% CI.
 
     Only ``status=ok`` runs are aggregated. ``n_runs`` reports how many that
     was, so a point that lost runs to failures is visible as n < 30 rather
@@ -332,7 +332,7 @@ def write_run_meta(
     reportable: bool,
     reportable_blockers: Sequence[str],
 ) -> None:
-    """``run_meta.json`` — provenance (README §7).
+    """``run_meta.json`` — provenance.
 
     ``reportable`` and ``reportable_blockers`` are the important fields. A run
     produced with a development-only pairing backend, or against a sample

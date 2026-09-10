@@ -12,5 +12,5 @@ the mechanism. The Data Owner's ``AuthRoot_DO``, which Phase IV Step 5 binds int
 
 Step 2 (``KeyGen(MSK_i, S_{U,i})``) is absent: the manuscript gives it as an
 interface without defining ``SK_{U,i}``'s structure, and it additionally needs the
-Type-III pairing backend. See ``../PHASE_III_PLAN.md``.
+Type-III pairing backend (Phase III).
 """

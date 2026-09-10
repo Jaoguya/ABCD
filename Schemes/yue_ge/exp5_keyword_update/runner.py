@@ -1,12 +1,12 @@
 """Exp. 5 — Dynamic Keyword Update. Ref[55] §VI-A ``Add`` / ``Delete``.
 
-Variable:  (keyword, document) pairs ``k`` = 10^2 -> 10^5 (README §5)
+Variable:  (keyword, document) pairs ``k`` = 10^2 -> 10^5
 Primary:   update latency (ms)
 Secondary: entries rewritten, index growth (bytes)
 
 INCREMENTAL, NOT A REBUILD
 --------------------------
-README §5 is explicit: "incremental update only. A global rebuild means Phase
+global.yaml is explicit: "incremental update only. A global rebuild means Phase
 VII is implemented wrong." Ref[55] satisfies this natively — ``Add`` writes a
 NEW batch ``I_c = (A_c, T_c)`` and the server appends it (``I = I union I_c``,
 Algorithm 1). Existing batches are never rewritten, which is precisely what
@@ -14,7 +14,7 @@ gives the scheme forward privacy. So what is timed here is one ``Add`` of ``k``
 fresh (keyword, document) pairs against an already-populated index.
 
 ``k`` counts pairs, not distinct keywords — the corpus holds ~18.8M pairs
-against a 2,102-word vocabulary (README §4), so 10^5 pairs is available while
+against a 2,102-word vocabulary, so 10^5 pairs is available while
 10^5 distinct keywords would be impossible.
 
 ADD AND DELETE ARE BOTH MEASURED

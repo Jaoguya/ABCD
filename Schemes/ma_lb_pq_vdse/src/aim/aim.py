@@ -57,7 +57,7 @@ class AuthorizationStateMismatchError(AIMError):
 class PropagationResult:
     """Outcome of one synchronization push.
 
-    ``fsns_touched`` is the Exp. 6 secondary metric — README §5: "Report FSNs
+    ``fsns_touched`` is the Exp. 6 secondary metric — global.yaml: "Report FSNs
     touched; selective propagation is the claim." It counts nodes the AIM
     *contacted*, not nodes whose state changed, because contacting a node is the
     cost the metric is about; ``fsns_updated`` records the subset that actually

@@ -1,6 +1,6 @@
 """Authenticated symmetric encryption: AES-256-GCM.
 
-README §1 fixes AES-256-GCM as the symmetric primitive for the whole
+SystemConfiguration.md fixes AES-256-GCM as the symmetric primitive for the whole
 benchmark. Ref[35] specifies only an abstract "symmetric encryption SE"
 (Ref[35].txt:1535), so it uses this same primitive — which is the point of a
 shared layer: the SE cost is identical across schemes and cannot explain a

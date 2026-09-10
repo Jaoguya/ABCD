@@ -1,6 +1,6 @@
 """Ref[41] PQ-ABSE — Thingom et al., IEEE TCE 2026.
 
-Implemented as published (README §13). Section and line citations point at
+Implemented as published. Section and line citations point at
 ``References/Ref[41].md``.
 
 WHAT THIS SCHEME IS
@@ -12,13 +12,13 @@ Note the paper self-refutes on post-quantum security: :83 asserts DBDH "forms
 the foundation of the post-quantum security claims in this work", while :362
 of the same paper states pairing-based cryptography "is not thought to be
 feasible in a post-quantum setting since it depends on Diffie-Hellman-type
-problems, which quantum computers can solve effectively". Per README §3 the
+problems, which quantum computers can solve effectively". Per SystemConfiguration.md the
 construction is reproduced as published and the contradiction reported as an
 observation, not silently corrected.
 
 WHAT IS ON THE MEASURED PATH
 ----------------------------
-Ref[41] runs Exp. 1, 2 and 3 only (SCHEME.md). Those exercise setup, key
+Ref[41] runs Exp. 1, 2 and 3 only. Those exercise setup, key
 generation, encryption, trapdoor generation and search. They never reach
 partial decryption or final decryption.
 
@@ -346,7 +346,7 @@ class Trapdoor:
     """``L_w = {L_0z, L_1z, L_2}`` (eq. 16, :332).
 
     One keyword. ``L_2`` carries exactly one ``O_3(w_w)`` (eq. 15, :328), so a
-    q-keyword query means q of these — see SCHEME.md for how Exp. 1 handles it.
+    q-keyword query means q of these — see ``experiments.py`` for how Exp. 1 handles it.
     """
 
     l0: Dict[str, Any]
@@ -407,7 +407,7 @@ class QueryPlan:
     This matters for fidelity, not only for speed. Ref[41]'s cost model
     (Table III, :485) contains no linear-algebra term at all; solving the
     system per candidate would charge the baseline for work its paper never
-    claims, which README §13 forbids in the same breath as speeding a
+    claims, which SystemConfiguration.md forbids in the same breath as speeding a
     baseline up.
     """
 

@@ -5,7 +5,7 @@ metadata, including ciphertext commitments, Merkle roots, version-delta
 commitments, public parameters of multiple Attribute Authorities, revocation
 records, and audit logs" — never the encrypted data itself.
 
-**Staging (decision of 2026-08-08).** Phases I-II are untimed setup (README §2),
+**Staging (decision of 2026-08-08).** Phases I-II are untimed setup,
 so they run against :class:`InProcessLedger`. Fabric implements the same
 :class:`Ledger` interface and must land before Exp. 4, which is the first
 experiment that *measures* a blockchain-consistency check (Phase VIII Step 2).

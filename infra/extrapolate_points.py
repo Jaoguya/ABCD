@@ -29,7 +29,7 @@ and is the whole point of doing this with a script rather than by hand:
 
 ``run_meta.json`` gets an ``extrapolation`` block naming the anchor, the factor
 applied to each target and the columns scaled, so any number in the figure can
-be traced back to the measured cell it came from (README section 15).
+be traced back to the measured cell it came from.
 
 WHAT IT REFUSES
 ---------------

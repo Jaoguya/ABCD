@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bring up the Fabric network this directory describes, from nothing.
 #
-# infra/fabric/README.md said the compose file was "necessary but not
+# SystemConfiguration.md section 13 said the compose file was "necessary but not
 # sufficient". This is the rest of it: crypto material, a channel genesis block,
 # channel join, and chaincode deploy. Until 2026-09-04 none of it existed, so
 # the network in that compose file had never been started even once -- the

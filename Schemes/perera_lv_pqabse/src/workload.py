@@ -13,7 +13,7 @@ plays each role, rather than leaving the mapping implicit in a runner.
 The numeric-range bitmap has no corpus field to index: the corpus carries no
 numeric observation values. It is therefore built EMPTY and never queried, and
 no Exp. 1-3 measurement depends on it — recorded here rather than quietly
-populated with a synthesised field, which README §13 forbids.
+populated with a synthesised field, which SystemConfiguration.md forbids.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ def build_fog_node(
     *,
     with_abe: Optional[bool] = None,
 ) -> scheme.FogNode:
-    """Phases 2-3 over ``records``. Untimed setup (README §5).
+    """Phases 2-3 over ``records``. Untimed setup.
 
     ``with_abe`` defaults to crypto.yaml's ``abe_on_measured_path`` (false):
     Exp. 1-3 read no ``ct_abe``, and producing one per record costs 758 ms

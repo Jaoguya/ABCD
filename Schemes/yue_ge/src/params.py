@@ -1,7 +1,7 @@
 """Scheme parameters for Ref[55] (Ge et al., Peony / Peony++).
 
 Every value here is loaded from ``Experiment Configuration/crypto.yaml`` under
-the ``yue_ge`` block. Nothing is hardcoded: README §7 requires that every
+the ``yue_ge`` block. Nothing is hardcoded: global.yaml requires that every
 reported number carry a config hash, which only works if the config is the
 single source of truth.
 

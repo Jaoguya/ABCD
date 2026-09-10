@@ -12,7 +12,7 @@ That is the same class of defect as ``d1cdf9c`` (Exp. 4's ``r`` counted index
 entries, not returned records) and the 2026-09-05 Exp. 9 fix (the sweep counted
 entries where the baselines counted documents): the number is plausible, the
 figure renders, and the axis quietly means something other than what the
-caption says. README §5 records both. These tests are the guard for the third
+caption says. global.yaml records both. These tests are the guard for the third
 instance.
 """
 
@@ -410,7 +410,7 @@ def test_psa_exp1_figure_draws_one_curve_per_scope(config):
     slugs = dict(plots.variants_for(spec))
     assert set(slugs) == set(psa.PSA_EXP1_VARIANTS)
     # Every arm needs its own style slot or the four curves draw identically
-    # and the figure is unreadable in grayscale (README §10).
+    # and the figure is unreadable in grayscale.
     slots = {plots.ABLATION_STYLE_SLOT.get(label) for label in slugs.values()}
     assert len(slots) == len(slugs) and None not in slots
 
@@ -690,7 +690,7 @@ def test_psa_exp8_shares_the_ablation_and_its_metrics(config):
 
 
 def test_both_exp7_traces_use_the_published_q(config, source):
-    """README §6 fixes q=5 from §VI; the trace used ONE keyword until 2026-09-06.
+    """global.yaml fixes q=5 from §VI; the trace used ONE keyword until 2026-09-06.
 
     Asserted for BOTH constructions, because the moment they differ the Exp. 7
     comparison measures two workloads rather than two schemes.

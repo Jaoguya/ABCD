@@ -19,7 +19,7 @@ does not describe.
 * ``Dataset/corpus.py``'s ``Record.pid`` is a **patient pseudonym**:
   ``prepare_dataset.py:346`` sets ``pid=pseudonymize(values["PATIENT"])``.
 
-README §4 lists the record schema as ``W_i + (PID_i, VID_i, Dom_i, TS_i)``, which
+dataset.yaml lists the record schema as ``W_i + (PID_i, VID_i, Dom_i, TS_i)``, which
 reads as though the two are the same field. They are not, and the difference is
 not cosmetic: taking the corpus ``pid`` as ``PID_i`` yields **one access policy
 per patient** — roughly 38,000 policies over the frozen corpus — and
@@ -27,7 +27,7 @@ per patient** — roughly 38,000 policies over the frozen corpus — and
 ``|Dom| x |PID|``. That choice therefore lands directly on Exp. 2's ``n_eff``.
 
 So this module **requires an explicit** :class:`PolicyAssignment` and provides no
-default. ``PHASE_IV_PLAN.md`` open decision 3 records ``|PID|`` and the
+default. Phase IV open decision 3 records ``|PID|`` and the
 record-to-policy mapping as undecided, and a default here would be that decision
 made silently, in the one place nobody would look for it.
 """
@@ -101,7 +101,7 @@ class BucketedPolicyAssignment:
 
 @dataclass(frozen=True)
 class PerPatientPolicyAssignment:
-    """One policy per patient — the reading README §4 implies.
+    """One policy per patient — the reading dataset.yaml implies.
 
     Provided so the option can be measured rather than argued about, and marked
     here rather than buried: ``|PID|`` becomes the patient count (~38,000 for the
@@ -212,7 +212,7 @@ def extract_all(
 ) -> Iterator[ExtractedRecord]:
     """Stream extraction over a corpus.
 
-    A generator, not a list: README §14 issue 9 records that materialising the
+    A generator, not a list: materialising the
     1.14M-record corpus costs 1-2 GB per process, and Exp. 2 sweeps index size to
     10^6. ``limit`` takes the prefix an experiment point needs without reading
     the rest.

@@ -3,7 +3,7 @@
 # ORDERER_GENERAL_BOOTSTRAPMETHOD=none plus CHANNELPARTICIPATION_ENABLED=true
 # means the orderer starts with NO channels and one is joined afterwards through
 # the admin API (osnadmin), rather than baking a system channel into the image.
-# That is the v2.5 way and it is what infra/fabric/README.md §"Channel setup"
+# That is the v2.5 way and it is what SystemConfiguration.md §"Channel setup"
 # describes; this file is the genesis block that join consumes.
 #
 # BatchTimeout is the single most important knob for Exp. 4 and Exp. 6: it sets

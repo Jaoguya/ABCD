@@ -9,7 +9,7 @@ Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 "``rho`` is a fresh random nonce preventing replay attacks. The search token is
 transmitted to the Authorization Index Manager (AIM)."
 
-**This is the Exp. 1 measured path**, and its cost boundary is set by README §5:
+**This is the Exp. 1 measured path**, and its cost boundary is set by global.yaml:
 "online trapdoor generation only. ML-KEM encapsulation happens once at session
 establishment; report it separately as a setup cost, not in the per-query curve."
 So generating ``ST`` is ``q`` PRF evaluations plus a nonce draw — no pairing, no

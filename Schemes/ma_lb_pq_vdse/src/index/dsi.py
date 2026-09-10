@@ -17,7 +17,7 @@ consequences, each of which a test pins:
   bitmap in the shard — the failure mode that looks like a correct index returning
   wrong results.
 * **A policy change rewrites payload only.** Under the recommended matching option
-  (``PHASE_IV_PLAN.md`` §1.5 option D) the token does not encode the policy, so
+  (Phase IV §1.5, option D) the token does not encode the policy, so
   re-policying an entry touches no posting list. That is what keeps Exp. 5
   incremental instead of re-tokenizing.
 * **Authorization filtering precedes matching.** §VI: "authorization-aware
@@ -26,7 +26,7 @@ consequences, each of which a test pins:
   set ``n_eff``". ``n_eff`` is therefore measured here, not derived.
 
 **The token function is injected.** Phase IV Step 2's matching relation is an open
-author decision (``PHASE_IV_PLAN.md`` §1) and ``index/tokens.py`` does not exist
+author decision (Phase IV §1) and ``index/tokens.py`` does not exist
 yet. This module never constructs a token: it takes them as opaque bytes, so the
 whole structure is buildable and testable today and none of it changes when the
 decision lands.

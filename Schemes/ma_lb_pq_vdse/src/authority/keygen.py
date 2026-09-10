@@ -9,7 +9,7 @@ Manuscript `Overleaf/MA-LB-PQ-VDSE.tex`:
 The manuscript gives ``KeyGen`` as an interface only — it never defines the
 structure of ``SK_{U,i}`` — so the construction was settled by decision on
 2026-08-09 as Rouselakis-Waters. Recorded as `benchmark` provenance in
-``PHASE_III_PLAN.md`` open decision 1.
+Phase III open decision 1.
 
 **Which Rouselakis-Waters.** The decision named RW13 (Rouselakis and Waters,
 *Practical Constructions and New Proof Methods for Large Universe Attribute-Based

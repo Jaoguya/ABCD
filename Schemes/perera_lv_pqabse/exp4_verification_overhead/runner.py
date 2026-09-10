@@ -38,7 +38,7 @@ inclusion proof and its verification against the partition root, and the
 freshness comparison against the latest root.
 
 Untimed: Phases 2-3 (edge encryption, fog ingest, index construction, and the
-``finalize()`` Merkle build). README §5 puts index construction offline, and
+``finalize()`` Merkle build). global.yaml puts index construction offline, and
 every other Exp. 4 arm draws the line in the same place.
 """
 
@@ -137,7 +137,7 @@ def run(
         print(
             f"  NOTE: epoch {epoch!r} holds {len(verifiable)} records at "
             f"N={len(subset)}; sweep truncated to {actual_range}. Points above "
-            f"the partition size are NOT reported (README §13)."
+            f"the partition size are NOT reported."
         )
 
     print(f"  built N={len(subset):,}: epoch {epoch!r} carries {available:,} "

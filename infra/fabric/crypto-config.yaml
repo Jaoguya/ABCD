@@ -10,7 +10,7 @@
 # problem and an unreviewable binary blob. Regenerating means the network is
 # reproducible from this file alone.
 #
-# Single org, single peer, solo orderer — the scope infra/fabric/README.md
+# Single org, single peer, solo orderer — the scope SystemConfiguration.md section 13
 # already fixes. Enough to measure ordering latency and an endorsement
 # round-trip, and explicitly not a production topology.
 

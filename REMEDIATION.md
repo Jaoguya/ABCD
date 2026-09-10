@@ -15,16 +15,22 @@
 Rule 3 is why this file is allowed to exist at all. `CLAUDE.md` says *"Two prose
 files, and no more … Do not create a third. Every document retired from this
 repo has left dangling citations behind — 338 of them when `README.md` went."*
-That cost is live right now, and it is far larger than the rule implies —
-**97 citations across the repo point at five documents that no longer exist**:
+That cost was live when this file was written, and larger than either figure.
+Two families, counted separately because they were found separately:
 
-| deleted document | citations still pointing at it |
-|---|---|
-| `SCHEME.md` | 39 |
-| `README.md` | 21 |
-| `MANUSCRIPT_DIVERGENCE.md` | 15 |
-| `PHASE_IV_PLAN.md` | 13 |
-| `PHASE_III_PLAN.md` | 9 |
+| family | live references | files | fixed by |
+|---|---|---|---|
+| **by filename** — `SCHEME.md`, `MANUSCRIPT_DIVERGENCE.md`, `PHASE_III_PLAN.md`, `PHASE_IV_PLAN.md`, `README.md`, `infra/fabric/README.md` | **79** (of 130 matches; the other 51 are history or banked `run_meta.json`) | 48 | D3 |
+| **by section of `README.md`** — `§N`, `section N`, and the mojibake `S N` | **333** | 87 | D4 |
+
+**412 in all, and all closed as of 2026-09-10.** The per-document split of the
+79 was never measured, so it is not stated here; the 130 raw matches were
+`SCHEME.md` 44, `MANUSCRIPT_DIVERGENCE.md` 35, `README.md` 23,
+`PHASE_IV_PLAN.md` 16, `PHASE_III_PLAN.md` 12.
+
+Two tests now hold the line: `test_no_source_file_cites_a_deleted_document` and
+`test_no_source_file_cites_a_section_of_the_deleted_readme`. What still matches
+those names in the tree is history — accounts of the deletion, not pointers.
 
 **This file is named `REMEDIATION.md`, not `TASKS.md`, for that reason.** A
 `TASKS.md` existed and was deleted in the 2026-09-08 purge, and
@@ -59,24 +65,6 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
       run.** Not before: it is the only track that works end to end today.
 
 
-- [ ] **A3 Re-source Fig. 6 from `psa_exp6_affected_ratio`.** §VI's Exp. 6 text
-      and caption describe an affected-policy-ratio sweep (10–100%); the
-      included figure is the δ = 10²–10⁵ sweep.
-- [ ] **A4 Baselines ×4 — Exp. 3 per-domain sizing.**
-      `guo/src/exp3_crossdomain.py:46`, `perera/.../runner.py:59`,
-      `yue_ge/.../runner.py:79`, `thingom/src/experiments.py:673` all fix
-      *total* at 100,000 and shard by `d`. §VI fixes **per-domain**; value
-      decided at 10,000.
-      *Results-affecting for four published baselines — disclose.*
-- [ ] **A5 Exp. 7/8 index sizing** — still `index_size // keywords_per_record`
-      ≈ 3,125 where Exp. 2 uses records directly.
-- [ ] **A6 `C_j^sync` → the published vector count.** `scheduler.yaml:55` has
-      `|VID_U - VID_j|` (a scalar) labelled *published*; eq:search-cost defines
-      `|{(ID_k,v_k) ∈ V_Q : v_{j,k} < v_k}|`.
-- [ ] **A7 Repoint the figure set to PSA.** `--construction` still defaults to
-      `option_d` in `main.py` and `generate_plots.py`.
-- [ ] **A8 Retire `test_exp3_trapdoor_count_does_not_scale_with_domains`** at
-      the PSA switch — it asserts an Option-D property PSA contradicts by design.
 - [ ] **A9 Exp. 4** — §V gains the `check_chain_integrity` disclosure sentence.
       *(`require_version_match` is a §VI item now: the AIM's freshness check is
       `VID_i == VID_U`, a SCALAR, and PSA's policy state is a vector digest.
@@ -123,11 +111,7 @@ Durable findings do **not** belong here — they go to `SystemConfiguration.md`
 
 ## D. Hygiene
 
-- [ ] **D3 Fix 97 dangling citations to five deleted documents** — `SCHEME.md`
-      (39), `README.md` (21), `MANUSCRIPT_DIVERGENCE.md` (15),
-      `PHASE_IV_PLAN.md` (13), `PHASE_III_PLAN.md` (9). Every one sends a
-      reader to a file that does not exist. `DECISIONS.md`'s six `TASKS.md`
-      citations are excluded: it is a closed archive per `CLAUDE.md`.
+*(empty — D3 and D4 both done, see below)*
 
 ## E. Blocked / pending someone else
 
@@ -154,6 +138,142 @@ This is the first run that is *meaningfully* green. Earlier "green" runs were
 little. Both now assert exact quantities. Treat any failure from here as real.
 
 ## Done (kept as the evidence trail until this file is deleted)
+
+- [x] **Rule 3 restored — the D4 guard had come to cite this file.** Two lines
+      of `test_document_config_agreement.py` named `REMEDIATION.md`: an entry in
+      the exclusion list and a comment explaining it. Both would have become
+      dangling references the moment this file is deleted, which is the exact
+      failure this file exists to clean up. **Caught by asking whether the
+      tracker could be deleted yet, not by any test** — a guard cannot see a
+      violation written into its own exclusions.
+      Fixed by scanning no repo-root prose at all: the two surviving prose
+      documents are already covered by
+      `test_documents_cite_only_paths_that_exist`, and a document whose
+      *subject* is the deletion has to be free to name what was deleted.
+      *Verified:* nothing in the repo cites this file; coverage unchanged at
+      421 files; every remaining exclusion is reachable, so none is decoration;
+      both guards still fire on an injected violation and revert clean.
+
+- [x] **D4 — every citation to a section of the deleted `README.md` is gone.**
+      **333 live references across 87 files**, in four spellings: `README §5`,
+      `README's §7`, `README section 5`, and the mojibake `README S6` a
+      non-UTF-8 write left behind. Two were invisible to a `§` search.
+      **Verified against the recovered file, not guessed.** README.md was
+      recovered from `e503655^` (998 lines, 17 sections). §1 Environment,
+      §4 Dataset, §6 Default Parameters, §7 Measurement Methodology and
+      §9 Output Format all matched their citations exactly — **drift was
+      confined to §14**, whose ~20 citations split between the Ground Rules
+      (§13 in the recovered file) and the numbered Open Issues (§14). A fifth
+      of them pointed at the wrong section *before* the file was deleted.
+      **Executed as the hybrid, in three passes:**
+      *82 deleted* — parentheticals whose whole content was the citation, where
+      the sentence already states the fact ("mean ± 95% CI (README §7)").
+      *241 repointed* — facts a config file owns now cite that file
+      (`global.yaml` for defaults, methodology and units; `dataset.yaml` for the
+      corpus), which is SHORTER than what it replaced and follows the repo's own
+      rule that a number is read from the file that owns it. Everything else
+      cites `SystemConfiguration.md` **with no section number**: the number is
+      the part that rotted, and a bare filename cannot develop that fault.
+      *10 by hand* — the `§14 issue #N` sites, whose issue numbers exist nowhere
+      now, repointed at `scheduler.yaml` (the λ sweep) or reduced to the fact.
+      **Reflow cost measured before choosing:** repointing by section NAME would
+      have pushed 297 lines past 88 chars and, worse, put bare `"` inside
+      f-strings — a syntax error. The config-file form cost **one** line over
+      100 chars, and that line was already long.
+      *Verified:* 0 live references remain (10 survivors are all history or the
+      resolver table); every edited `.py` compiles, every `.yaml` parses, every
+      `.sh` passes `bash -n`; the 131 changed code lines are argparse help,
+      messages and comments, and no test asserts on any of them.
+- [x] **Guard for D4** —
+      `test_no_source_file_cites_a_section_of_the_deleted_readme`. Proven
+      non-vacuous: an injected line carrying all three spellings fails it, each
+      named in the message; reverted clean.
+- [x] **Two stale `--runs 30` claims corrected**, both contradicting
+      `global.yaml`'s 10 and found while rewriting the lines around them:
+      `main.py`'s module docstring printed a `--runs 30` command, and
+      `harness/runner.py`'s docstring said a failed run is re-run "to restore
+      n = 30" seven lines after stating "10 runs after 5 discarded warm-ups".
+      `test_repetition_count_agreement.py` exists to catch exactly this and
+      scans only `SystemConfiguration.md` and `CLAUDE.md`, so it could not see
+      either.
+
+- [x] **Structural guard for D3** —
+      `test_no_source_file_cites_a_deleted_document` scans **419** source files
+      for the four deleted design documents. Proven non-vacuous: injecting
+      `PHASE_IV_PLAN.md` into `index/extract.py` fails it by name, and the
+      injection was reverted. The prose half was already covered by
+      `test_documents_cite_only_paths_that_exist`; nothing covered source
+      comments, which is where 79 of the 79 lived.
+- [x] **`README` section 10 (figure conventions) rescued** into
+      `SystemConfiguration.md` "Figure conventions". `generate_plots.py` cites
+      it as "followed exactly" — vector PDF, 3.5 in single column, 8 pt
+      minimum, 95% CI on every point, log x for Exps. 2/5/6, marker *and* line
+      style so figures survive grayscale — and it existed nowhere in the tree.
+      (`README` section 3's native-mode rule needed no rescue: it is already in
+      section 5's measurement boundaries.)
+- [x] **Corrected a claim the PSA port had made false.**
+      `SystemConfiguration.md` section 5 said "All `psa_*` runs are built on
+      in-process synthetic data and are `reportable: false` by construction".
+      `psa_exp1/2/7/8` are corpus-backed, and every manuscript figure now
+      draws from `psa`.
+
+- [x] **D3 — every dangling citation to the five deleted documents is gone.**
+      The recorded figure of 97 was low: **130 hits**, of which **79 were live
+      pointers** and the rest history. All 79 rewritten across 48 files.
+      Two forms: a pointer whose target survives goes to the surviving section
+      (`README §5` → `SystemConfiguration.md` section 5, `README §9` → section 7,
+      `infra/fabric/README.md` → section 13); a pointer to a *decision* keeps
+      the identifier and loses the path (`` ``PHASE_IV_PLAN.md`` §1.3`` →
+      `Phase IV §1.3`, `` ``MANUSCRIPT_DIVERGENCE.md`` D1`` → `divergence D1`).
+      `SystemConfiguration.md` section 8 gains a resolver table — the six
+      documents, what each held, where its substance went — so a bare
+      "Phase IV decision 6" has exactly one place that explains it, in a file
+      that exists.
+      **Deliberately not touched, and why:** 18 hits in banked `run_meta.json`
+      (machine-written records of what the code said at run time — editing them
+      would falsify provenance; the string's source in `main.py` is fixed, so
+      future runs carry the new wording), and 12 history statements in
+      `CLAUDE.md`, `.claude/`, three test comments and this file, which
+      describe the deletion rather than point at it.
+      *Verified:* `grep -rE` over the tree returns only those two classes plus
+      the new resolver table; 48 edited files compile / parse as YAML;
+      `test_document_config_agreement` + `test_repetition_count_agreement` +
+      `test_cost_table_agreement` + `test_phase1_2` → **188 passed**.
+      *Found while there, and fixed:* `main.py`'s module docstring printed
+      `--runs 30` against a config of 10 — the exact defect
+      `test_repetition_count_agreement.py` exists to catch, in a file that
+      test does not scan (its list is `SystemConfiguration.md` and `CLAUDE.md`).
+
+- [x] **A7 + A3 — the manuscript figure set now sources PSA.** All eight
+      `fig_exp<N>_*.pdf` specs point at `psa_*` folders, Fig. 6 included (which
+      also closes A3: §VI's Exp. 6 describes the affected-policy-ratio sweep,
+      which is `psa_exp6`, not the δ sweep that was being drawn).
+      **A latent bug surfaced doing it:** `proposed_prefix` only took effect
+      through `collect_mixed`, which runs only when `proposed_variants` is also
+      set — so specs naming a `psa_` folder still globbed `exp<N>_*` and drew
+      **Option D**. Verified: Fig. 3's proposed series came back as
+      0.076/0.106/0.123 ms, the pre-fix Option D numbers. Fixed; Fig. 2 now
+      draws 0.340 (psa_exp2) where it drew 0.486 (option_d).
+- [x] **A5 Exp. 7/8 index sizing** — `index_size` in RECORDS, matching Exp. 2.
+      Was `// keywords_per_record`, i.e. ~3,125 records against Exp. 2's
+      100,000 at the same configured value.
+      Cost: `Exp7.prepare` went from ~2 s to **58.3 s**, so the test suite now
+      uses a 2,000-record index for Exps. 7-8 only (`_TEST_INDEX_SIZE`) —
+      production keeps the value §VI describes.
+- [x] **A6 `C_j^sync`** — the CODE was always right (`aass.sync_lag` computes
+      the published set cardinality). `scheduler.yaml` described it as
+      `|VID_U - VID_j|`, a scalar, and labelled that *published*. Config
+      corrected to eq:search-cost.
+- [x] **A8** — the Exp. 3 d-independence test is narrowed to Option D and
+      renamed `test_exp3_trapdoor_count_is_an_option_d_property_only`. Kept
+      rather than deleted: it guards the construction it describes, and §VI's
+      Exp. 3 text never claimed the single-trapdoor property.
+- [x] **A4 — all four baselines now fix PER-DOMAIN index size** at 10,000
+      (`PER_DOMAIN_INDEX_SIZE`), per §VI. They fixed *total* at 100,000 and
+      sharded by `d`, so each shard shrank as `d` grew — which is why [35]'s
+      Exp. 3 latency *fell* across the sweep.
+      *Results-affecting for four published baselines; §VI needs a disclosure
+      sentence (section C).*
 
 - [x] **Step 4 — AIM and AASS wired into `PsaExp2` and `PsaExp3`.** §VI names a
       four-stage path (*"the AIM validates the current VAP and derives … AASS

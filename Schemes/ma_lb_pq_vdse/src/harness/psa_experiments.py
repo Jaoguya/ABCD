@@ -1,6 +1,6 @@
 """D6-D9 — the experiments the manuscript's construction calls for.
 
-``MANUSCRIPT_DIVERGENCE.md`` D7-D9 are experiment-design divergences and D6 is a
+Divergences D7-D9 are experiment-design divergences and D6 is a
 cost-table one. They cannot be measured against the implemented scheme, because
 each is a consequence of the construction in ``src/psa/`` (D1-D5). This module
 supplies them.
@@ -845,7 +845,7 @@ class PsaExp5ReTokenization:
     affected entries, then rebuilds ``Commit_i``.
 
     The two curves against the same ``k`` are the price of D1, and
-    ``PHASE_IV_PLAN.md`` §1.3's ~9.0M-entry estimate is the thing they settle.
+    Phase IV §1.3's ~9.0M-entry estimate is the thing they settle.
     """
 
     config: scheme_config.Configuration
@@ -1830,7 +1830,7 @@ class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
             ]
             # THE SAME KEYWORD SET Option D's trace uses, so the only
             # difference between the two arms is the construction. Both are now
-            # q per README §6; when that was q=5 here and 1 there, the resulting
+            # q per global.yaml; when that was q=5 here and 1 there, the resulting
             # "PSA is 1.38x faster" was the workload mismatch, not a result.
             keywords = list(dict.fromkeys(record["record"].keywords))[
                 : self.config.defaults.keywords_per_query
@@ -1905,7 +1905,7 @@ def build(
     if number not in PSA_EXPERIMENTS:
         raise KeyError(
             f"no policy-state-aware experiment {number}; D6-D9 cover "
-            f"{sorted(PSA_EXPERIMENTS)} — see MANUSCRIPT_DIVERGENCE.md and the "
+            f"{sorted(PSA_EXPERIMENTS)} — see the divergence notes and the "
             f"scope note in this module's docstring"
         )
     cls = PSA_EXPERIMENTS[number]

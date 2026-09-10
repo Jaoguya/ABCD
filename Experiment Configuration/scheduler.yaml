@@ -52,10 +52,21 @@ cost_terms:
                                       # x log of FSN_j's index entry count
     source: fsn_index_statistics
   sync:
-    formula: "|VID_U - VID_j|"        # published: version-synchronisation cost.
-                                      # This is the term that makes the AASS
-                                      # scheduler prefer fresh FSNs
-                                      # (Phase VII Step 6).
+    formula: "|{(ID_k,v_k) in V_Q : v_j,k < v_k}|"
+                                      # published: eq:search-cost. The COUNT of
+                                      # query-relevant authorities whose version
+                                      # at FSN_j lags the current one — the term
+                                      # that makes AASS prefer fresh FSNs
+                                      # (Phase VII Step 5).
+                                      #
+                                      # This said "|VID_U - VID_j|", a SCALAR
+                                      # difference, and labelled it published.
+                                      # eq:search-cost defines a set cardinality
+                                      # over a version VECTOR. The code was
+                                      # always right (`aass.sync_lag`); only
+                                      # this line was wrong, which is worse than
+                                      # harmless — it is the sort of drift that
+                                      # gets copied into a paper.
     source: aim_version_table
   queue:
     formula: "T_j^queue"              # published: current queue waiting time
@@ -153,7 +164,7 @@ sweep:
   output: Schemes/ma_lb_pq_vdse/exp7_search_throughput/lambda_sweep.csv
 
 # -----------------------------------------------------------------------------
-# Ablation variants — §VI (experiments) / SCHEME.md. Internal ablation, NOT a
+# Ablation variants — §VI (experiments). Internal ablation, NOT a
 # cross-scheme comparison. All four see byte-identical workloads.
 # -----------------------------------------------------------------------------
 variants:

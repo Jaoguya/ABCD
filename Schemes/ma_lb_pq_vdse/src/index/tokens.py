@@ -6,9 +6,8 @@
    Phase VI Step 2 both write the token as ``H(w ‖ PID ‖ PV ‖ Dom)`` and prove
    their equality as a theorem, where Option D below reduces both to ``H(w)``.
    The reasoning below is preserved because it is why the code is as it is, but
-   it argues against a version of the paper that no longer exists. See
-   ``MANUSCRIPT_DIVERGENCE.md`` D1 before treating any formula here as the
-   published one.
+   it argues against a version of the paper that no longer exists. Divergence D1
+   is this one; do not treat any formula here as the published one.
 
 Manuscript `Overleaf/MA-LB-PQ-VDSE.tex` writes the index token as
 
@@ -16,8 +15,8 @@ Manuscript `Overleaf/MA-LB-PQ-VDSE.tex` writes the index token as
 
 while Phase VI Step 1 writes the query token as
 ``T_Q = {H(w_i ‖ VID_U)}`` and Phase VI Step 4 leaves the matching relation
-``T_Q → I_i`` undefined. ``PHASE_IV_PLAN.md`` §1 sets out why those cannot all
-hold, and **Option D was chosen on 2026-08-10**:
+``T_Q → I_i`` undefined. Those cannot all hold — the Phase IV design note
+set out five ways to reconcile them, and **Option D was chosen on 2026-08-10**:
 
     T_j = T_Q = H(w)                                   the lookup key
     PolicyTag_i = H( PID_i ‖ VID_i ‖ Dom_i )           the policy binding
@@ -35,7 +34,7 @@ Three properties follow, each pinned by a test:
   the same function, which is the Exp. 3 claim.
 * **A version bump does not change a token** — so version skew degrades results
   rather than zeroing them, and an authority version change does not re-tokenize
-  its domain (the 9.0M-entry problem of ``PHASE_IV_PLAN.md`` §1.3).
+  its domain (the ~9.0M-entry re-tokenization problem, Phase IV §1.3).
 * **A policy change does not change a token** — so Exp. 5 measures an incremental
   update rather than a re-tokenization.
 
@@ -63,7 +62,7 @@ or ``TokenScheme.unkeyed()``. There is no default, because this is not a detail
 that should be settled by whichever constructor happened to be convenient. It
 also **affects a reported number** — HMAC-SHA256 costs roughly two SHA-256
 compressions, and Exp. 1 measures exactly this operation ``q`` times per query.
-Recorded as open decision 6 in ``PHASE_IV_PLAN.md``.
+Recorded as Phase IV open decision 6, and still open.
 """
 
 from __future__ import annotations
@@ -232,7 +231,7 @@ class TokenScheme:
 
         Closing that last gap would mean either adding ``Dom_i`` to ``I_j`` or
         folding this tag into ``L_j``, both of which change a published formula.
-        Recorded as open decision 7 in ``PHASE_IV_PLAN.md`` rather than done
+        Recorded as Phase IV open decision 7 rather than done
         quietly here.
         """
         if not policy_id:

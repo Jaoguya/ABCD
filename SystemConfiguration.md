@@ -253,8 +253,12 @@ estimate counting only measured operations will be wrong by an order of magnitud
 and `psa` (`harness/psa_experiments.py`) time *different functions at the same
 experiment number* — the first uses `T = H(w)`, the second the manuscript's
 `T = H(w || PID || PV || Dom)`. Every reported number must say which produced it.
-All `psa_*` runs are built on in-process synthetic data and are
-`reportable: false` by construction.
+`psa` is the construction the manuscript defines and, since 2026-09-10, the
+one every manuscript figure is drawn from. It is no longer synthetic-only:
+`psa_exp1`, `psa_exp2`, `psa_exp7` and `psa_exp8` run on the frozen corpus.
+Banked `psa_*` results predating that port still carry
+`corpus_type: psa_in_process` and `reportable: false` — read the field, do not
+assume either way.
 
 ---
 
@@ -298,6 +302,28 @@ python3 -u -m Schemes.yue_ge.src.main           --experiment 1,2,3,4,5 --runs 10
 
 python3 Plots/generate_plots.py --input Schemes --output Plots/output
 ```
+
+### Figure conventions
+
+Rescued from `README.md` section 10 on 2026-09-10. `generate_plots.py` cites it
+as the spec it follows, and it existed nowhere else.
+
+| Exp. | File | Manuscript label |
+|---|---|---|
+| 1 | `fig_exp1_trapdoor.pdf` | `fig:exp1` |
+| 2 | `fig_exp2_search.pdf` | `fig:exp2` |
+| 3 | `fig_exp3_crossdomain.pdf` | `fig:exp3` |
+| 4 | `fig_exp4_verify.pdf` | `fig:exp4` |
+| 5 | `fig_exp5_update.pdf` | `fig:exp5` |
+| 6 | `fig_exp6_sync.pdf` | `fig:exp6` |
+| 7 | `fig_exp7_throughput.pdf` | `fig:exp7` |
+| 8 | `fig_exp8_balance.pdf` | `fig:exp8` |
+
+Written to `Plots/output/`, referenced from the manuscript as
+`images/<same name>`. Vector PDF, single-column width (IEEE, 3.5 in), 8 pt
+minimum type, 95% CI error bars on every point, log x-axis for Exps. 2, 5 and 6.
+**Distinguish schemes by marker *and* line style**, so the figures survive
+grayscale.
 
 **Flags differ per scheme** — they were written at different times. Only
 `ma_lb_pq_vdse` reads `global.yaml` for `--runs`/`--warmup`; the other four carry
@@ -343,6 +369,28 @@ Overleaf/                     the manuscript
 Merkle, Bloom, ML-KEM) live there so every scheme measures the same cost.
 Anything a paper *contributes* stays in its own `src/`. If two schemes seem to
 need the same construction, one is probably being implemented unfaithfully.
+
+### Documents that no longer exist, and how to read a reference to one
+
+Five prose documents were deleted in the 2026-09-07/08 purge that produced the
+"two prose files" rule. Source comments still name the *decisions* they held,
+because those decisions are why the code is shaped as it is. **This subsection
+is the only place to resolve such a reference** — the documents are gone and no
+path in the tree points at them any more.
+
+| document | what it held | where its substance is now |
+|---|---|---|
+| `README.md` | operator's guide, §5 the eight experiments, §9 the output layout, and the AWS estate | sections 5, 7 and 12 of this file |
+| `infra/fabric/README.md` | Fabric + IPFS bring-up | section 13 of this file |
+| `SCHEME.md` (one per scheme, five in all) | per-scheme faithfulness notes: which experiments a baseline runs, what its paper does and does not support, and every unpublished parameter chosen for it | the module docstrings that cite it, plus `crypto.yaml` and section 9 of this file |
+| `PHASE_III_PLAN.md` | Phase III (user registration, VAP, delivery) build order and its open author decisions, numbered 1-4 | the `src/user/` docstrings, which state each decision in full |
+| `PHASE_IV_PLAN.md` | Phase IV (index) build order, the five token-matching options, and open author decisions numbered 1-7 | the `src/index/` docstrings; option D and the ~9.0M-entry sizing are stated inline where they matter |
+| `MANUSCRIPT_DIVERGENCE.md` | nine numbered divergences D1-D9 between the manuscript and the implemented scheme | the PSA migration resolves them; `src/psa/` and `harness/psa_experiments.py` carry what each one was |
+
+So a comment reading **"Phase IV decision 6"**, **"divergence D1"** or **"the
+SCHEME note"** is a reference to a decision, not to a file you can open. None of
+these documents may be recreated: `CLAUDE.md`'s rule is two prose files and no
+more, and it exists because the last deletion left 338 dangling citations.
 
 ---
 
@@ -460,11 +508,17 @@ Verified 2026-09-08 against the repo, not carried over from the previous version
   construction. Isolated to the corpus path, which needs the AWS host —
   `Dataset/derived/corpus.jsonl` is gitignored and exists only on the AMI.
 
-- **97 citations point at five deleted documents**: `SCHEME.md` (39),
-  `README.md` (21), `MANUSCRIPT_DIVERGENCE.md` (15), `PHASE_IV_PLAN.md` (13),
-  `PHASE_III_PLAN.md` (9). Section 8's "two prose files" rule exists because of
-  exactly this, and cites 338 from the `README.md` deletion as history — it is
-  not history. Every one of these sends a reader to a file that does not exist.
+- ~~**97 citations point at five deleted documents.**~~ **Closed 2026-09-10.**
+  The true count was 130 hits across 79 live sites; all 79 are repointed at
+  section 5, 7, 12 or 13 of this file, or reduced to a bare decision reference
+  ("Phase IV decision 6", "divergence D1") that section 8 now resolves. What
+  remains matching those filenames is deliberate: this file's resolver table,
+  the "rescued from" provenance lines, `CLAUDE.md`'s and the bug-sweep
+  archive's accounts of the deletion, and three test comments that describe the
+  deletion as history. **The 18 hits in banked `run_meta.json` were left
+  untouched on purpose** — they are machine-written records of what the code
+  said at run time, and editing them would falsify provenance; the string's
+  source in `main.py` is fixed, so future runs carry the new wording.
 
 - **The cross-node-forward metric is 0 for AASS by construction.**
   `scheduler/aass.py` increments `forwards` only in the non-AASS branch, and
