@@ -1,6 +1,6 @@
 """Instrument the Exp.7/8 scheduling path. Diagnosis only -- nothing here is reportable."""
 import sys, time, collections, statistics
-sys.path.insert(0, '/Users/puumax/ABCD')
+sys.path.insert(0, '/Users/puumax/OJCOMS')
 
 from Schemes.ma_lb_pq_vdse.src.harness import experiments as E
 from Schemes.ma_lb_pq_vdse.src import config as C

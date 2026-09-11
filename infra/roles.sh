@@ -10,7 +10,7 @@
 # like cmux). The prompt text lives here and only here so the two launchers
 # cannot drift apart.
 
-REPO="/Users/puumax/ABCD"
+REPO="/Users/puumax/OJCOMS"
 # Not `claude` from PATH: that is a cmux shim under a per-boot temp directory
 # which will not resolve inside a fresh tmux server.
 CLI="/Users/puumax/.local/bin/claude"
