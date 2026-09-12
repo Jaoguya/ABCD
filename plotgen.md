@@ -178,7 +178,24 @@ one paper.
 ## 6. Before a figure goes in the paper
 
 1. `run_meta.json` says `reportable: true` for **every** series drawn.
-2. The plotter emitted no config-hash warning.
+2. The plotter emitted no config-hash warning, **except the one Figs. 2 and 3
+   are known to carry** — see below.
+
+   > **Accepted config-hash exception, Figs. 2 and 3.** Those figures' baseline
+   > curves are the frozen ones, measured under `global.yaml` `032de0d9…`,
+   > while everything measured after the 2026-09-12 rewrite carries
+   > `2bb41bb1…` (the revision that took `repetitions` from 30 to 10, among
+   > others). The plotter therefore warns that Fig. 2 and Fig. 3 mix
+   > revisions, and it is right to.
+   >
+   > **Do not "fix" this by re-running the frozen baselines.** The user
+   > reviewed it on 2026-09-13 and accepted the existing results as
+   > satisfactory. The warning is disclosure, not a defect to clear, and the
+   > cost of clearing it is re-running four schemes' Exp. 2 and Exp. 3 —
+   > including Scheme 35's Exp. 2, which needs ~52 GB at `N = 10^6`.
+   >
+   > Every other figure must still be warning-free: Exps. 1, 4, 4b and 5 were
+   > re-run at the current revision precisely so that they are.
 3. Any hollow marker is explained in the caption, and the caption's description
    of how those points were derived matches what the code did.
 4. Panel labels were verified against `secondary_metrics` — no warning.

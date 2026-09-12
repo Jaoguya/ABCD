@@ -469,6 +469,20 @@ stay exactly as they are, and a change that could move them — a baseline's
 search path, index construction, workload selection or aggregation — is not
 made without asking. Renaming a flag or fixing a comment cannot move a number.
 
+**They carry an older `global.yaml`, and that is accepted.** The frozen
+baselines were measured under revision `032de0d9…`; everything measured after
+the 2026-09-12 rewrite carries `2bb41bb1…` — the revision that took
+`repetitions` from 30 to 10, among others. So `generate_plots.py` warns that
+Fig. 2 and Fig. 3 mix two revisions, and it is right to: those curves were not
+all measured under one configuration.
+
+Re-running them is the only way to clear it, and the user declined on
+2026-09-13 — the existing Exp. 2 and Exp. 3 results are satisfactory as they
+stand. **Do not re-run them to silence the warning.** The warning is
+disclosure; `plotgen.md`'s pre-publication checklist records it as the one
+permitted exception, and Exps. 1, 4, 4b and 5 were re-run at the current
+revision so that every other figure stays warning-free.
+
 Current inventory — one directory per experiment, `n = 10` at every point:
 
 | Scheme | Directories | Reportable |

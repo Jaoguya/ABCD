@@ -68,7 +68,8 @@ number in the manuscript — never by author name — and each has one document:
 
 ## The experiments
 
-Nine experiment numbers exist in the code; the manuscript reports eight.
+Eight experiments. The code once carried a ninth number; it was folded into
+Experiment 4 on 2026-09-12 and `parse_experiments("all")` now returns 1-8.
 
 | # | Measures |
 |---|---|
@@ -80,7 +81,6 @@ Nine experiment numbers exist in the code; the manuscript reports eight.
 | 6 | DIAS synchronization ablation |
 | 7 | AASS search throughput vs concurrency |
 | 8 | Load-balancing effectiveness vs concurrency |
-| 9 | Verification granularity vs tampered records `t` |
 
 Experiment 4 has two arms: the default sweeps `r` (what verification costs),
 the `granularity` arm sweeps the tamper count `t` (what it buys). They are the

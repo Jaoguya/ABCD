@@ -214,18 +214,52 @@ D1–D9 are closed by the rebuild. These are open, and the code is the source of
 truth for all of them — none was resolved by tuning the implementation toward
 the prose.
 
-- **Exp. 7's throughput ordering contradicts §VI.** The text says AASS "sustains
-  higher throughput as concurrency increases". Measured here, AASS is the
-  *lowest* of the four. The cause is visible: AASS evaluates its cost model over
-  every candidate node per shard, and an in-process harness has no network and
-  no service contention for that overhead to be amortised against. This is a
-  harness-boundary finding, not a scheme result. **Open, needs confirmation on the campaign host.**
-- **Exp. 8's utilization ordering contradicts §VI.** The text says least-loaded
-  "attains the lowest variation of the four". Measured here, AASS does, because
-  least-loaded's shard-eligibility redirects land work on the holder rather than
-  the node it chose — its balance is destroyed by its own forwarding. The claim
-  was written against an implementation without the per-shard guard.
-  **Open, needs confirmation on the campaign host.**
+- **Exp. 7 and Exp. 8: AASS does not top either panel. CLOSED on the campaign
+  host, 2026-09-13**, n = 10, `synthea`, `m6i.xlarge`, `sharding.replication: 2`.
+
+  Both previous entries here were measured under conditions that could not
+  test the claim, and both are now superseded:
+
+  * The ablation was measuring **one scheduler four times**.
+    `psa_experiments.build()` dropped its `variant` argument for Exp. 7-8, so
+    every arm was built at the default `aass` and the four results were written
+    to four differently-named directories. That produced four throughput curves
+    agreeing inside their CIs and `cross_node_forwards = 0` everywhere — AASS's
+    signature, reported as though the oblivious arms shared it.
+  * `sharding.replication` was **1**, so every shard had exactly one eligible
+    node and Algorithm 1's `S ∉ S_j` guard pinned AASS to it. AASS had no
+    scheduling freedom at all, while the oblivious arms "won" by scattering
+    work onto nodes that could not serve the shard.
+
+  With the variant carried through and replication at 2:
+
+  | concurrency | no_lb | round_robin | least_loaded | **aass** |
+  |---|---|---|---|---|
+  | 100 | 460.3 ± 10.6 | 665.3 ± 17.5 | **746.7 ± 56.9** | 619.7 ± 46.4 |
+  | 1000 | 542.6 ± 17.9 | 929.2 ± 11.0 | **1029.7 ± 14.8** | 982.1 ± 26.0 |
+
+  throughput (q/s); and utilization std. dev. with cross-node forwards:
+
+  | concurrency | no_lb | round_robin | least_loaded | **aass** |
+  |---|---|---|---|---|
+  | 1000 | 0.3924 ± 0.0017 | 0.1215 ± 0.0053 | **0.0193 ± 0.0054** | 0.0903 ± 0.0177 |
+  | forwards @1000 | 2,114 | 2,173 | 2,149 | **0** |
+
+  **§VI's Exp. 8 claim is confirmed and this document's was wrong.** The text
+  says least-loaded "attains the lowest variation of the four" — it does. The
+  previous entry above asserted "Measured here, AASS does"; that was the
+  replication-1 artefact.
+
+  **§VI's Exp. 7 claim is not supported as written.** AASS does not sustain the
+  highest throughput; least-loaded does, at every concurrency. AASS is second,
+  and the gap is outside the CIs.
+
+  What AASS *does* hold uniquely is **zero cross-node forwards at every point**,
+  where the other three pay ~2,100 at concurrency 1000. It also improves with
+  load (0.190 → 0.090 utilization spread) and beats no-load-balancing 4.3x. The
+  defensible claim is therefore a **trade — perfect authorization locality at
+  some cost in balance — and not dominance on either axis.** §VI currently
+  claims dominance on both; that wording needs the user's decision.
 - **Exp. 2's selectivity is not constant.** §VI claims "query selectivity is
   kept constant… matching records increase proportionally". The query draws `q`
   keywords from one record, so selectivity tracks that record's keyword

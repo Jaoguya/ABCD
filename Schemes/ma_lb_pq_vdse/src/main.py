@@ -157,16 +157,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--variant", default=None,
         help=(
-            "ablation variant, or 'all' to run each in turn. Exp. 7-8 take the "
-            "SCHEDULER variants (no_lb, round_robin, least_loaded, aass; "
-            "default aass). Exp. 6 takes the DIAS PROPAGATION variants (ias, "
-            "broadcast, full_rebuild; default ias) -- Section VI calls these "
-            "DIAS, Incremental-All and Full-State Synchronization respectively; "
-            "the slugs are kept because they name the results directories. "
-            "Ignored for Exp. 1-5. The "
-            "two vocabularies are not interchangeable: a scheduler decides "
-            "which FSN serves a QUERY and has no effect on how an authorization "
-            "change propagates."
+            "ablation variant, or 'all' to run each in turn. Exp. 1 takes the "
+            "AUTHORIZATION SCOPES (pu1, pu2, pu4, pu8; default pu1). Exp. 6 "
+            "takes the DIAS PROPAGATION variants (dias, incremental_all, "
+            "full_state; default dias) -- Section VI's DIAS, Incremental-All "
+            "and Full-State Synchronization. Exp. 7-8 take the SCHEDULER "
+            "variants (no_lb, round_robin, least_loaded, aass; default aass). "
+            "Ignored for Exp. 2-5. "
+            "The three vocabularies are not interchangeable: a scheduler "
+            "decides which FSN serves a QUERY and has no effect on how an "
+            "authorization change propagates."
         ),
     )
     parser.add_argument(
