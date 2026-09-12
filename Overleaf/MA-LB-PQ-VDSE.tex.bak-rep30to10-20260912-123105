@@ -2199,7 +2199,7 @@ Experiments were conducted using the Synthea synthetic healthcare
 dataset. Encrypted searchable indexes containing $10^4$--$10^6$ EHRs were generated from the dataset and uniformly
 distributed across four administrative healthcare domains. Unless
 otherwise specified, each query contains five keywords. Each
-experiment was repeated 10 times, and the reported results represent
+experiment was repeated 30 times, and the reported results represent
 the mean with 95\% confidence intervals.
 
 The proposed framework was compared with four representative

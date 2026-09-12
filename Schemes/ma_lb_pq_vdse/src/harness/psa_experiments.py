@@ -1993,6 +1993,19 @@ def build(
         # `granularity` t sweep is Fig. 4(b). One experiment, one figure.
         if number == 4 and variant == "granularity":
             return PsaExp4Granularity(config=config, source=source)
+        # Exp. 7-8's arm IS the scheduler. Same defect as Exp. 1's above, and it
+        # survived the fix there because 7 and 8 are CORPUS_BACKED and fell
+        # through to the variant-less return: `--variant all` built four
+        # experiments that were all `aass`, ran the same scheduler four times,
+        # and wrote the four results to no_lb/round_robin/least_loaded/aass
+        # directories. Measured 2026-09-12 on the campaign host, that produced
+        # four throughput curves agreeing inside their CIs and
+        # `cross_node_forwards = 0` in every arm -- the signature of AASS, whose
+        # eligibility guard never misplaces a shard, reported as if it were the
+        # oblivious arms' behaviour too. Fig. 8(c) was therefore measuring one
+        # scheduler against itself.
+        if number in (7, 8) and variant:
+            return cls(config=config, source=source, variant=variant)
         return cls(config=config, source=source)
     if number == 1 and variant:
         return cls(config=config, policy_scope=policy_scope_of(variant))

@@ -32,6 +32,7 @@ from Schemes.ma_lb_pq_vdse.src.harness import psa_experiments as psa  # noqa: E4
 from Schemes.ma_lb_pq_vdse.src.psa import records as psa_records  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.psa import verify as psa_verify_mod  # noqa: E402
 from Schemes.ma_lb_pq_vdse.src.harness import psa_experiments as psa_mod  # noqa: E402
+from Schemes.ma_lb_pq_vdse.src.scheduler import aass as aass_mod  # noqa: E402
 
 
 @pytest.fixture(scope="module")
@@ -831,3 +832,39 @@ def test_option_d_dispatch_passes_no_groups(config):
     )
     trapdoor, _ = experiment.prepare(20)["requests"][0]
     assert not getattr(trapdoor, "groups", None)
+
+
+_SCHEDULER_VARIANTS = (
+    aass_mod.VARIANT_NO_LB,
+    aass_mod.VARIANT_ROUND_ROBIN,
+    aass_mod.VARIANT_LEAST_LOADED,
+    aass_mod.VARIANT_AASS,
+)
+
+
+def test_psa_build_propagates_the_scheduler_variant(config):
+    """Exp. 7-8's arm IS the scheduler, so `build` must carry it through.
+
+    `psa.build` handled `variant` for Exp. 1 (|P_U|), Exp. 4 (`granularity`)
+    and Exp. 6 (DIAS propagation), but Exp. 7-8 are CORPUS_BACKED and fell
+    through to the variant-less `cls(config=..., source=...)`. Every arm was
+    therefore built at the default `aass`: `--variant all` ran one scheduler
+    four times and wrote the results to four directories named after four
+    different schedulers.
+
+    Measured on the campaign host 2026-09-12, that gave four Exp. 7 throughput
+    curves agreeing inside their confidence intervals and
+    `cross_node_forwards = 0` in all four arms -- AASS's signature, since its
+    eligibility guard never misplaces a shard, reported as though the three
+    oblivious arms shared it. Fig. 8(c) compared one scheduler with itself.
+    """
+    for number in (7, 8):
+        for variant in _SCHEDULER_VARIANTS:
+            experiment = psa.build(
+                number, config, variant=variant, source=_source()
+            )
+            assert experiment.variant == variant, (
+                f"psa.build({number}, variant={variant!r}) produced "
+                f"variant={experiment.variant!r}; the ablation would measure "
+                f"the default scheduler under this arm's directory name"
+            )
