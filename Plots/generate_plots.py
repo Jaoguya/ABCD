@@ -905,7 +905,10 @@ def _folders_claimed_by_other_specs(spec: "ExperimentSpec") -> set:
     gets wrong (a different measurement).
     """
     claimed = set()
-    for other in tuple(EXPERIMENTS) + tuple(PSA_EXPERIMENTS):
+    # Was `tuple(EXPERIMENTS) + tuple(PSA_EXPERIMENTS)`. PSA_EXPERIMENTS went
+    # with the second figure family on 2026-09-12, so this raised NameError on
+    # every run -- the plotter has not executed since. One family now.
+    for other in tuple(EXPERIMENTS):
         if other.folder and other.folder != spec.folder:
             claimed.add(other.folder)
         for panel in other.panels:
@@ -1604,13 +1607,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
                         help="root containing <scheme>/exp<N>_*/results.csv")
     parser.add_argument("--output", default="Plots/output",
                         help="directory to write the PDFs into")
-    parser.add_argument("--construction", default="option_d",
+    # Default was "option_d", a key CONSTRUCTIONS no longer has: the second
+    # figure family was removed on 2026-09-12 and only "psa" remains. So the
+    # plotter crashed with KeyError: 'option_d' on every invocation that did
+    # not pass --construction explicitly -- i.e. the command plotgen.md
+    # documents. Kept as a compatibility alias per plotgen.md, now defaulting
+    # to the one family that exists.
+    parser.add_argument("--construction", default="psa",
                         choices=sorted(CONSTRUCTIONS),
-                        help="which figure family to draw. 'option_d' (the "
-                             "default) is SystemConfiguration.md's eight figures, from "
-                             "exp<N>_*/. 'psa' is the manuscript's "
-                             "policy-state-aware track (D6-D9), from "
-                             "there is one construction, so this names what is drawn.")
+                        help="kept for compatibility; there is one figure "
+                             "family, the manuscript's eight figures drawn "
+                             "from exp<N>_*/, so this only names what is "
+                             "already drawn.")
     parser.add_argument("--experiment", default="all",
                         help="all, or a comma-separated subset e.g. 1,2,6")
     parser.add_argument("--require-reportable", action="store_true",

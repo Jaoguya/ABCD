@@ -47,8 +47,28 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 
-def _shards(base: Path) -> List[Path]:
-    return sorted(base.parent.glob(f"{base.name}__points-*"))
+def _shards(base: Path, variant: str = "") -> List[Path]:
+    """The shards belonging to ``base``, optionally narrowed to one arm.
+
+    An ABLATION shards twice over. `main.py` names the directory
+    ``exp<N>_*__points-<vals>__<variant>`` -- points first, then arm -- so a
+    plain ``{base}__points-*`` glob spans every arm at once, and the merge
+    refuses with "sweep value '100' appears in both ...__aass and
+    ...__least_loaded". That refusal is correct: those are different
+    schedulers, and concatenating them would average four arms into one curve.
+
+    There is no base path that selects a single arm, because the arm is the
+    LAST component. Hence ``--variant``: it narrows the glob and names the
+    merged output ``{base}__{variant}``, which is exactly the directory
+    `generate_plots.py` looks for via `variants_for`.
+    """
+    pattern = f"{base.name}__points-*__{variant}" if variant else f"{base.name}__points-*"
+    found = sorted(base.parent.glob(pattern))
+    if not variant:
+        # Without an arm, drop anything that carries one: a bare merge of an
+        # ablation is the double-count this guard exists to prevent.
+        found = [f for f in found if f.name.count("__") < 3]
+    return found
 
 
 def _check_provenance(shards: List[Path], base: Path) -> Dict[str, object]:
@@ -180,10 +200,13 @@ def _refuse_if_base_is_newer(base: Path, shard_commit: str) -> None:
     )
 
 
-def merge(base: Path, *, dry_run: bool = False) -> int:
-    shards = _shards(base)
+def merge(base: Path, *, dry_run: bool = False, variant: str = "") -> int:
+    shards = _shards(base, variant)
     if not shards:
-        raise SystemExit(f"no shards found matching {base.name}__points-*")
+        suffix = f"__points-*__{variant}" if variant else "__points-*"
+        raise SystemExit(f"no shards found matching {base.name}{suffix}")
+    if variant:
+        base = base.parent / f"{base.name}__{variant}"
 
     meta = _check_provenance(shards, base)
     _refuse_if_base_is_newer(base, str(meta.get("git_commit", "")))
@@ -384,8 +407,12 @@ def main(argv=None) -> int:
     ap.add_argument("experiment_dir", type=Path,
                     help="the unsharded directory, e.g. Schemes/x/exp3_...")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--variant", default="",
+                    help="merge only this ablation arm's shards, writing "
+                         "<experiment_dir>__<variant>/ (Exp. 6, 7, 8)")
     args = ap.parse_args(argv)
-    return merge(args.experiment_dir, dry_run=args.dry_run)
+    return merge(args.experiment_dir, dry_run=args.dry_run,
+                 variant=args.variant)
 
 
 if __name__ == "__main__":
