@@ -2031,6 +2031,7 @@ $u,e$ & User attributes and satisfying LSSS rows \\
 $x$ & Number of candidate/returned documents \\
 $n_w^l$ & Matching files for keyword $w$ at level $l$ \\
 $a$ & Number of changed policy-relevant authority components \\
+$N$ & Total indexed records/ciphertexts \\
 \hline
 $T_H$ & Hash computation \\
 $T_P,T_E$ & Pairing and exponentiation/encryption \\
@@ -2039,6 +2040,9 @@ $T_L$ & Encrypted-index lookup/set operation \\
 $T_{\rm Punc}$ & Puncturable-PRF operation \\
 $T_{\rm MAC},T_{\rm Ver}$ & MAC and signature verification \\
 $T_{\rm BC}$ & Blockchain state read \\
+$T_{\rm Mul}$ & Multiplication operation  \\
+$T_{\rm Sig}$ & Signature generation operation \\
+$T_{\rm BF}$  & Bitmap-filter check operation \\
 \hline
 \end{tabular}
 \end{table}
@@ -2115,11 +2119,11 @@ N/A
 
 Scheme~\cite{ref54}
 &
-$O(|\mathcal{T}|)T_{\rm PRF}+T_{\rm Sig}$
+$O(|\mathcal{T}_Q|)T_{\rm PRF}+T_{\rm Sig}$
 &
 \makecell{
-$O(|\mathcal{T}|)T_L$\\
-$+O(n_{\rm cand})T_{\rm BF}$
+$O(|\mathcal{T}_Q|)T_L$\\
+$+O(x)T_{\rm BF}$
 }
 &
 N/A
@@ -2195,7 +2199,7 @@ Experiments were conducted using the Synthea synthetic healthcare
 dataset. Encrypted searchable indexes containing $10^4$--$10^6$ EHRs were generated from the dataset and uniformly
 distributed across four administrative healthcare domains. Unless
 otherwise specified, each query contains five keywords. Each
-experiment was repeated 10 times, and the reported results represent
+experiment was repeated 30 times, and the reported results represent
 the mean with 95\% confidence intervals.
 
 The proposed framework was compared with four representative
@@ -2215,8 +2219,8 @@ This experiment evaluates the online cost of generating policy-state-aware
 search tokens. The number of queried keywords is varied as
 $q\in\{1,5,10,15,20\}$, while the number of authorized policies is varied
 as $|\mathcal{P}_U|\in\{1,2,4,8\}$. The proposed framework is compared
-with Scheme~\cite{ref30}, Scheme~\cite{ref35}, Scheme~\cite{ref41},
-and Scheme~\cite{ref54}.
+with Guo \textit{et al}.~\cite{ref35}, XB-Muse~\cite{ref36}, Thingom
+\textit{et al}.~\cite{ref41}, and Zhuang \textit{et al}.~\cite{ref52}.
 ML-KEM key establishment is excluded because it is performed during
 attribute-key delivery rather than for each search request.
 

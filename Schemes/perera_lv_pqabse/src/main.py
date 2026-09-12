@@ -2,7 +2,7 @@
 
     python3 -m Schemes.perera_lv_pqabse.src.main --experiment all
 
-Covers Exp. 1, 2, 3 only. Exp. 4 is not claimed (this repo's Exp. 4 boundary is
+Covers Exp. 1, 2, 3 and 4. Exp. 4 was added 2026-09-04 (this repo's Exp. 4 boundary is
 defined against the proposed scheme's verification path), and Exp. 5 and 6 are
 excluded because the paper has no incremental-update primitive and explicitly
 disclaims fine-grained revocation — see 54.md for both.
@@ -72,7 +72,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         description="Run the LV-PQ-ABSE (Ref[54]) experiments — Exp. 1, 2, 3.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--experiment", default="all", help="all, or 1,2,3")
+    parser.add_argument("--experiment", default="all", help="all, or 1,2,3,4")
     parser.add_argument("--runs", type=int, default=10,
                         help="retained runs per point (skill.md fixes 10)")
     # Canonical spelling per skill.md's common contract; --warmup stays

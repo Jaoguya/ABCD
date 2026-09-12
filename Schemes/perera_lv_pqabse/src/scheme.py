@@ -75,6 +75,13 @@ class SystemKeys:
     fog_verifying_key: bytes
     fog_signing_key: bytes
     token_key: bytes                    # Phase 3 PRF tokenization key
+    # sk_U / vk_U. Ref[54] L566 signs the trapdoor with the USER's key, not the
+    # edge device's: the edge signs ciphertext provenance in Phase 2, the user
+    # authorises a query in Phase 4. They are different credentials held by
+    # different parties, and conflating them let a device credential stand in
+    # for a user's authorisation.
+    user_verifying_key: bytes = b""
+    user_signing_key: bytes = b""
 
 
 def setup(params: SchemeParams, *, with_abe: Optional[bool] = None,
@@ -93,6 +100,7 @@ def setup(params: SchemeParams, *, with_abe: Optional[bool] = None,
     sig = MLDSA65()
     edge = sig.keygen()
     fog = sig.keygen()
+    user = sig.keygen()
 
     return SystemKeys(
         params=params,
@@ -107,6 +115,8 @@ def setup(params: SchemeParams, *, with_abe: Optional[bool] = None,
         fog_verifying_key=fog.verifying_key,
         fog_signing_key=fog.signing_key,
         token_key=secure_random_bytes(32),
+        user_verifying_key=user.verifying_key,
+        user_signing_key=user.signing_key,
     )
 
 
@@ -302,15 +312,68 @@ class Trapdoor:
         return sum(len(t) for t in self.tokens) + len(self.signature)
 
 
+def enrol_user(keys: SystemKeys, attributes: Optional[Sequence[int]] = None):
+    """Phase 1: issue this user their attribute secret key ``SK_A``.
+
+    Ref[54]'s trapdoor binds to ``SK_A`` (L563-565) and Theorem 2 rests on that
+    binding (L816), so a querying user must hold one. Enrolment is setup: the
+    lattice preimage sampling happens here, once, and never on the query path.
+
+    Defaults to the first three attributes of the universe -- a benchmark
+    choice. The paper fixes no particular attribute set for its own evaluation,
+    and the count does not reach the measured path: ``attribute_binding()``
+    hashes the preimages whatever there are of them.
+    """
+    if keys.master is None:
+        raise ValueError(
+            "no ABE master key: setup() was called with with_abe=False, so no "
+            "attribute key can be issued and trapdoors cannot be bound as "
+            "Ref[54] L563-565 requires"
+        )
+    if attributes is None:
+        attributes = range(min(3, keys.params.attribute_universe))
+    return abe.keygen(keys.master, list(attributes))
+
+def attribute_binding(key: "abe.AttributeKey") -> bytes:
+    """``H(SK_A)`` — the value the trapdoor is bound to.
+
+    Ref[54] L563-565 binds query tokens to the user's attribute-based secret key
+    and Theorem 2 (L816) rests on that binding. This derives a commitment to the
+    key from material only its holder has: the attribute set AND the short
+    preimages ``d_i``. Binding to the attribute set alone would be forgeable by
+    anyone who knows which attributes a user holds, which is public.
+
+    A HASH, not a lattice operation. Table II costs the trapdoor at
+    ``O(n + T_PRF)`` and states there is no lattice sampling at query time, so
+    binding must not introduce one.
+    """
+    parts = [b"attr-bind"]
+    for index in sorted(key.attributes):
+        parts.append(index.to_bytes(4, "big"))
+        # tobytes() over the preimage: the secret half of the key.
+        parts.append(key.d[index].astype("<i8", copy=False).tobytes())
+    return sha3_256(*parts)
+
+
 def trapdoor(keys: SystemKeys, keywords: Sequence[str], *,
+             attribute_key: "abe.AttributeKey",
              epoch: Optional[str] = None, category: Optional[int] = None,
              fuzzy_term: Optional[str] = None) -> Trapdoor:
-    """The whole of Exp. 1: ``q`` PRF evaluations plus one Dilithium3 signature.
+    """``TokenTrapdoorGen(SK_A, T, range, op, epoch)`` — Ref[54] §IV-C.5b, L798.
 
-    Both halves are timed. The signature dominates and is not incidental — the
-    paper's Phase 4 requires the trapdoor to be signed so the fog can reject
-    unauthorised queries, and :meth:`FogNode.search` checks it, so omitting it
-    would report a trapdoor the scheme would not accept.
+    The whole of Exp. 1: ``q`` PRF evaluations, one attribute-key binding hash,
+    and one Dilithium3 signature. All three are timed.
+
+    **The attribute key is required, not optional.** L563-565 constructs the
+    trapdoor by "binding query tokens to the user's attribute-based secret key",
+    and Theorem 2's proof (L816) takes that binding as a precondition. A
+    trapdoor without it is a cheaper object than the paper specifies, and this
+    baseline may not be measured on a weaker construction than it published.
+
+    **Signed with ``sk_U``, not the edge device's key** (L566:
+    ``sigma_user = Dilithium3.Sign(sk_U, H_2(TD))``). The edge device signs
+    ciphertext provenance in Phase 2; the querying user authorises the query in
+    Phase 4. :meth:`FogNode.search` verifies against ``user_verifying_key``.
     """
     tokens = tuple(token(keys.token_key, w) for w in keywords)
     digest = sha3_256(
@@ -318,12 +381,14 @@ def trapdoor(keys: SystemKeys, keywords: Sequence[str], *,
         (epoch or "").encode(),
         b"" if category is None else category.to_bytes(4, "big"),
         (fuzzy_term or "").encode(),
+        # The binding Theorem 2 depends on.
+        attribute_binding(attribute_key),
     )
     return Trapdoor(
         tokens=tokens, epoch=epoch, category=category, fuzzy_term=fuzzy_term,
         digest=digest,
-        signature=MLDSA65().sign(keys.edge_signing_key, digest),
-        verifying_key=keys.edge_verifying_key,
+        signature=MLDSA65().sign(keys.user_signing_key, digest),
+        verifying_key=keys.user_verifying_key,
     )
 
 

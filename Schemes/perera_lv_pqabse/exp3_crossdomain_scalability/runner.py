@@ -80,7 +80,11 @@ def run(
             f"that rather than the §6 default {TOTAL_INDEX_SIZE:,}."
         )
 
-    keys = scheme.setup(params, with_abe=False)
+    keys = scheme.setup(params, with_abe=True)
+    # Ref[54] L563-565 binds the trapdoor to SK_A, so the querying user
+    # must be enrolled. One key per RUN -- a user's attribute key does not
+    # change between queries. Enrolment is setup and is not timed.
+    user_key = scheme.enrol_user(keys)
     built: Dict[int, List[Dict[str, Any]]] = {}
 
     def deployments_for(d: int) -> List[Dict[str, Any]]:
@@ -127,7 +131,7 @@ def run(
                     continue
                 # One trapdoor PER DOMAIN: the scheme has no shared trapdoor,
                 # and that cost is exactly what Exp. 3 exists to expose.
-                td = scheme.trapdoor(keys, keywords)
+                td = scheme.trapdoor(keys, keywords, attribute_key=user_key)
                 issued += 1
                 merged |= ctx["node"].search(td).rids
             return issued, merged

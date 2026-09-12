@@ -68,7 +68,11 @@ def run(
     actual_range = sweep.select(VARIABLE_RANGE, points)
     subset = list(records[: min(INDEX_SIZE, len(records))])
 
-    keys = scheme.setup(params, with_abe=False)
+    keys = scheme.setup(params, with_abe=True)
+    # Ref[54] L563-565 binds the trapdoor to SK_A, so the querying user
+    # must be enrolled. One key per RUN -- a user's attribute key does not
+    # change between queries. Enrolment is setup and is not timed.
+    user_key = scheme.enrol_user(keys)
     freq = keyword_frequency(subset)
 
     pools: Dict[int, list] = {}
@@ -86,7 +90,7 @@ def run(
         counter[q] += 1
         keywords = pools[q][i % len(pools[q])]
 
-        elapsed_ms, td = measure_ns(lambda: scheme.trapdoor(keys, keywords))
+        elapsed_ms, td = measure_ns(lambda: scheme.trapdoor(keys, keywords, attribute_key=user_key))
         return RunResult(
             primary_metric=elapsed_ms,
             secondary_metrics={

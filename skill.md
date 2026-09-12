@@ -21,7 +21,31 @@ Each step below is verified against the current code.
 
 ---
 
-## 2. Experiment structure
+## 2. Where the numbers come from
+
+One chain, each link derived from the one before:
+
+```
+tab:cost  ->  the experiments  ->  the results  ->  Section VI's prose
+```
+
+The **computation-cost table** (`Overleaf/MA-LB-PQ-VDSE.tex`, `tab:cost`) says
+what should scale with what. **The experiments** are designed to sweep exactly
+those variables — that is why Exp. 1 sweeps `q` and `|P_U|` (the row is
+`O(|T_Q|)T_H` and `|T_Q| = q·|P_U|`), why Exp. 5 sweeps `k`, and why Exp. 6
+sweeps the affected-policy ratio. **The results** are what those sweeps produce.
+**Section VI's prose** describes the results, and is written after they exist.
+
+Nothing restates the table. It was copied into test code once — two lists of
+cells-as-strings — and the copy drifted out of step with the construction while
+its assertions silently skipped. The one check that remains
+(`test_cost_table_agreement.py`) asserts a structural invariant the table
+implies, against the data: `O(|T_Q|)T_H` means `q=20,|P_U|=1` must cost what
+`q=5,|P_U|=4` costs. That is checkable without naming a single cell.
+
+---
+
+## 3. Experiment structure
 
 Every experiment is a **one-variable sweep**. One parameter is swept; every
 other parameter is held at `Experiment Configuration/global.yaml`'s `defaults`.
@@ -76,7 +100,7 @@ intervals, `drop_outliers: false` (a failed run is recorded `status=failed` and
 
 ---
 
-## 3. Scheme selection
+## 4. Scheme selection
 
 | Scheme key | Doc | Experiments implemented |
 |---|---|---|
@@ -168,7 +192,7 @@ host, `n_runs`), what one point on the axis is, and measured vs extrapolated.
 
 ---
 
-## 4. Configuration
+## 5. Configuration
 
 Five YAML files in `Experiment Configuration/`. All five are SHA-256 hashed
 into every `run_meta.json`.
@@ -190,7 +214,7 @@ producing points measured under two configurations.
 
 ---
 
-## 5. Dataset
+## 6. Dataset
 
 The corpus is **frozen**. `Dataset/derived/corpus.jsonl` is git-ignored (it is
 hundreds of MB) but pinned by SHA-256 in `dataset.yaml` and verified on load.
@@ -225,7 +249,7 @@ python3 Dataset/prepare_dataset.py --input <synthea>/output_full/csv \
 
 ---
 
-## 6. Execution
+## 7. Execution
 
 The flags are **not uniform**. Verified against each `src/main.py`:
 
@@ -373,7 +397,7 @@ an in-memory dict under a `run_meta.json` claiming Fabric.
 
 ---
 
-## 7. Output and validation
+## 8. Output and validation
 
 Every run writes three files into `Schemes/<scheme>/exp<N>_*/`:
 
@@ -449,13 +473,17 @@ Current inventory — one directory per experiment, `n = 10` at every point:
 
 | Scheme | Directories | Reportable |
 |---|---|---|
-| `yue_ge` | exp1, **exp2**, **exp3**, exp4, exp5, exp9 | all 6 |
-| `guo_vdsse` | exp1, **exp2**, **exp3**, exp4, exp5, exp9 | all 6 |
-| `perera_lv_pqabse` | exp1, **exp2**, **exp3**, exp4 | all 4 |
+| `yue_ge` | exp1, **exp2**, **exp3**, exp4(+granularity), exp5 | all 6 |
+| `guo_vdsse` | exp1, **exp2**, **exp3**, exp4(+granularity), exp5 | all 6 |
+| `perera_lv_pqabse` | ~~exp1~~, **exp2**, **exp3**, ~~exp4~~ | 2 of 4 |
 | `thingom_pq_abse` | exp1, **exp2**, **exp3** | all 3 |
 | `ma_lb_pq_vdse` | none | **none** |
 
-Bold is frozen. The proposed scheme has **no reportable result**: its
+Bold is frozen. Struck-through is **superseded**: Scheme 54's `trapdoor()` did
+not bind to the user's attribute secret key and signed with the wrong key
+(Ref[54] L563-566, L798, L816). Fixed 2026-09-12; Exp. 1 and Exp. 4 are the only
+experiments that call it on a measured path, and both directories carry a
+`SUPERSEDED` marker explaining why. See [54.md](54.md). The proposed scheme has **no reportable result**: its
 implementation was ported on 2026-09-12 and has only been exercised against a
 development corpus, which the gate refuses by design. Nothing about it is
 quotable until it runs on the campaign host.
@@ -467,10 +495,11 @@ measured at a replication count the paper does not claim cannot be reported,
 and the parent is the data. The proposed scheme's 20 development-corpus
 directories went at the same time; all were `reportable: false`.
 
-The two `exp9_verification_granularity` directories are orphans of the Exp. 9
-fold and will be replaced when Exp. 4 is re-run for the baselines.
+The baselines' granularity results were renamed to
+`exp4_verification_overhead__granularity/` when the fold landed, so all three
+schemes that measure panel (b) now write the same directory name.
 
-## 8. Figures
+## 9. Figures
 
 All of it — the command, the experiment-to-figure map, panel ordering, how
 measured and projected points are drawn differently, and the pre-publication
@@ -482,7 +511,7 @@ python3 Plots/generate_plots.py --input Schemes --output Plots/output
 
 ---
 
-## 9. Reproducibility requirements
+## 10. Reproducibility requirements
 
 1. **Only the frozen Synthea corpus counts.** Nothing measured against the
    development corpus is reportable.
@@ -499,7 +528,7 @@ python3 Plots/generate_plots.py --input Schemes --output Plots/output
 
 ---
 
-## 10. Tests
+## 11. Tests
 
 ```bash
 python -m pytest -q          # from the repository root

@@ -111,7 +111,7 @@ and indistinguishable from a measurement while the caption claimed otherwise.
 `--require-reportable` drops any series whose `run_meta.json` says
 `reportable: false`. Without the flag such series are drawn — useful during
 development, never acceptable for a figure going into the paper. Check the
-field before quoting anything; [skill.md](skill.md) §7 lists the conditions.
+field before quoting anything; [skill.md](skill.md) §8 lists the conditions.
 
 ### Configuration agreement
 

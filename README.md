@@ -82,12 +82,13 @@ Nine experiment numbers exist in the code; the manuscript reports eight.
 | 8 | Load-balancing effectiveness vs concurrency |
 | 9 | Verification granularity vs tampered records `t` |
 
-Experiment 9 has no standalone figure — it is drawn as panel (b) of the
-Experiment 4 figure, which is how the manuscript presents the pair.
+Experiment 4 has two arms: the default sweeps `r` (what verification costs),
+the `granularity` arm sweeps the tamper count `t` (what it buys). They are the
+two panels of one figure, which is how the manuscript presents the pair.
 Experiments 6, 7 and 8 are proposed-scheme ablations with no baseline.
 
 Which scheme runs which experiment, and what each one measures, is the
-participation matrix in [skill.md](skill.md) §3.
+participation matrix in [skill.md](skill.md) §4.
 
 ## Repository layout
 
