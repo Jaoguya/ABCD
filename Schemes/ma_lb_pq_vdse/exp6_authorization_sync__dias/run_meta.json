@@ -1,0 +1,111 @@
+{
+  "confidence": 0.95,
+  "config_hashes": {
+    "crypto.yaml": "8f484f1a22ab7a90de0c67d4d95f31b83d506e49e17d09a19620792c25f1d793",
+    "dataset.yaml": "2ee621d6a113f399eac5e0e0e750764be27d300907f87fcb79ee93fd4f06e4e6",
+    "global.yaml": "2bb41bb124422d70cfaaeffe95aec35d13722f2c88968d3c5598793681246df0",
+    "index.yaml": "ce4e1de6bc1ea4f0078a7520c7577a0af413bca97e6f3c18bb89b2bc3ad6e8d5",
+    "scheduler.yaml": "cfa4b32a11d66728d9a1956b5ab92db66c03b37963541b34d0aaee62263384e2",
+    "workload/exp78_sweep_holdout.yaml": "a85ccb7d681be2287ec3b7763a43df726f053c40005c28fb2474f7725d299fd7",
+    "workload/exp78_workload.yaml": "7f2cb5b45d1e8d4a60dad81f02670387b5afd119691ca0646fdebcc2e9203cc6"
+  },
+  "construction": "psa",
+  "corpus_sha256": "e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0",
+  "corpus_type": "synthea",
+  "crypto_backends": {
+    "blas_thread_env": {
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1"
+    },
+    "config_hashes": {
+      "crypto.yaml": "8f484f1a22ab7a90de0c67d4d95f31b83d506e49e17d09a19620792c25f1d793",
+      "dataset.yaml": "2ee621d6a113f399eac5e0e0e750764be27d300907f87fcb79ee93fd4f06e4e6",
+      "global.yaml": "2bb41bb124422d70cfaaeffe95aec35d13722f2c88968d3c5598793681246df0",
+      "index.yaml": "ce4e1de6bc1ea4f0078a7520c7577a0af413bca97e6f3c18bb89b2bc3ad6e8d5",
+      "scheduler.yaml": "cfa4b32a11d66728d9a1956b5ab92db66c03b37963541b34d0aaee62263384e2"
+    },
+    "cpu_count": 4,
+    "experiment_host": {
+      "detected_instance_type": "m6i.xlarge",
+      "expected_instance_type": null,
+      "host_check_satisfied": true,
+      "is_pinned_experiment_host": false,
+      "metadata_reachable": true,
+      "pin_configured": false,
+      "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
+    },
+    "kem_backends_available": {
+      "cryptography": true,
+      "kyber_py": false,
+      "liboqs": true
+    },
+    "libraries": {
+      "cryptography": "50.0.0",
+      "mmh3": "unknown",
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "yaml": "6.0.3"
+    },
+    "pairing_backends_available": {
+      "charm_ss512": true,
+      "charm_type3": true,
+      "petrelic_bn254": false
+    },
+    "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
+    "python_implementation": "CPython",
+    "python_version": "3.11.15"
+  },
+  "dataset_records": null,
+  "experiment": "exp6_authorization_sync",
+  "experiment_host": {
+    "detected_instance_type": "m6i.xlarge",
+    "expected_instance_type": null,
+    "host_check_satisfied": true,
+    "is_pinned_experiment_host": false,
+    "metadata_reachable": true,
+    "pin_configured": false,
+    "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
+  },
+  "finished_utc": "2026-09-12T16:21:42.489166+00:00",
+  "git_commit": "d266e9c94136f9ddb7184116c5efb5bedd584954-dirty",
+  "instance_type": "unknown",
+  "ledger_backend": "memory",
+  "libraries": {
+    "bitarray": "3.10.1",
+    "cryptography": "50.0.0",
+    "mmh3": "unknown",
+    "numpy": "2.4.6",
+    "pandas": "3.0.5",
+    "scipy": "1.17.1"
+  },
+  "measurement_fingerprint": "8f50abfb1fa9cc4d6d7120c7fbeaa28adb562ff99768f38a71f3a22973688259",
+  "not_reportable_because": [],
+  "notes": [
+    "construction=psa",
+    "scheduler_variant=dias",
+    "policy-state-aware construction (divergences D1-D9): T = H(w || PID || PV || Dom), PV a version-VECTOR digest",
+    "host NOT pinned: global.yaml sets no environment.instance_type, so the host check passed vacuously. Detected 'm6i.xlarge'. Cross-host latency comparisons are unsound until the pin returns; SVI must disclose the host per scheme rather than claim one type."
+  ],
+  "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
+  "python_version": "3.11.15",
+  "reportable": true,
+  "runs": 10,
+  "scheme": "ma_lb_pq_vdse",
+  "secondary_metrics": [
+    "records_evolved",
+    "entries_retokenized",
+    "delivered_kb",
+    "fsns_touched"
+  ],
+  "started_utc": "2026-09-12T16:20:45.078999+00:00",
+  "thread_pinning": {
+    "MKL_NUM_THREADS": "1",
+    "NUMEXPR_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "OPENBLAS_NUM_THREADS": "1",
+    "VECLIB_MAXIMUM_THREADS": "1"
+  },
+  "warmups": 5
+}

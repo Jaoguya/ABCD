@@ -292,7 +292,19 @@ cmd_run() {
   shift 2
   [ "$#" -gt 0 ] || { echo "run: no command given"; return 2; }
 
-  local blas="export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1"
+  # PUT THE CAMPAIGN VENV FIRST ON PATH, so a plain `python3` in the command is
+  # the interpreter that actually has the dependencies.
+  #
+  # Without this, `python3 -m Schemes...` resolves to system python and dies on
+  # `ModuleNotFoundError: No module named 'mmh3'` before measuring anything --
+  # and because the command exits, the self-stop below fires and the node halts
+  # in seconds. A run that failed instantly is then indistinguishable from one
+  # that finished fast: on 2026-09-13 that made a failed Exp. 4 panel (b) look
+  # like a completed one, and it was only caught by reading the log.
+  # \$HOME escaped: it must expand on the NODE. Unescaped it expanded on the
+  # laptop and put a macOS path on the remote PATH, which changed nothing and
+  # left `python3` still resolving to system python.
+  local blas="export PATH=\$HOME/.venv-malbpq/bin:\$PATH; export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1"
   local tail_cmd="echo \"__exit=\$rc\""
   [ "$keep" -eq 0 ] && tail_cmd="$tail_cmd; sudo shutdown -h now"
 

@@ -1,28 +1,28 @@
 {
   "scheme": "yue_ge",
-  "experiment": "exp9",
-  "git_commit": "8fad8e496c1f17607712de53a1dcdfaa47e8a79a",
+  "experiment": "exp4_granularity",
+  "git_commit": "f6af79ac2826fe6d0512e5641f949b865ca4c5a3",
   "python_version": "3.11.15",
   "dataset_sha256": "e56ca2d14b3b6438a231fa9d00c5970a91cd0085879fa214092efbb7f707d6a0",
   "corpus_type": "synthea",
   "config_hashes": {
-    "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
-    "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-    "global.yaml": "676c67df27111c4d8ed4e3d59da8897e11f13e3b05b2bc43261c15a0e40a3ec0",
-    "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
-    "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
+    "crypto.yaml": "8f484f1a22ab7a90de0c67d4d95f31b83d506e49e17d09a19620792c25f1d793",
+    "dataset.yaml": "2ee621d6a113f399eac5e0e0e750764be27d300907f87fcb79ee93fd4f06e4e6",
+    "global.yaml": "2bb41bb124422d70cfaaeffe95aec35d13722f2c88968d3c5598793681246df0",
+    "index.yaml": "ce4e1de6bc1ea4f0078a7520c7577a0af413bca97e6f3c18bb89b2bc3ad6e8d5",
+    "scheduler.yaml": "cfa4b32a11d66728d9a1956b5ab92db66c03b37963541b34d0aaee62263384e2"
   },
-  "utc_start_time": "2026-09-03T14:11:33+00:00",
+  "utc_start_time": "2026-09-12T18:30:07+00:00",
   "environment": {
     "python_version": "3.11.15",
     "python_implementation": "CPython",
     "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39",
     "cpu_count": 4,
     "blas_thread_env": {
-      "OMP_NUM_THREADS": "UNSET",
-      "OPENBLAS_NUM_THREADS": "UNSET",
-      "MKL_NUM_THREADS": "UNSET",
-      "NUMEXPR_NUM_THREADS": "UNSET"
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
     },
     "libraries": {
       "cryptography": "50.0.0",
@@ -42,11 +42,11 @@
       "kyber_py": false
     },
     "config_hashes": {
-      "crypto.yaml": "c06971442ad96b97781ded9d2f93c6d02d1e1d7710698f255fa2b3ff05c51147",
-      "dataset.yaml": "32129d470aaaeee788960f431b092db599b78fb6c50675b0e4d05f192c5fd1ca",
-      "global.yaml": "676c67df27111c4d8ed4e3d59da8897e11f13e3b05b2bc43261c15a0e40a3ec0",
-      "index.yaml": "2a6c44f9dad85067deb59f8514b8ed6b07cfeb1bd626b9ade04e0b2dd984feac",
-      "scheduler.yaml": "99132b7a4c3ba3edab9295ec38957ad635d22bbd5c7a7570922c1d1759d0da21"
+      "crypto.yaml": "8f484f1a22ab7a90de0c67d4d95f31b83d506e49e17d09a19620792c25f1d793",
+      "dataset.yaml": "2ee621d6a113f399eac5e0e0e750764be27d300907f87fcb79ee93fd4f06e4e6",
+      "global.yaml": "2bb41bb124422d70cfaaeffe95aec35d13722f2c88968d3c5598793681246df0",
+      "index.yaml": "ce4e1de6bc1ea4f0078a7520c7577a0af413bca97e6f3c18bb89b2bc3ad6e8d5",
+      "scheduler.yaml": "cfa4b32a11d66728d9a1956b5ab92db66c03b37963541b34d0aaee62263384e2"
     },
     "experiment_host": {
       "expected_instance_type": null,
