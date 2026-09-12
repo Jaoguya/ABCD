@@ -332,27 +332,47 @@ def enrol_user(keys: SystemKeys, attributes: Optional[Sequence[int]] = None):
         )
     if attributes is None:
         attributes = range(min(3, keys.params.attribute_universe))
-    return abe.keygen(keys.master, list(attributes))
+    key = abe.keygen(keys.master, list(attributes))
+    # Derive the binding HERE: it is setup, not query-path work.
+    attribute_binding(key)
+    return key
+
+#: ``H(SK_A)`` per enrolled key, derived ONCE.
+#:
+#: This was computed inside trapdoor() until 2026-09-12. At the configured
+#: m = 33,792 it hashed 792 KB of preimage on EVERY query -- 4.15 ms against a
+#: 1.4 ms trapdoor, and growing with the lattice dimension. Ref[54] Table II
+#: costs the trapdoor at O(n + T_PRF); an O(m|S|) hash on the query path
+#: contradicts that just as surely as a lattice sample would, and would have
+#: reported this baseline as ~4x slower than the construction it published.
+#:
+#: The binding is a function of SK_A alone and SK_A does not change between
+#: queries, so enrolment derives it and the query path mixes in 32 bytes.
+_BINDINGS: Dict[int, bytes] = {}
+
 
 def attribute_binding(key: "abe.AttributeKey") -> bytes:
     """``H(SK_A)`` — the value the trapdoor is bound to.
 
-    Ref[54] L563-565 binds query tokens to the user's attribute-based secret key
-    and Theorem 2 (L816) rests on that binding. This derives a commitment to the
-    key from material only its holder has: the attribute set AND the short
-    preimages ``d_i``. Binding to the attribute set alone would be forgeable by
-    anyone who knows which attributes a user holds, which is public.
+    Ref[54] L563-565 binds query tokens to the user's attribute-based secret
+    key and Theorem 2 (L816) rests on that binding. This commits to material
+    only its holder has: the attribute set AND the short preimages ``d_i``.
+    Binding to the attribute set alone would be forgeable by anyone who knows
+    which attributes a user holds, which is public.
 
-    A HASH, not a lattice operation. Table II costs the trapdoor at
-    ``O(n + T_PRF)`` and states there is no lattice sampling at query time, so
-    binding must not introduce one.
+    Memoised per key object; :func:`enrol_user` warms it, so the first trapdoor
+    does not pay for it either.
     """
+    cached = _BINDINGS.get(id(key))
+    if cached is not None:
+        return cached
     parts = [b"attr-bind"]
     for index in sorted(key.attributes):
         parts.append(index.to_bytes(4, "big"))
-        # tobytes() over the preimage: the secret half of the key.
         parts.append(key.d[index].astype("<i8", copy=False).tobytes())
-    return sha3_256(*parts)
+    value = sha3_256(*parts)
+    _BINDINGS[id(key)] = value
+    return value
 
 
 def trapdoor(keys: SystemKeys, keywords: Sequence[str], *,

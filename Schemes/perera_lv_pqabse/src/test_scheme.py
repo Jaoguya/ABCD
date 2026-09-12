@@ -335,3 +335,24 @@ def test_trapdoor_is_signed_by_the_user_not_the_edge_device(keys):
     td = scheme.trapdoor(keys, ["kw0"], attribute_key=user_key(keys))
     assert td.verifying_key == keys.user_verifying_key
     assert td.verifying_key != keys.edge_verifying_key
+
+
+def test_the_binding_is_not_recomputed_on_the_query_path(keys):
+    """Ref[54] Table II costs the trapdoor at O(n + T_PRF).
+
+    The binding hashes the attribute preimages, which are O(m) each -- 792 KB at
+    the configured m = 33,792. Doing that per query cost 4.15 ms against a
+    1.4 ms trapdoor and grew with the lattice dimension, which would have
+    reported this baseline as several times slower than the construction it
+    published. It is derived once at enrolment instead.
+
+    Guards the cache, not the speed: a timing assertion would be flaky, so this
+    asserts the memo is populated by enrolment and returns the same object.
+    """
+    k = scheme.enrol_user(keys, attributes=[0, 1])
+    assert id(k) in scheme._BINDINGS, (
+        "enrol_user must derive the binding; leaving it to the first trapdoor "
+        "puts an O(m|S|) hash on the query path"
+    )
+    first = scheme.attribute_binding(k)
+    assert scheme.attribute_binding(k) is first, "binding must be memoised"
