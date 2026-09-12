@@ -101,21 +101,35 @@ def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, source, k)
 
     ``psa/__init__.py`` says the two curves "against the same ``k``" are the
     price of D1. They are only that if ``k`` buys the same amount of work in
-    both. ``Exp5KeywordUpdate`` reports ``entries_rewritten``; the PSA arm
-    reports ``entries_retokenized``; at a given ``k`` they must match to within
-    one record.
+    both.
+
+    COMPARED AGAINST `replica_writes`, NOT `entries_retokenized`. Option D's
+    `entries_rewritten` comes from `dias.synchronize()`, which writes every
+    node holding the shard, so at replication 2 it counts 204 physical writes
+    at k=100. The PSA arm recomputes `T'` once per entry -- the token does not
+    depend on which node stores it -- so its LOGICAL count is 102. Comparing
+    those two was comparing physical work with logical work, and it only looked
+    right while replication was 1 and the two coincided.
     """
     theirs = option_d.build_experiment(
         5, config, option_d.SyntheticRecordSource()
     )
     ours = psa.PsaExp5ReTokenization(config=config, source=source)
     rewritten = theirs.measure(theirs.prepare(k)).secondaries["entries_rewritten"]
-    retokenized = ours.measure(ours.prepare(k)).secondaries["entries_retokenized"]
-    assert abs(rewritten - retokenized) <= ours.keywords_per_record, (
+    mine = ours.measure(ours.prepare(k)).secondaries
+    assert abs(rewritten - mine["replica_writes"]) <= ours.keywords_per_record, (
         f"at k={k} Option D rewrites {rewritten:.0f} entries and the PSA arm "
-        f"retokenizes {retokenized:.0f}; the two Exp. 5 curves share an x-axis "
-        f"and would be compared at different amounts of work"
+        f"writes {mine['replica_writes']:.0f}; the two Exp. 5 curves share an "
+        f"x-axis and would be compared at different amounts of work"
     )
+    # And the logical count must stay BELOW the physical one at replication > 1,
+    # or the replica fan-out has been folded into the token recomputation.
+    if config.index.replication > 1:
+        assert mine["entries_retokenized"] < mine["replica_writes"], (
+            "entries_retokenized should count T' recomputations (once per "
+            "entry) and replica_writes the per-holder stores; equal values mean "
+            "one has been substituted for the other"
+        )
 
 
 # ===========================================================================
@@ -570,7 +584,16 @@ def test_psa_shards_are_real_indexes_not_dicts(config):
     for node in ours.nodes:
         assert hasattr(node.index, "authorized_bitmap"), "not a DynamicSearchIndex"
         total += node.index.entry_count
-    assert total == ours.entry_count > 0
+    # Summed ACROSS nodes, so each entry is counted once per holder:
+    # `sharding.replication` went to 2 on 2026-09-12 and every shard now lives
+    # on two FSNs. `entry_count` is the logical total, so the two differ by
+    # exactly that factor -- and must, or a replica is missing its copy.
+    assert ours.entry_count > 0
+    assert total == ours.entry_count * config.index.replication, (
+        f"{total} entries across nodes against a logical {ours.entry_count} at "
+        f"replication {config.index.replication}; a mismatch means a holder "
+        f"was never written"
+    )
 
 
 # ===========================================================================

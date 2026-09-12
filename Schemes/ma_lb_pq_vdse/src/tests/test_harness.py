@@ -810,8 +810,10 @@ def test_exp6_reports_message_size_and_fsns_touched():
     experiment, sample = measure_once(6, 4)
     assert experiment.secondaries[0].unit == "KB"
     assert sample.secondaries["dias_message_size"] > 0
-    # d = m = 4, so one authority's update reaches one node.
-    assert sample.secondaries["fsns_touched"] == 1.0
+    # One authority's update reaches every node holding the affected shard --
+    # `sharding.replication` of them, 2 since 2026-09-12. It was 1 while each
+    # domain lived on exactly one node.
+    assert sample.secondaries["fsns_touched"] == float(CONFIG.index.replication)
 
 
 def test_exp7_primary_is_a_throughput_not_a_latency():
@@ -1115,7 +1117,11 @@ def test_aass_forwards_no_shard_and_the_oblivious_variants_do():
     experiment = exp_mod.Exp7Throughput(config=CONFIG, source=SOURCE)
     prepared = experiment.prepare(40)
     deployment, requests = prepared["deployment"], prepared["requests"]
-    assert all(len(node.domains) == 1 for node in deployment.nodes)
+    # Each node holds `replication` domains, not one: replicas are what give
+    # AASS a choice of holder per shard. What must still hold is that every
+    # shard has more than one eligible node, which is the premise of this test.
+    assert all(len(node.domains) == CONFIG.index.replication
+               for node in deployment.nodes)
 
     counts = {}
     for variant in aass_mod.VARIANTS:

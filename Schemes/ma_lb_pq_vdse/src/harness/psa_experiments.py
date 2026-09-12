@@ -62,6 +62,7 @@ from ..aim import verification as authz_mod  # noqa: E402
 from ..user import token as token_mod  # noqa: E402
 from ..user import profile as profile_mod  # noqa: E402
 from ..scheduler import aass as aass_mod  # noqa: E402
+from ..fsn import fsn as fsn_mod  # noqa: E402
 from .. import types as types_mod  # noqa: E402
 from . import experiments as experiments_mod  # noqa: E402
 from ..chain import outsourcing as out_mod  # noqa: E402
@@ -784,6 +785,22 @@ class PsaExp5ReTokenization:
         MetricSpec("entries_retokenized", COUNT),
         MetricSpec("merkle_nodes_recomputed", COUNT),
         MetricSpec("commitments_rebuilt", COUNT),
+        # PHYSICAL writes, where `entries_retokenized` is logical.
+        #
+        # Added 2026-09-12 with replication 2. `T'` is recomputed ONCE per
+        # affected entry -- the token is a function of (w, PID, PV, Dom) and not
+        # of which node stores it -- but the resulting entry has to be written
+        # to EVERY node holding that shard, or the replicas diverge and a query
+        # AASS routes to the stale one returns stale results.
+        #
+        # This arm had no node layer at all, so it counted only the logical
+        # recomputation: 102 entries at k=100 against Option D's 204, because
+        # Option D goes through `dias.synchronize()` and therefore hits both
+        # holders. The two Exp. 5 curves share an x-axis, so one counting
+        # logical work and the other physical made them incomparable at the
+        # same k. Both quantities are now reported rather than one being
+        # silently substituted for the other.
+        MetricSpec("replica_writes", COUNT),
     )
     #: WAS a hardcoded 6, commented "matching the frozen corpus's mean |W_i|".
     #: The frozen corpus's mean is **31.70** (`dataset_manifest.json`), so the
@@ -856,7 +873,32 @@ class PsaExp5ReTokenization:
                 # The record's OWN entry count, not a nominal constant: with the
                 # corpus, |W_i| varies per record (5..64, mean 31.70).
                 affected_entries += len(entries)
-        return dict(world=world, scheme=scheme, records=records, pairs=pairs)
+
+        # S_k^aff -- the shard layer Phase VII Step 2's rewrite actually lands
+        # on. Without it this arm measured token recomputation and nothing else,
+        # so replication was invisible to it.
+        node_count = min(
+            int(self.config.topology.fog_search_nodes), len(world.domains)
+        )
+        placement = fsn_mod.assign_domains_to_fsns(
+            list(world.domains),
+            node_count,
+            replication=min(int(self.config.index.replication), node_count),
+        )
+        holders: Dict[str, List[str]] = {d: [] for d in world.domains}
+        shards: Dict[str, Dict[str, Any]] = {}
+        for index, node_domains in enumerate(placement, start=1):
+            node_id = f"FSN{index}"
+            shards[node_id] = {}
+            for domain in node_domains:
+                holders[domain].append(node_id)
+        for record in records:
+            for node_id in holders[record["domain"]]:
+                shards[node_id][record["cid"]] = list(record["entries"])
+        return dict(
+            world=world, scheme=scheme, records=records, pairs=pairs,
+            holders=holders, shards=shards,
+        )
 
     def measure(self, prepared: Any) -> Sample:
         world = prepared["world"]
@@ -870,6 +912,7 @@ class PsaExp5ReTokenization:
         applied = 0
         nodes = 0
         rebuilt = 0
+        writes = 0
         with gc_quiesced():
             started = time.perf_counter_ns()
             for record in prepared["records"]:
@@ -902,6 +945,12 @@ class PsaExp5ReTokenization:
                 # with Exp. 5's merkle_nodes_recomputed.
                 nodes += max(0, 2 * len(fresh) - 1)
                 rebuilt += 1
+                # THE REWRITE REACHES EVERY HOLDER. The token above is computed
+                # once; storing it is per replica, and a holder left unwritten
+                # would serve the pre-update PV forever.
+                for node_id in prepared["holders"][record["domain"]]:
+                    prepared["shards"][node_id][record["cid"]] = fresh
+                    writes += len(fresh)
                 record["entries"] = fresh
                 record["commitment"] = commitment
             elapsed = time.perf_counter_ns() - started
@@ -912,6 +961,7 @@ class PsaExp5ReTokenization:
                 "entries_retokenized": float(applied),
                 "merkle_nodes_recomputed": float(nodes),
                 "commitments_rebuilt": float(rebuilt),
+                "replica_writes": float(writes),
             },
         )
 
@@ -1178,8 +1228,19 @@ class PsaExp6AffectedRatio:
             _PsaShard(node_id=f"FSN{i}", domains=set())
             for i in range(self.fog_search_nodes)
         ]
-        for index, domain in enumerate(world.domains):
-            nodes[index % len(nodes)].domains.add(domain)
+        # THE SAME PLACEMENT `assign_domains_to_fsns` USES, replication and all.
+        # This was `nodes[index % len(nodes)]` -- one domain per node, hardcoded
+        # -- so when `index.yaml sharding.replication` went to 2 this arm kept
+        # placing one holder per shard while its run_meta recorded the config
+        # hash that says 2. `fsns_touched` then understated selective delivery,
+        # and the run was internally inconsistent with its own provenance.
+        placement = fsn_mod.assign_domains_to_fsns(
+            list(world.domains),
+            len(nodes),
+            replication=min(int(self.config.index.replication), len(nodes)),
+        )
+        for node, node_domains in zip(nodes, placement):
+            node.domains.update(node_domains)
         for record in records:
             for node in nodes:
                 if record["domain"] in node.domains:

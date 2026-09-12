@@ -320,16 +320,27 @@ class FogSearchNode:
 
 
 def assign_domains_to_fsns(
-    domains: Sequence[str], fsn_count: int
+    domains: Sequence[str], fsn_count: int, *, replication: int = 1
 ) -> Tuple[Tuple[str, ...], ...]:
     """Distribute ``domains`` across ``fsn_count`` nodes, largest-first.
 
     ``index.yaml`` sets ``overflow_policy: pack_largest_first``, matching the rule
-    ``Dataset/prepare_dataset.py`` uses to balance domains. With ``d == m`` (the
-    §VI default of 4 and 4) this is one domain per node, which is what makes
-    Phase VII's selective propagation observable: an update from one authority
-    touches exactly one node. Exp. 3 sweeps ``d`` to 10 against ``m = 4``, where
-    nodes take multiple domains.
+    ``Dataset/prepare_dataset.py`` uses to balance domains. Exp. 3 sweeps ``d``
+    to 10 against ``m = 4``, where nodes take multiple domains.
+
+    ``replication`` is how many nodes hold each domain's shard, and it is what
+    gives the scheduler a choice to make. At 1, the eligible set for any shard
+    is a SINGLETON: AASS's ``S notin S_j`` guard forces it to the one holder, so
+    it cannot balance load at all, while the three oblivious arms spread work
+    over nodes that cannot serve the shard and pay a cross-node forward for
+    every one. Exp. 8 panel (a) then measures how evenly work can be spread
+    while ignoring correctness, and AASS loses it by construction rather than on
+    merit. Raised to 2 on 2026-09-12 for that reason.
+
+    Replicas are placed at consecutive offsets, so a domain lands on nodes
+    ``i, i+1, ..., i+replication-1`` (mod ``fsn_count``). That keeps every node
+    holding the same number of shards -- the placement itself contributes no
+    imbalance for the scheduler to be credited with removing.
 
     Domains are assumed equal-sized, which the frozen corpus makes true
     (285,268 records x 4 exactly), so round-robin over sorted domains IS
@@ -342,16 +353,27 @@ def assign_domains_to_fsns(
         raise ValueError("domains must not be empty")
     if len(set(domains)) != len(domains):
         raise ValueError("duplicate domain in the assignment")
+    if replication < 1:
+        raise ValueError("replication must be >= 1")
+    if replication > fsn_count:
+        raise FSNError(
+            f"replication={replication} exceeds fsn_count={fsn_count}; a shard "
+            f"cannot have more holders than there are nodes"
+        )
     buckets: List[List[str]] = [[] for _ in range(fsn_count)]
     for index, domain in enumerate(sorted(domains)):
-        buckets[index % fsn_count].append(domain)
+        for offset in range(replication):
+            buckets[(index + offset) % fsn_count].append(domain)
     empty = [i for i, bucket in enumerate(buckets) if not bucket]
     if empty:
         raise FSNError(
             f"{len(domains)} domains cannot fill {fsn_count} Fog Search Nodes; "
             f"nodes {empty} would hold no shard and never be selected"
         )
-    return tuple(tuple(bucket) for bucket in buckets)
+    # De-duplicate while keeping order: at d < m*replication one domain can be
+    # placed on the same node twice, and a repeated domain would double-count
+    # that node's shard in `policy_pairs`.
+    return tuple(tuple(dict.fromkeys(bucket)) for bucket in buckets)
 
 
 def build_fsn_set(
@@ -361,12 +383,15 @@ def build_fsn_set(
     prefix: str = "FSN",
     bloom_bits_per_entry: int = 10,
     bloom_num_hashes: int = 7,
+    replication: int = 1,
 ) -> Tuple[FogSearchNode, ...]:
     """Phase I Step 4: build ``F = {FSN_1, ..., FSN_m}``, each with its shard.
 
     Node identifiers are 1-based to match the manuscript's ``FSN_1..FSN_m``.
     """
-    assignment = assign_domains_to_fsns(domains, fsn_count)
+    assignment = assign_domains_to_fsns(
+        domains, fsn_count, replication=replication
+    )
     return tuple(
         FogSearchNode.create(
             f"{prefix}{index}",
@@ -385,6 +410,7 @@ def build_fsn_set_from_config(config, domains: Sequence[str]) -> Tuple[FogSearch
         config.topology.fog_search_nodes,
         bloom_bits_per_entry=config.index.bloom_bits_per_entry,
         bloom_num_hashes=config.index.bloom_num_hashes,
+        replication=config.index.replication,
     )
 
 

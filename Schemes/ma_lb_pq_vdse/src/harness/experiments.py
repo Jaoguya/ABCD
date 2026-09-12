@@ -447,11 +447,16 @@ def build_deployment(
         ledger.publish_authorization_state(authority.state())
         authorities[domain] = authority
 
+    _node_count = min(config.topology.fog_search_nodes, len(domain_names))
     nodes = fsn_mod.build_fsn_set(
         domain_names,
-        min(config.topology.fog_search_nodes, len(domain_names)),
+        _node_count,
         bloom_bits_per_entry=config.index.bloom_bits_per_entry,
         bloom_num_hashes=config.index.bloom_num_hashes,
+        # Capped at the node count: Exp. 3's low points run d=2 against m=4, and
+        # `_node_count` follows d there, so an uncapped replication would ask
+        # for more holders than there are nodes.
+        replication=min(config.index.replication, _node_count),
     )
     aim_mod.initial_synchronization(
         aim, ledger, [a.authority_id for a in authorities.values()], nodes

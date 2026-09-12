@@ -2189,3 +2189,60 @@ def main(argv: List[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
+
+
+# ===========================================================================
+# Shard replication — what gives the scheduler a choice to make
+# ===========================================================================
+def test_replication_puts_every_shard_on_that_many_nodes():
+    """`replication=r` must mean r eligible holders per domain, not r-ish.
+
+    This is the invariant Exp. 7-8 rest on. At replication 1 the eligible set
+    for a shard is a singleton, Algorithm 1's `S notin S_j` guard pins AASS to
+    the sole holder, and the ablation compares arms that cannot differ on
+    merit -- `least_loaded` scored 7x better on Exp. 8's utilization spread
+    purely by scattering work onto nodes that could not serve the shard.
+    """
+    domains = [f"dom{i}" for i in range(4)]
+    for replication in (1, 2, 3, 4):
+        assignment = fsn_mod.assign_domains_to_fsns(
+            domains, 4, replication=replication
+        )
+        holders = {
+            domain: sum(1 for bucket in assignment if domain in bucket)
+            for domain in domains
+        }
+        assert set(holders.values()) == {replication}, (
+            f"replication={replication} gave holder counts {holders}"
+        )
+
+
+def test_replication_keeps_the_placement_itself_balanced():
+    """Every node must hold the same number of shards.
+
+    If the placement were lopsided, Exp. 8 would credit the scheduler with
+    removing an imbalance the topology created.
+    """
+    assignment = fsn_mod.assign_domains_to_fsns(
+        [f"dom{i}" for i in range(4)], 4, replication=2
+    )
+    sizes = {len(bucket) for bucket in assignment}
+    assert sizes == {2}, f"uneven shard counts per node: {sizes}"
+
+
+def test_replication_never_places_a_domain_on_one_node_twice():
+    """A repeated domain would double-count that node's `policy_pairs`."""
+    assignment = fsn_mod.assign_domains_to_fsns(
+        ["a", "b"], 2, replication=2
+    )
+    for bucket in assignment:
+        assert len(bucket) == len(set(bucket)), bucket
+
+
+def test_replication_cannot_exceed_the_node_count():
+    try:
+        fsn_mod.assign_domains_to_fsns(["a", "b", "c", "d"], 2, replication=3)
+    except fsn_mod.FSNError as exc:
+        assert "more holders than there are nodes" in str(exc)
+        return
+    raise AssertionError("replication above fsn_count should be refused")

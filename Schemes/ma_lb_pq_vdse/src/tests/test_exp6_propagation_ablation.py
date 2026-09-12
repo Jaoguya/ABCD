@@ -48,6 +48,23 @@ def _measure(variant: str):
     return experiment, prepared, experiment.measure(prepared)
 
 
+def _holders_per_shard(prepared) -> int:
+    """How many FSNs a single domain's shard lives on.
+
+    Was implicitly 1 everywhere in this file -- `assign_domains_to_fsns` gave
+    each domain to exactly one node, so "selective delivery touches one node"
+    was a constant. `index.yaml sharding.replication` went to 2 on 2026-09-12
+    so the scheduler in Exp. 7-8 would have a choice to make, and selective
+    delivery now necessarily touches that many nodes. Derived from the
+    deployment rather than hardcoded, so this file follows the config instead of
+    re-freezing a different constant.
+    """
+    domain = prepared["deployment"].records[0]["record"].domain
+    return sum(
+        1 for node in prepared["deployment"].nodes if domain in node.domains
+    )
+
+
 # ===========================================================================
 # The variants exist and the default is the published rule
 # ===========================================================================
@@ -70,10 +87,12 @@ def test_unknown_variant_is_refused_rather_than_silently_ignored():
 # ===========================================================================
 # SELECTIVE — the half `broadcast` tests
 # ===========================================================================
-def test_selective_delivery_touches_exactly_one_node():
+def test_selective_delivery_touches_every_holder_and_no_more():
     """d = m = 4, one domain per node, so one authority's update reaches one."""
-    _, _, sample = _measure(exp_mod.VARIANT_DIAS)
-    assert sample.secondaries["fsns_touched"] == 1.0
+    _, prepared, sample = _measure(exp_mod.VARIANT_DIAS)
+    # The shard's holders, not "one node": a replica left unwritten would serve
+    # the pre-update authorization state.
+    assert sample.secondaries["fsns_touched"] == float(_holders_per_shard(prepared))
 
 
 def test_broadcast_touches_every_node():
@@ -89,9 +108,11 @@ def test_broadcast_is_the_measurable_contrast_selective_needs():
     _, prepared, selective = _measure(exp_mod.VARIANT_DIAS)
     _, _, broadcast = _measure(exp_mod.VARIANT_INCREMENTAL_ALL)
     nodes = len(prepared["deployment"].nodes)
-    assert broadcast.secondaries["fsns_touched"] == (
-        selective.secondaries["fsns_touched"] * nodes
-    )
+    # Broadcast reaches EVERY node; selective reaches only the holders. The
+    # old form multiplied selective by the node count, which coincided with
+    # that only while selective was 1.
+    assert broadcast.secondaries["fsns_touched"] == float(nodes)
+    assert selective.secondaries["fsns_touched"] < broadcast.secondaries["fsns_touched"]
 
 
 def test_broadcast_carries_the_same_message_it_just_sends_it_further():
@@ -107,9 +128,9 @@ def test_broadcast_carries_the_same_message_it_just_sends_it_further():
 # DELIVERED PAYLOAD — the figure's panel (b)
 # ===========================================================================
 def test_selective_delivers_exactly_one_copy_of_the_message():
-    _, _, sample = _measure(exp_mod.VARIANT_DIAS)
+    _, prepared, sample = _measure(exp_mod.VARIANT_DIAS)
     assert sample.secondaries["delivered_kb"] == pytest.approx(
-        sample.secondaries["dias_message_size"]
+        sample.secondaries["dias_message_size"] * _holders_per_shard(prepared)
     )
 
 
@@ -153,7 +174,8 @@ def test_full_rebuild_payload_is_one_message_plus_the_republishes():
         len(other.meta().encode()) / 1024.0 for other in others
     ) * len(d.nodes)
     assert sample.secondaries["delivered_kb"] == pytest.approx(
-        sample.secondaries["dias_message_size"] + republished
+        sample.secondaries["dias_message_size"] * _holders_per_shard(prepared)
+        + republished
     )
 
 
@@ -183,7 +205,7 @@ def test_full_rebuild_recomputes_every_authority():
     authorities = len(d.authorities)
     # One selective delivery for the affected authority, plus a republish of
     # every other authority's recomputed state to every node.
-    expected = 1 + (authorities - 1) * nodes
+    expected = _holders_per_shard(prepared) + (authorities - 1) * nodes
     assert sample.secondaries["fsns_touched"] == float(expected)
 
 

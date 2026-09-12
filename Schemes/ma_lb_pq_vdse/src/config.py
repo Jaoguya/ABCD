@@ -739,11 +739,34 @@ class Configuration:
                 "index.yaml merkle.incremental_update is false; a full rebuild "
                 "is a Phase VII bug (global.yaml, Exp. 5 rule)"
             )
-        if self.index.replication != 1:
+        # WAS `!= 1`, refusing any replication with "replicas would give the
+        # scheduler a choice the paper does not describe". Inverted on
+        # 2026-09-12: at replication 1 the eligible set for any shard is a
+        # SINGLETON, so Algorithm 1's `S notin S_j` guard forces AASS to the one
+        # holder and it cannot balance load at all. Measured that way, Exp. 8
+        # panel (a) ranks the arms by how evenly they spread work while ignoring
+        # whether the chosen node can serve the shard -- `least_loaded` came out
+        # 7x better than AASS on utilization spread while paying 2,984
+        # cross-node forwards against AASS's 0. The scheduler ablation needs a
+        # choice to ablate, which is what `OJCOMS.md` says and what the old
+        # rationale here contradicted.
+        #
+        # Replication is a DEPLOYMENT parameter, not a construction claim: the
+        # manuscript's silence on replica-based availability is not a
+        # prohibition, and nothing cryptographic depends on how many nodes hold
+        # a shard. It stays a recorded benchmark decision (open decision 3).
+        if self.index.replication < 2:
             raise ConfigError(
                 f"index.yaml sharding.replication={self.index.replication}; "
-                f"replicas would give the scheduler a choice the paper does not "
-                f"describe"
+                f"below 2 every shard has exactly one eligible node, so AASS "
+                f"has no scheduling freedom and Exp. 7-8 compare arms that "
+                f"cannot differ on merit"
+            )
+        if self.index.replication > self.topology.fog_search_nodes:
+            raise ConfigError(
+                f"index.yaml sharding.replication={self.index.replication} "
+                f"exceeds topology.fog_search_nodes="
+                f"{self.topology.fog_search_nodes}"
             )
 
         # Crypto: our pairing must stay Type-III (Phase I Step 1).

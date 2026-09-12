@@ -761,7 +761,9 @@ def test_lifecycle_revocation_invalidates_a_stale_profile_and_bundle():
         aim=system.aim,
         ledger=system.ledger,
     )
-    assert receipt.touched_count == 1
+    # Every holder of the affected shard, which is `sharding.replication`
+    # nodes (2 since 2026-09-12), not one.
+    assert receipt.touched_count == config_mod.load().index.replication
 
     # Phase VI Step 2 now rejects the stale profile.
     fresh_token = token_mod.generate_search_token(

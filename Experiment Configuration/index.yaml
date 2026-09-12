@@ -126,9 +126,33 @@ sharding:
   # With d > m (Exp. 3 sweeps d to 10) domains are packed onto FSNs
   # largest-first, the same rule Dataset/prepare_dataset.py uses for domains.
   overflow_policy: pack_largest_first   # benchmark
-  replication: 1                # benchmark: no replication; the paper claims no
-                                # replica-based availability, and replicas would
-                                # give the scheduler a choice it does not have.
+  replication: 2                # benchmark, RAISED 1 -> 2 on 2026-09-12 on the
+                                # user's decision. RESULTS-AFFECTING for every
+                                # proposed-scheme experiment: this file's SHA is
+                                # in every run_meta.json, so anything measured
+                                # at 1 is not comparable with anything measured
+                                # at 2 and generate_plots.py warns on the mix.
+                                #
+                                # The previous comment read "replicas would give
+                                # the scheduler a choice it does not have" and
+                                # had it backwards. At 1, each shard has exactly
+                                # ONE eligible node, so Algorithm 1's
+                                # `S notin S_j` guard pins AASS to that holder --
+                                # it cannot balance anything. Exp. 8 then scored
+                                # `least_loaded` 7x better on utilization spread
+                                # purely because it ignores eligibility and
+                                # scatters work onto nodes that cannot serve the
+                                # shard, paying 2,984 cross-node forwards to
+                                # AASS's 0. An ablation of a scheduler needs the
+                                # scheduler to have a choice.
+                                #
+                                # 2 is the minimum that provides one. It is a
+                                # deployment parameter, not a construction
+                                # claim: nothing cryptographic depends on how
+                                # many nodes hold a shard, so the manuscript's
+                                # silence on replica availability does not
+                                # forbid it. See OJCOMS.md, which recorded 2 as
+                                # the benchmark decision all along.
 
 # -----------------------------------------------------------------------------
 # Merkle commitment structure — Phase IV Step 4 / Phase VII Step 4.
