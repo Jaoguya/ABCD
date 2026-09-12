@@ -422,25 +422,38 @@ def test_there_is_exactly_one_figure_family():
         assert not spec.filename.startswith("fig_psa_")
 
 
-def test_exp1_figure_draws_one_curve_per_scope(config):
-    """SVI's second dimension must reach the figure as four series.
+def test_exp1_figure_draws_only_arms_the_runner_writes(config):
+    """Every |P_U| arm Fig. 1 declares must exist and be styled.
 
-    `collect` takes the FIRST matching directory per scheme and stops, which is
-    right for a cross-scheme figure and wrong for an arm sweep: without the
-    spec declaring its variants, one |P_U| would be drawn and three silently
-    dropped, labelled with the scheme name.
+    WAS an assertion that all four scopes are drawn. Fig. 1 draws only
+    |P_U| = 1 as of 2026-09-13, a presentation choice: four proposed curves
+    against each baseline's one made it an eight-series figure that read as
+    eight unrelated schemes. Exp. 1 still MEASURES every scope -- global.yaml
+    still declares policy_scopes [1,2,4,8] and the runner still writes all four
+    `__pu<N>` directories -- so the count is not the invariant and pinning it
+    would just block the next presentation change.
+
+    What must hold is the mechanism. `collect` takes the FIRST matching
+    directory per scheme and stops, so a declared arm whose directory the
+    runner never writes does not fall back to the scheme curve: it drops the
+    proposed series from the figure silently. And an arm with no style slot
+    draws in the fallback style, which is how two curves end up identical in
+    grayscale.
     """
     plots = _plots_module()
     spec = next(s for s in plots.EXPERIMENTS if s.number == 1)
-    # `proposed_variants`, not `variants_for`: Exp. 1 is a MIXED figure -- the
-    # proposed scheme contributes four scope curves while each baseline
-    # contributes one, which a single `variants` field cannot express.
     slugs = dict(spec.proposed_variants)
-    assert set(slugs) == set(psa.PSA_EXP1_VARIANTS)
-    # Every arm needs its own style slot or the four curves draw identically
-    # and the figure is unreadable in grayscale.
+    assert slugs, "exp1 declares no proposed arm; the proposed curve would vanish"
+    unknown = set(slugs) - set(psa.PSA_EXP1_VARIANTS)
+    assert not unknown, (
+        f"exp1 declares arm(s) {sorted(unknown)} that the runner never writes; "
+        f"collect() would drop the proposed series rather than fall back"
+    )
     slots = {plots.ABLATION_STYLE_SLOT.get(label) for label in slugs.values()}
-    assert len(slots) == len(slugs) and None not in slots
+    assert None not in slots, (
+        f"unstyled exp1 arm label(s) in {sorted(slugs.values())}"
+    )
+    assert len(slots) == len(slugs), "two exp1 arms share a style slot"
 
 
 def test_exp6_figure_uses_the_runners_variant_slugs(config):

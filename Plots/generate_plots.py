@@ -164,11 +164,25 @@ class ExperimentSpec:
 #: §VI Exp. 1's second sweep dimension: "|P_U| is varied as {1,2,4,8}".
 #: Defined here rather than in the PSA block below because the MANUSCRIPT
 #: Exp. 1 figure needs it -- the proposed curves are one per scope.
+#: ONE CURVE ON THE FIGURE, 2026-09-13. Exp. 1 still MEASURES all four
+#: authorization scopes -- `global.yaml` still declares
+#: `policy_scopes: [1,2,4,8]`, the runner still writes
+#: `exp1_trapdoor_generation__pu<N>/` for each, and nothing measured is
+#: discarded. Only the PLOT changed: four proposed curves against each
+#: baseline's one made Fig. 1 an eight-series figure that read as eight
+#: unrelated schemes, so it now draws the |P_U| = 1 scope alone, labelled
+#: "Proposed" like every other single-curve figure.
+#:
+#: This is a presentation choice and nothing else. The other three scopes stay
+#: in their directories and in `results.csv`; to draw them again, restore the
+#: three commented entries below. `plotgen.md` records the same rule for
+#: `restrict_x`: nothing measured is discarded from any file, only from the
+#: plot.
 PSA_EXP1_VARIANTS: Tuple[Tuple[str, str], ...] = (
-    ("pu1", "$|P_U| = 1$"),
-    ("pu2", "$|P_U| = 2$"),
-    ("pu4", "$|P_U| = 4$"),
-    ("pu8", "$|P_U| = 8$"),
+    ("pu1", "Proposed"),
+    # ("pu2", "$|P_U| = 2$"),
+    # ("pu4", "$|P_U| = 4$"),
+    # ("pu8", "$|P_U| = 8$"),
 )
 
 
@@ -410,6 +424,10 @@ ABLATION_STYLE_SLOT: Dict[str, int] = {
     # |P_U| = 1, the baseline scope, and the rest step up from there. Without
     # these four entries all four curves drew in one colour and the figure
     # could not be read at all in grayscale, which SystemConfiguration.md requires.
+    # "Proposed" is the sole Exp. 1 arm drawn since 2026-09-13; slot 0 is the
+    # proposed scheme's blue circle, the same style it carries in every other
+    # figure. The three |P_U| labels stay for the commented-out arms.
+    "Proposed": 0,
     "$|P_U| = 1$": 0,
     "$|P_U| = 2$": 1,
     "$|P_U| = 4$": 2,
