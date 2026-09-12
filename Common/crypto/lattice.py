@@ -44,6 +44,12 @@ import numpy as np
 # any statistical distance that matters here.
 _TAIL_FACTOR = 6
 
+#: Largest single rejection-sampling temporary, in elements. 2^24 int64 is
+#: 128 MiB, which keeps the sampler's peak far below the 15 GiB campaign host
+#: while staying large enough that every caller except `trapgen`'s R fills in
+#: one iteration and therefore draws exactly the sequence it drew before.
+_MAX_GAUSSIAN_DRAW = 1 << 24
+
 
 class PerturbationMode(str, Enum):
     """How ``SamplePre`` perturbs, i.e. what it is honest about measuring."""
@@ -184,7 +190,22 @@ def sample_discrete_gaussian(
     filled = 0
     while filled < total:
         # Over-draw: acceptance rate is ~ s/(2*bound) ~ 1/12, so ask for more.
-        draw = max(1024, int((total - filled) * 14))
+        #
+        # CAPPED. The factor is applied to what REMAINS, so an unbounded draw is
+        # 14x the whole output in one allocation. `trapgen` at the configured
+        # n=768, log_q=22 samples a (16896 x 16896) R -- 285M elements -- and
+        # asked numpy for 3,996,647,424 int64 at once: 29.8 GiB of temporary to
+        # fill a 2.3 GiB result, which is an unconditional MemoryError on the
+        # 15 GiB campaign host. Scheme 54's Exp. 1 and Exp. 4 could not start.
+        #
+        # The cap only ever splits the loop into more iterations; it never
+        # changes the acceptance test. Every call site except `trapgen`'s R is
+        # <= params.m (33,792) elements, so its draw stays under the cap and the
+        # RNG is consumed in exactly the same order as before -- those results
+        # are bit-identical. `trapgen`'s R does change, and is allowed to: it is
+        # the trapdoor, built in untimed setup, and crypto.yaml records
+        # `abe_on_measured_path: false`, so no reported number reads it.
+        draw = max(1024, min(_MAX_GAUSSIAN_DRAW, int((total - filled) * 14)))
         cand = rng.integers(lo, hi + 1, size=draw)
         prob = np.exp(-math.pi * np.square(cand - center) / (s * s))
         accepted = cand[rng.random(draw) < prob]
