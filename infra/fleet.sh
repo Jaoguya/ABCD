@@ -220,6 +220,53 @@ UNPACK
 cmd_stop()   { echo "stopping..."; for i in $(ids); do
                  aws ec2 stop-instances --instance-ids "$i" >/dev/null 2>&1 && echo "  $i"; done; }
 
+# Dispatch one job to one node and STOP THAT NODE THE MOMENT IT ENDS.
+#
+#   ./infra/fleet.sh run <ip> <logtag> <command...>
+#   ./infra/fleet.sh run --keep <ip> <logtag> <command...>   # chain more work
+#
+# WHY THIS EXISTS. There was no `run`, so every dispatch was hand-rolled
+# `ssh -f ... setsid ...`, and three things went wrong every time:
+#
+#   * The five BLAS variables global.yaml requires had to be retyped per
+#     dispatch, and a miss silently produces latency that depends on core
+#     count. They are set here, once.
+#   * Nodes sat idle between dispatches, billing. On 2026-09-13 three were
+#     idle for over an hour before anyone noticed.
+#   * The only thing reaping idle nodes was a CloudWatch alarm on
+#     CPUUtilization < 1% for 30 min, created 2026-08-30. CPU cannot
+#     distinguish "finished" from "pulling container images", so it stopped a
+#     node in the middle of the Fabric bring-up; disabling it then left
+#     nothing reaping anything.
+#
+# A job knows exactly when it is done, so it stops its own node: no polling, no
+# 30-minute waste, and no false positive on network-bound work. Done with
+# `shutdown -h now` rather than the EC2 API because the fleet has NO instance
+# profile and NO aws CLI on the nodes -- but every instance's
+# instanceInitiatedShutdownBehavior is `stop`, verified 2026-09-13, so a guest
+# halt transitions it to `stopped` with its EBS volume and results intact.
+# Never `terminate`: that would destroy unharvested results.
+#
+# Keep ONE widened CPU alarm as a backstop -- self-stop cannot fire if the
+# process is killed or the node wedges. See the note in cmd_status.
+cmd_run() {
+  local keep=0
+  [ "${1:-}" = "--keep" ] && { keep=1; shift; }
+  local ip="${1:?usage: fleet.sh run [--keep] <ip> <logtag> <command...>}"
+  local tag="${2:?usage: fleet.sh run [--keep] <ip> <logtag> <command...>}"
+  shift 2
+  [ "$#" -gt 0 ] || { echo "run: no command given"; return 2; }
+
+  local blas="export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1"
+  local tail_cmd="echo \"__exit=\$rc\""
+  [ "$keep" -eq 0 ] && tail_cmd="$tail_cmd; sudo shutdown -h now"
+
+  ssh -f -n "${SSH_OPTS[@]}" "ubuntu@$ip" \
+    "cd ~/abcd && $blas && setsid bash -c '$* ; rc=\$?; $tail_cmd' \
+       > ~/run_$tag.log 2>&1 < /dev/null" \
+    && echo "  dispatched $tag -> $ip$([ "$keep" -eq 1 ] && echo ' (--keep: node will NOT self-stop)')"
+}
+
 cmd_status() {
   local run stop burn
   run=$(aws ec2 describe-instances "${TAG_FILTER[@]}" "Name=instance-state-name,Values=running" \
@@ -266,15 +313,27 @@ PYRATE
 
 case "${1:-}" in
   start) cmd_start ;;  deploy) cmd_deploy ;;  harvest) shift; cmd_harvest "$@" ;;
-  stop) cmd_stop ;;    status) cmd_status ;;
+  stop) cmd_stop ;;    status) cmd_status ;;  run) shift; cmd_run "$@" ;;
   *) cat <<USAGE
-usage: infra/fleet.sh {start|deploy|harvest [dir]|stop|status}
+usage: infra/fleet.sh {start|deploy|harvest [dir]|run|stop|status}
 
   start    start every Project=OJCOMS instance, authorise your current IP, wait for sshd
   deploy   archive results, update to \$OZ BRANCH (default: main), restore real results
   harvest  pull results selected by provenance (corpus_type=synthea), never by mtime
+  run      dispatch one job to one node, pin BLAS, and STOP THAT NODE when it ends
   stop     stop every instance (STOP, not terminate -- volumes and results survive)
   status   what is running, what is busy, current burn rate
+
+  run [--keep] <ip> <logtag> <command...>
+      Logs to ~/run_<logtag>.log on the node. The node halts itself when the
+      command exits, so it never idles -- this is the rule in CLAUDE.md
+      ("stop an idle instance the moment its work ends") enforced rather than
+      remembered. --keep suppresses the self-stop when you intend to dispatch
+      more work to the same node.
+
+      e.g. ./infra/fleet.sh run 10.0.0.5 exp13 \\
+             python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment 1,3 \\
+               --runs 10 --require-reportable
 
 env: OJCOMS_KEY, OJCOMS_SG, OJCOMS_BRANCH, OJCOMS_COMMIT (harvest filter)
 USAGE
