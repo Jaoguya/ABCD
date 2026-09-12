@@ -429,22 +429,25 @@ def corpus_world(
 
 
 # ===========================================================================
-# D7 — Exp. 1 over q AND |P_U|
+# Exp. 1 — token generation over q
 # ===========================================================================
-#: ``|P_U| ∈ {1,2,4,8}`` — the manuscript's Exp. 1 authorization scope.
-POLICY_SCOPES: Tuple[int, ...] = (1, 2, 4, 8)
-
-
-#: One arm per ``|P_U|``, so the figure renders §VI's two-variable sweep the way
-#: §VI states it: "q is varied as {1,5,10,15,20}, WHILE |P_U| is varied as
-#: {1,2,4,8}" -- q on the x-axis, one curve per authorization scope.
+#: THE |P_U| SWEEP IS GONE, dropped on the user's instruction 2026-09-13.
 #:
-#: This replaced a single sweep over an INDEX into the 20 (q, |P_U|) pairs. That
-#: index was injective and ordered, but it was not a quantity: the axis read
-#: 0..19, the mapping survived only in run_meta.json, and two points a reader
-#: would want side by side (q=5 at |P_U|=2 and at |P_U|=8) sat six positions
-#: apart. A family of curves is how a 2-D sweep is normally drawn and it needs
-#: no legend table to read.
+#: Exp. 1 used to sweep q AND the authorization scope, one arm per
+#: ``|P_U| ∈ {1,2,4,8}``, so the proposed scheme contributed four curves to
+#: Fig. 1 while each baseline contributed one. It now sweeps q alone and writes
+#: a single ``exp1_trapdoor_generation/`` like every other scheme.
+#:
+#: ``|P_U|`` has not been removed from the CONSTRUCTION and could not be: a
+#: token binds exactly one policy (``T = H(w‖PID‖PV‖Dom)``), so a user
+#: authorized under n policies needs n tokens per keyword. That is a property
+#: of eq:policy-bound-token, not a knob. What changed is only that the
+#: experiment no longer forces the scope to 1, 2, 4 and 8 in turn; it measures
+#: whatever scope the AIM resolves, with ``policy_scope`` fixed at its default.
+#:
+#: Kept as a one-element tuple rather than deleted so `build()` and any banked
+#: command line naming `pu1` still resolve.
+POLICY_SCOPES: Tuple[int, ...] = (1,)
 PSA_EXP1_VARIANTS: Tuple[str, ...] = tuple(f"pu{p}" for p in POLICY_SCOPES)
 
 

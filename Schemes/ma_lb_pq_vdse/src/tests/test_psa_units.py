@@ -422,25 +422,23 @@ def test_there_is_exactly_one_figure_family():
         assert not spec.filename.startswith("fig_psa_")
 
 
-def test_exp1_figure_draws_one_curve_per_scope(config):
-    """SVI's second dimension must reach the figure as four series.
+def test_exp1_declares_no_arms(config):
+    """Exp. 1 contributes ONE curve per scheme.
 
-    `collect` takes the FIRST matching directory per scheme and stops, which is
-    right for a cross-scheme figure and wrong for an arm sweep: without the
-    spec declaring its variants, one |P_U| would be drawn and three silently
-    dropped, labelled with the scheme name.
+    It briefly swept |P_U| as well as q, declaring four `pu<N>` arms through
+    `proposed_variants` so the proposed scheme drew four curves against each
+    baseline's one. The arms were removed on the user's instruction
+    2026-09-13. If a spec ever re-declares them without the runner producing
+    `exp1_trapdoor_generation__pu<N>/` directories, Fig. 1 silently loses the
+    proposed series entirely -- `collect_mixed` would look for arms that are
+    not there.
     """
     plots = _plots_module()
     spec = next(s for s in plots.EXPERIMENTS if s.number == 1)
-    # `proposed_variants`, not `variants_for`: Exp. 1 is a MIXED figure -- the
-    # proposed scheme contributes four scope curves while each baseline
-    # contributes one, which a single `variants` field cannot express.
-    slugs = dict(spec.proposed_variants)
-    assert set(slugs) == set(psa.PSA_EXP1_VARIANTS)
-    # Every arm needs its own style slot or the four curves draw identically
-    # and the figure is unreadable in grayscale.
-    slots = {plots.ABLATION_STYLE_SLOT.get(label) for label in slugs.values()}
-    assert len(slots) == len(slugs) and None not in slots
+    assert not spec.proposed_variants, (
+        f"exp1 declares arms {spec.proposed_variants!r}, but the runner writes "
+        f"a single exp1_trapdoor_generation/"
+    )
 
 
 def test_exp6_figure_uses_the_runners_variant_slugs(config):

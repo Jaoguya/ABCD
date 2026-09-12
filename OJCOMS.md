@@ -65,9 +65,17 @@ Policy, policy-state digest and domain are **inside** the hash. Two consequences
 carry the whole design, and both are pinned by tests:
 
 - A token names a domain, so a trapdoor is **not** domain-independent. One
-  keyword under `|P_U|` authorized policies yields `|P_U|` distinct tokens —
-  which is why Experiment 1 sweeps `q` *and* `|P_U|` and reports
+  keyword under `|P_U|` authorized policies yields `|P_U|` distinct tokens, so
   `|T_Q| = q·|P_U|`.
+
+  **Exp. 1 no longer sweeps `|P_U|`.** It swept `q` and the authorization scope
+  together, one arm per `|P_U| ∈ {1,2,4,8}`, so the proposed scheme drew four
+  curves against each baseline's one. Dropped on the user's instruction
+  2026-09-13; Exp. 1 sweeps `q` alone. `|P_U|` is unchanged in the
+  construction — it is a property of the token binding one policy, not a knob —
+  but it is no longer a measured dimension, and `tab:cost`'s `O(|T_Q|)T_H` row
+  consequently has no structural check against data (see
+  `test_cost_table_agreement.py`, now skipped).
 - An authority update **inside** `AA(PID_i)` changes `PV_i`, hence every token
   of every record under that policy. An update **outside** it leaves
   `V_{P_i}` untouched, so `PV_i`, every token and every index entry are
@@ -171,7 +179,7 @@ a silent fallback would produce Exp. 4 numbers measured against a dict under a
 
 | Flag | Effect |
 |---|---|
-| `--variant` | Exp. 1: `pu1/pu2/pu4/pu8` (authorization scope). Exp. 6: `dias/incremental_all/full_state`. Exp. 7–8: `no_lb/round_robin/least_loaded/aass`. Or `all`. |
+| `--variant` | Exp. 6: `dias/incremental_all/full_state`. Exp. 7–8: `no_lb/round_robin/least_loaded/aass`. Or `all`. Ignored for Exp. 1–5. |
 | `--smoke` | one sweep point, few runs |
 | `--require-reportable` | refuse to start unless every condition holds |
 | `--quiet` | |

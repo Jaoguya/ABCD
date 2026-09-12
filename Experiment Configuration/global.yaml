@@ -81,13 +81,23 @@ experiments:
     # 20. Their extra points are a superset and stay in results.csv; the figure
     # draws these five (generate_plots.py: ExperimentSpec.restrict_x).
     values: [1, 5, 10, 15, 20]
-    # THE SECOND SWEPT PARAMETER, published in the same sentence: §VI Exp. 1
-    # varies "|P_U| in {1,2,4,8}" alongside q. It lived only in code
-    # (`psa_experiments.PSA_EXP1_VARIANTS`, the `pu<N>` arms), which is exactly
-    # what this file exists to prevent — the harness must not carry its own
-    # copy of a §VI range. Added 2026-09-07; the code values are unchanged, so
-    # no measured number moves.
-    policy_scopes: [1, 2, 4, 8]
+    # THE |P_U| SWEEP WAS REMOVED on the user's instruction 2026-09-13.
+    # Exp. 1 swept q AND the authorization scope, one `pu<N>` arm per
+    # |P_U| in {1,2,4,8}, so the proposed scheme drew four curves in Fig. 1
+    # against each baseline's one. It now sweeps q alone and writes a single
+    # exp1_trapdoor_generation/, like every other scheme.
+    #
+    # RESULTS-AFFECTING: the four arm directories are gone and Exp. 1 was
+    # re-measured. |P_U| is unchanged in the CONSTRUCTION -- a token binds one
+    # policy, so a user authorized under n policies still needs n tokens per
+    # keyword -- it is simply no longer a measured dimension. §VI was updated
+    # in the same pass.
+    #
+    # Consequence worth knowing: tab:cost's O(|T_Q|)T_H row had its only
+    # structural check against data in test_cost_table_agreement.py, which
+    # needs two |P_U| arms to reach one |T_Q| by two factorizations. That test
+    # now skips and says so.
+    policy_scopes: [1]
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp2_search_latency:
     variable: index_size

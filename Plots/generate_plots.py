@@ -161,29 +161,26 @@ class ExperimentSpec:
     restrict_x: Tuple[float, ...] = ()
 
 
-#: §VI Exp. 1's second sweep dimension: "|P_U| is varied as {1,2,4,8}".
-#: Defined here rather than in the PSA block below because the MANUSCRIPT
-#: Exp. 1 figure needs it -- the proposed curves are one per scope.
-PSA_EXP1_VARIANTS: Tuple[Tuple[str, str], ...] = (
-    ("pu1", "$|P_U| = 1$"),
-    ("pu2", "$|P_U| = 2$"),
-    ("pu4", "$|P_U| = 4$"),
-    ("pu8", "$|P_U| = 8$"),
-)
+#: EMPTY SINCE 2026-09-13. Exp. 1's |P_U| arms were dropped on the user's
+#: instruction, so the proposed scheme contributes ONE curve to Fig. 1 like
+#: every other scheme and there is no arm family to declare. Kept as a name so
+#: the spec below and any external reference still resolve.
+PSA_EXP1_VARIANTS: Tuple[Tuple[str, str], ...] = ()
 
 
 EXPERIMENTS: Tuple[ExperimentSpec, ...] = (
-    # §VI Exp. 1 sweeps q AND |P_U| and compares against four baselines, all in
-    # ONE figure: "Increasing q enlarges the keyword dimension of the query,
-    # while increasing |P_U| expands the number of policy states under which
-    # those keywords must be encoded." So the proposed scheme contributes FOUR
-    # curves (one per scope, from exp1_trapdoor_generation__pu<N>/) and each
-    # baseline one (from its own exp1_trapdoor_generation/). See collect_mixed.
+    # Exp. 1 sweeps q alone. It used to sweep q AND |P_U|, so the proposed
+    # scheme drew four curves against each baseline's one; the |P_U| arms were
+    # dropped 2026-09-13 and every scheme now contributes a single curve from
+    # its own exp1_trapdoor_generation/.
+    #
+    # restrict_x stays: the baselines are measured at every integer q in 1..20
+    # and §VI's figure shows {1,5,10,15,20}. Nothing measured is discarded from
+    # any file, only from the plot.
     ExperimentSpec(1, "exp1_trapdoor_generation", "fig_exp1_trapdoor.pdf",
                    "Queried keywords $q$", "Token generation latency (ms)",
                    log_y=True,   # 4.82 decades — see LOG_Y_DECADES
                    proposed_prefix="",
-                   proposed_variants=PSA_EXP1_VARIANTS,
                    restrict_x=(1, 5, 10, 15, 20)),
     ExperimentSpec(2, "exp2_search_latency", "fig_exp2_search.pdf",
                    "Index size $N$ (records)", "Search latency (ms)",
@@ -405,25 +402,14 @@ ABLATION_STYLE_SLOT: Dict[str, int] = {
     "DIAS (proposed)": 0,
     "Incremental-All": 1,
     "Full-State Synchronization": 2,
-    # PSA Exp. 1's arms are |P_U| values, so they are ORDERED and the styles
-    # should read that way: slot 0 (the proposed scheme's blue circle) is
-    # |P_U| = 1, the baseline scope, and the rest step up from there. Without
-    # these four entries all four curves drew in one colour and the figure
-    # could not be read at all in grayscale, which SystemConfiguration.md requires.
-    "$|P_U| = 1$": 0,
-    "$|P_U| = 2$": 1,
-    "$|P_U| = 4$": 2,
-    "$|P_U| = 8$": 3,
 }
 
 
-#: Exp. 1's proposed curves are ONE scheme at four authorization scopes, not
-#: four schemes. Given four different colours they read as eight unrelated
-#: curves against four baselines; sharing the proposed colour and varying only
-#: marker and linestyle makes them read as a family, which is what they are.
-PROPOSED_FAMILY: Tuple[str, ...] = (
-    "$|P_U| = 1$", "$|P_U| = 2$", "$|P_U| = 4$", "$|P_U| = 8$",
-)
+#: EMPTY SINCE 2026-09-13. This grouped Exp. 1's four |P_U| curves into one
+#: visual family so they did not read as four unrelated schemes. With the arms
+#: dropped there is one proposed curve and nothing to group. `style_for` still
+#: consults it, so an empty tuple is the correct no-op.
+PROPOSED_FAMILY: Tuple[str, ...] = ()
 
 
 def style_for(scheme: str) -> Dict[str, object]:

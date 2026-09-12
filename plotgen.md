@@ -151,13 +151,15 @@ Series are labelled by citation number, never by author name:
 - Legend order is kept separate from style assignment, so reordering the legend
   can never reassign a scheme's marker or colour.
 
-**Experiment 1 is the one mixed figure.** §VI sweeps `q` *and* the authorization
-scope, so the proposed scheme contributes four curves — one per `|P_U|`, read
-from `exp1_trapdoor_generation__pu<N>/` — while each baseline contributes one
-from its own `exp1_trapdoor_generation/`. The figure also restricts x to
-`{1, 5, 10, 15, 20}`: the baselines were measured at every integer 1–20, and
-drawing four 20-point curves against a 5-point one would misrepresent the
-comparison. Nothing measured is discarded from any file, only from the plot.
+**Experiment 1 is no longer a mixed figure.** It used to sweep `q` *and* the
+authorization scope, so the proposed scheme contributed four curves — one per
+`|P_U|`, from `exp1_trapdoor_generation__pu<N>/` — against each baseline's one.
+The `|P_U|` arms were removed on the user's instruction 2026-09-13; every
+scheme now contributes a single curve from its own
+`exp1_trapdoor_generation/`. The figure still restricts x to
+`{1, 5, 10, 15, 20}`, because the baselines are measured at every integer 1–20
+and §VI's figure shows five points. Nothing measured is discarded from any
+file, only from the plot.
 
 ---
 

@@ -2217,7 +2217,8 @@ balancing under increasing workloads.
 
 This experiment evaluates the online cost of generating policy-state-aware
 search tokens. The number of queried keywords is varied as
-$q\in\{1,5,10,15,20\}$. The proposed framework is compared
+$q\in\{1,5,10,15,20\}$, while the number of authorized policies is varied
+as $|\mathcal{P}_U|\in\{1,2,4,8\}$. The proposed framework is compared
 with Guo \textit{et al}.~\cite{ref35}, XB-Muse~\cite{ref36}, Thingom
 \textit{et al}.~\cite{ref41}, and Zhuang \textit{et al}.~\cite{ref52}.
 ML-KEM key establishment is excluded because it is performed during
@@ -2249,16 +2250,16 @@ O(|\mathcal{T}_Q|)T_H
 \begin{figure}[!t]
     \centering
     \includegraphics[width=\columnwidth]{images/fig_exp1_trapdoor.pdf}
-    \caption{Policy-state-aware token-generation latency under an increasing
-    number of queried keywords.}
+    \caption{Policy-state-aware token-generation latency under increasing
+    query and authorization scopes.}
     \label{fig:exp1}
 \end{figure}
 
 Fig.~\ref{fig:exp1} shows that the proposed scheme exhibits approximately
 linear growth with the number of generated policy-aware tokens. Increasing
-$q$ enlarges the keyword dimension of the query, and each queried keyword
-must be encoded under the policy states the querying user is authorized
-for. Nevertheless, token generation remains
+$q$ enlarges the keyword dimension of the query, while increasing
+$|\mathcal{P}_U|$ expands the number of policy states under which those
+keywords must be encoded. Nevertheless, token generation remains
 hash-dominated and avoids pairing, exponentiation, or lattice operations
 in the online search path.
 
