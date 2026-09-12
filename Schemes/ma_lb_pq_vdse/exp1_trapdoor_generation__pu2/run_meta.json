@@ -3,7 +3,7 @@
   "config_hashes": {
     "crypto.yaml": "8f484f1a22ab7a90de0c67d4d95f31b83d506e49e17d09a19620792c25f1d793",
     "dataset.yaml": "2ee621d6a113f399eac5e0e0e750764be27d300907f87fcb79ee93fd4f06e4e6",
-    "global.yaml": "cd1c5e4152a09b77baba3f283b85351bd408d84b817844a33d21add615959784",
+    "global.yaml": "2bb41bb124422d70cfaaeffe95aec35d13722f2c88968d3c5598793681246df0",
     "index.yaml": "ce4e1de6bc1ea4f0078a7520c7577a0af413bca97e6f3c18bb89b2bc3ad6e8d5",
     "scheduler.yaml": "cfa4b32a11d66728d9a1956b5ab92db66c03b37963541b34d0aaee62263384e2",
     "workload/exp78_sweep_holdout.yaml": "a85ccb7d681be2287ec3b7763a43df726f053c40005c28fb2474f7725d299fd7",
@@ -22,7 +22,7 @@
     "config_hashes": {
       "crypto.yaml": "8f484f1a22ab7a90de0c67d4d95f31b83d506e49e17d09a19620792c25f1d793",
       "dataset.yaml": "2ee621d6a113f399eac5e0e0e750764be27d300907f87fcb79ee93fd4f06e4e6",
-      "global.yaml": "cd1c5e4152a09b77baba3f283b85351bd408d84b817844a33d21add615959784",
+      "global.yaml": "2bb41bb124422d70cfaaeffe95aec35d13722f2c88968d3c5598793681246df0",
       "index.yaml": "ce4e1de6bc1ea4f0078a7520c7577a0af413bca97e6f3c18bb89b2bc3ad6e8d5",
       "scheduler.yaml": "cfa4b32a11d66728d9a1956b5ab92db66c03b37963541b34d0aaee62263384e2"
     },
@@ -68,8 +68,8 @@
     "pin_configured": false,
     "platform": "Linux-7.0.0-1011-aws-x86_64-with-glibc2.39"
   },
-  "finished_utc": "2026-09-12T23:03:28.311338+00:00",
-  "git_commit": "db6fab542fc923655b18f104bffcf3755d238226-dirty",
+  "finished_utc": "2026-09-12T16:20:27.125637+00:00",
+  "git_commit": "d266e9c94136f9ddb7184116c5efb5bedd584954-dirty",
   "instance_type": "unknown",
   "ledger_backend": "memory",
   "libraries": {
@@ -84,6 +84,7 @@
   "not_reportable_because": [],
   "notes": [
     "construction=psa",
+    "scheduler_variant=pu2",
     "policy-state-aware construction (divergences D1-D9): T = H(w || PID || PV || Dom), PV a version-VECTOR digest",
     "host NOT pinned: global.yaml sets no environment.instance_type, so the host check passed vacuously. Detected 'm6i.xlarge'. Cross-host latency comparisons are unsound until the pin returns; SVI must disclose the host per scheme rather than claim one type."
   ],
@@ -98,7 +99,7 @@
     "policies",
     "token_bytes"
   ],
-  "started_utc": "2026-09-12T23:03:27.260939+00:00",
+  "started_utc": "2026-09-12T16:20:26.592094+00:00",
   "thread_pinning": {
     "MKL_NUM_THREADS": "1",
     "NUMEXPR_NUM_THREADS": "1",

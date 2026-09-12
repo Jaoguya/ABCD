@@ -157,12 +157,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--variant", default=None,
         help=(
-            "ablation variant, or 'all' to run each in turn. Exp. 6 "
+            "ablation variant, or 'all' to run each in turn. Exp. 1 takes the "
+            "AUTHORIZATION SCOPES (pu1, pu2, pu4, pu8; default pu1). Exp. 6 "
             "takes the DIAS PROPAGATION variants (dias, incremental_all, "
             "full_state; default dias) -- Section VI's DIAS, Incremental-All "
             "and Full-State Synchronization. Exp. 7-8 take the SCHEDULER "
             "variants (no_lb, round_robin, least_loaded, aass; default aass). "
-            "Ignored for Exp. 1-5. "
+            "Ignored for Exp. 2-5. "
             "The three vocabularies are not interchangeable: a scheduler "
             "decides which FSN serves a QUERY and has no effect on how an "
             "authorization change propagates."
@@ -283,18 +284,19 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                 )
             return picked
         if number == 1:
-            # |P_U| WAS THE ARM AND IS NOT ANY MORE. Exp. 1 swept q AND the
-            # authorization scope, so the proposed scheme contributed four
-            # curves against each baseline's one. Dropped on the user's
-            # instruction 2026-09-13: Exp. 1 sweeps q alone and writes a single
-            # `exp1_trapdoor_generation/`, like every other scheme.
-            #
-            # |P_U| itself has not gone anywhere -- it is a property of the
-            # construction, not a knob. A token binds one policy, so a user
-            # authorized under n policies still needs n tokens per keyword.
-            # The experiment now measures that at the scope the AIM actually
-            # resolves rather than forcing it to 1, 2, 4 and 8 in turn.
-            return [""]
+            # §VI varies q AND |P_U|; the runner sweeps one variable, so |P_U|
+            # is the arm. Defaults to every scope, because a single-arm run
+            # would silently reproduce the D7 defect it exists to fix.
+            if args.variant in (None, "") or args.variant.lower() == "all":
+                return list(psa_mod.PSA_EXP1_VARIANTS)
+            picked = [v.strip() for v in args.variant.split(",") if v.strip()]
+            bad = [v for v in picked if v not in psa_mod.PSA_EXP1_VARIANTS]
+            if bad:
+                raise SystemExit(
+                    f"unknown PSA Exp. 1 variant(s) {bad}; valid: "
+                    f"{', '.join(psa_mod.PSA_EXP1_VARIANTS)}"
+                )
+            return picked
         if number == 6:
             if True:
                 if args.variant in (None, ""):
@@ -458,9 +460,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         # curve labelled as an ablation.
         folders = PSA_FOLDERS if psa else FOLDERS
         out_dir = sweep.shard_dir(output_root / folders[number], args.points)
-        # 1 dropped 2026-09-13 with the |P_U| arm: Exp. 1 is a single
-        # curve again and must write the unsuffixed directory.
-        variant_dir_numbers = (4, 6, 7, 8) if psa else (6, 7, 8)
+        variant_dir_numbers = (1, 4, 6, 7, 8) if psa else (6, 7, 8)
         if variant and number in variant_dir_numbers:
             out_dir = out_dir.parent / f"{out_dir.name}__{variant}"
         written = runner.write_outputs(result, out_dir)

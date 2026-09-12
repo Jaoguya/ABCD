@@ -31,8 +31,8 @@ tab:cost  ->  the experiments  ->  the results  ->  Section VI's prose
 
 The **computation-cost table** (`Overleaf/MA-LB-PQ-VDSE.tex`, `tab:cost`) says
 what should scale with what. **The experiments** are designed to sweep exactly
-those variables — that is why Exp. 1 sweeps `q` (the row is `O(|T_Q|)T_H`
-and `|T_Q| = q·|P_U|`), why Exp. 5 sweeps `k`, and why Exp. 6
+those variables — that is why Exp. 1 sweeps `q` and `|P_U|` (the row is
+`O(|T_Q|)T_H` and `|T_Q| = q·|P_U|`), why Exp. 5 sweeps `k`, and why Exp. 6
 sweeps the affected-policy ratio. **The results** are what those sweeps produce.
 **Section VI's prose** describes the results, and is written after they exist.
 
@@ -41,9 +41,7 @@ cells-as-strings — and the copy drifted out of step with the construction whil
 its assertions silently skipped. The one check that remains
 (`test_cost_table_agreement.py`) asserts a structural invariant the table
 implies, against the data: `O(|T_Q|)T_H` means `q=20,|P_U|=1` must cost what
-`q=5,|P_U|=4` costs. **That check is disabled as of 2026-09-13**: reaching one
-`|T_Q|` by two factorizations needs two `|P_U|` arms read together, and the
-arms were removed on the user's instruction, so the test skips and names why.
+`q=5,|P_U|=4` costs. That is checkable without naming a single cell.
 
 ---
 
@@ -62,7 +60,7 @@ its `results.csv`.
 
 | # | Folder stem | Variable | Sweep values |
 |---|---|---|---|
-| 1 | `exp1_trapdoor_generation` | `keywords_per_query` (q) | 1, 5, 10, 15, 20 |
+| 1 | `exp1_trapdoor_generation` | `keywords_per_query` (q) | 1, 5, 10, 15, 20 — and policy scopes 1, 2, 4, 8 |
 | 2 | `exp2_search_latency` | `index_size` (N, in **records**) | 10^4, 5·10^4, 10^5, 5·10^5, 10^6 |
 | 3 | `exp3_crossdomain_scalability` | `domains` (d) | 2, 4, 6, 8, 10 |
 | 4 | `exp4_verification_overhead` | `returned_results` (r) | 10, 50, 100, 500, 1000 |
@@ -306,11 +304,12 @@ Known deviations, and nothing else:
 | 35, 54 | Exp. 2 grows one index across nested prefixes, so `--points` buys nothing |
 
 ```bash
-# proposed scheme, all eight experiments
+# proposed scheme, all nine experiments, implemented construction
 python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment all --runs 10
 
-# proposed scheme, Exp. 1 (sweeps q; the |P_U| arms were removed 2026-09-13)
-python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment 1 --runs 10
+# proposed scheme, manuscript construction, Exp. 1 across every policy scope
+python3 -m Schemes.ma_lb_pq_vdse.src.main \
+    --construction psa --experiment 1 --variant all
 
 # scheduler ablation — all four arms of Exp. 7 and 8
 python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment 7,8 --variant all
@@ -325,7 +324,7 @@ python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment 6 --variant all
 |---|---|---|
 | 7, 8 | `no_lb`, `round_robin`, `least_loaded`, `aass` (default) | **scheduler** — which FSN serves a query |
 | 6 | `dias` (default), `incremental_all`, `full_state` | **DIAS propagation** — how an authorization change spreads |
-| 1 | *(none — the `\|P_U\|` arms were removed 2026-09-13)* | — |
+| 1 | `pu1` (default), `pu2`, `pu4`, `pu8` | the authorization scope `\|P_U\|` |
 
 The Exp. 6 arms carry the manuscript's own names. Passing a scheduler variant to
 Exp. 6 is refused — a scheduler

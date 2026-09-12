@@ -67,17 +67,7 @@ def test_token_generation_cost_depends_on_the_product_not_its_factorization():
         )
     )
     if not paths:
-        pytest.skip(
-            "THIS CHECK IS DISABLED, not merely waiting for data. Exp. 1's "
-            "|P_U| arms were removed on the user's instruction 2026-09-13, so "
-            "no exp1_trapdoor_generation__pu*/ directories are produced any "
-            "more. Reaching a given |T_Q| by two factorizations requires two "
-            "arms read together (|T_Q|=20 is q=20 at |P_U|=1 and q=5 at "
-            "|P_U|=4), and a single-arm sweep contains no contested |T_Q| at "
-            "all. tab:cost's O(|T_Q|)T_H row therefore has NO structural check "
-            "against measured data while the arms stay removed -- restoring "
-            "POLICY_SCOPES to (1,2,4,8) is what re-enables it."
-        )
+        pytest.skip("no Exp. 1 results yet")
 
     by_tokens = collections.defaultdict(list)
     rows = []

@@ -1215,10 +1215,10 @@ def test_cli_folders_match_the_plotting_paths():
             # exists, so an ablation is checked against its arms.
             arms = sorted(scheme_root.glob(f"{folder}__*"))
             arms = [a for a in arms if a.is_dir() and "points-" not in a.name]
-            # Exp. 1 was briefly an ablation over |P_U| and wrote only
-            # `__pu<N>` arms; the arms were removed 2026-09-13 so it has an
-            # unsuffixed directory again. Exps. 6, 7 and 8 remain ablations. An
-            # experiment that has simply never been run has neither.
+            # Exp. 1 joined 6/7/8 as an ablation on 2026-09-12: it sweeps the
+            # authorization scope and writes only `__pu<N>` arms, so it has no
+            # unsuffixed directory either. An experiment that has simply never
+            # been run has neither, which is the third legitimate case.
             assert arms or not any(scheme_root.glob(f"{folder}*")), (
                 f"{folder} has directories but none the plotter can find"
             )
@@ -1230,12 +1230,13 @@ def test_cli_writes_all_three_files_per_experiment():
         ["--experiment", "1", "--smoke", "--quiet", "--output", str(output)]
     )
     assert code == 0
-    # ONE directory again. Exp. 1 briefly wrote one per |P_U| scope
-    # (`__pu1`..`__pu8`); those arms were removed 2026-09-13 and it writes the
-    # unsuffixed folder like every other scheme.
-    folder = output / main_mod.FOLDERS[1]
-    for name in ("raw_runs.csv", "results.csv", "run_meta.json"):
-        assert (folder / name).is_file(), f"missing {name} in {folder}"
+    # Exp. 1 writes ONE DIRECTORY PER SCOPE (`__pu1`..`__pu8`), not a single
+    # folder: SVI sweeps q and |P_U| together and each scope is its own curve.
+    arms = sorted(output.glob(f"{main_mod.FOLDERS[1]}__*"))
+    assert arms, f"no {main_mod.FOLDERS[1]}__* arm directories under {output}"
+    for arm in arms:
+        for name in ("raw_runs.csv", "results.csv", "run_meta.json"):
+            assert (arm / name).is_file(), f"{arm.name} is missing {name}"
 
 
 def test_cli_require_reportable_matches_the_actual_reportability():
@@ -1287,13 +1288,14 @@ def test_cli_reportability_and_its_reasons_always_agree():
     main_mod.run(
         ["--experiment", "1", "--smoke", "--quiet", "--output", str(output)]
     )
-    meta = json.loads(
-        (output / main_mod.FOLDERS[1] / "run_meta.json").read_text()
-    )
-    if meta["reportable"]:
-        assert not meta["not_reportable_because"]
-    else:
-        assert meta["not_reportable_because"]
+    arms = sorted(output.glob(f"{main_mod.FOLDERS[1]}__*"))
+    assert arms, f"no {main_mod.FOLDERS[1]}__* arm directories under {output}"
+    for arm in arms:
+        meta = json.loads((arm / "run_meta.json").read_text())
+        if meta["reportable"]:
+            assert not meta["not_reportable_because"], arm.name
+        else:
+            assert meta["not_reportable_because"], arm.name
 
 
 # ===========================================================================
