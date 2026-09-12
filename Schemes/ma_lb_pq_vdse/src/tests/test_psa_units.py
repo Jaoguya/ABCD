@@ -189,7 +189,7 @@ def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config, source):
     time (14/15 in isolation) — the second timing-ratio assertion in this file
     to do so. Measured, the work ratios are integers:
 
-        policies_evolved     full/dias = 10.000 @0.1  ->  1.000 @1.0
+        records_evolved     full/dias = 10.000 @0.1  ->  1.000 @1.0
         entries_retokenized  full/dias = 10.000 @0.1  ->  1.000 @1.0
 
     At ratio 1.0 the two arms evolve exactly the same set (40 policies, 240
@@ -210,7 +210,7 @@ def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config, source):
         return out
 
     sparse, full = work_at(0.1), work_at(1.0)
-    for metric in ("policies_evolved", "entries_retokenized"):
+    for metric in ("records_evolved", "entries_retokenized"):
         sparse_ratio = (sparse[psa.VARIANT_FULL_STATE][metric]
                         / sparse[psa.VARIANT_DIAS][metric])
         full_ratio = (full[psa.VARIANT_FULL_STATE][metric]
@@ -241,7 +241,7 @@ def test_psa_exp6_fsns_touched_is_the_affected_node_set(config, source):
     """
     dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
-        config=config, variant=psa.VARIANT_INCREMENTAL_ALL
+        config=config, variant=psa.VARIANT_INCREMENTAL_ALL, source=source
     )
     for ratio in dias.values:
         selective = dias.measure(dias.prepare(ratio)).secondaries["fsns_touched"]
@@ -275,13 +275,13 @@ def test_psa_exp6_full_state_redistributes_authority_state(config, source):
     """
     full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     everyone = psa.PsaExp6AffectedRatio(
-        config=config, variant=psa.VARIANT_INCREMENTAL_ALL
+        config=config, variant=psa.VARIANT_INCREMENTAL_ALL, source=source
     )
     at_one = full.measure(full.prepare(1.0)).secondaries
     other = everyone.measure(everyone.prepare(1.0)).secondaries
     # At a 100% ratio both arms evolve every policy and deliver to every node,
     # so the ONLY thing separating them is the authority-state republish.
-    assert at_one["policies_evolved"] == other["policies_evolved"]
+    assert at_one["records_evolved"] == other["records_evolved"]
     assert at_one["delivered_kb"] > other["delivered_kb"], (
         "Full-State must put more on the wire than Incremental-All even at a "
         "100% ratio; if it does not, the authorization half is not happening"
@@ -308,7 +308,7 @@ def test_psa_exp6_delivered_bytes_are_summed_per_delivery(config, source):
     """
     dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
-        config=config, variant=psa.VARIANT_INCREMENTAL_ALL
+        config=config, variant=psa.VARIANT_INCREMENTAL_ALL, source=source
     )
     a = dias.measure(dias.prepare(0.1)).secondaries
     b = everyone.measure(everyone.prepare(0.1)).secondaries
@@ -368,38 +368,48 @@ def _plots_module():
     return module
 
 
-def test_every_psa_experiment_has_a_figure_spec():
-    """A measured PSA experiment with no figure is a result nobody can read.
+def test_every_experiment_has_a_figure_spec():
+    """A measured experiment with no figure is a result nobody can read.
 
-    ``main.PSA_FOLDERS`` is what the runner writes; ``PSA_EXPERIMENTS`` is what
-    the plotter draws. They drifted apart at birth — the track shipped with
-    four experiments and zero figures.
+    Was written against `PSA_EXPERIMENTS` and `main.PSA_FOLDERS`, the second
+    figure family. The proposed scheme implements one construction as of
+    2026-09-12, so both are gone and every scheme writes `exp<N>_*`. The
+    invariant survives the collapse: whatever the runner writes, the plotter
+    must draw.
     """
     from Schemes.ma_lb_pq_vdse.src import main as main_mod
 
     plots = _plots_module()
-    drawn = {spec.number for spec in plots.PSA_EXPERIMENTS}
-    assert drawn == set(main_mod.PSA_FOLDERS), (
-        f"the runner writes {sorted(main_mod.PSA_FOLDERS)} but the plotter "
+    drawn = {spec.number for spec in plots.EXPERIMENTS}
+    assert drawn == set(main_mod.FOLDERS), (
+        f"the runner writes {sorted(main_mod.FOLDERS)} but the plotter "
         f"draws {sorted(drawn)}"
     )
-    for spec in plots.PSA_EXPERIMENTS:
-        assert spec.folder == main_mod.PSA_FOLDERS[spec.number]
-        assert spec.prefix == "psa_", "psa specs must glob psa_exp<N>_*"
-        # A psa figure dropped into the manuscript's images/ must not be able
-        # to shadow the Option D figure of the same experiment number.
-        assert spec.filename.startswith("fig_psa_exp")
+    for spec in plots.EXPERIMENTS:
+        assert spec.folder == main_mod.FOLDERS[spec.number]
 
 
-def test_the_two_figure_families_never_share_a_filename():
+def test_there_is_exactly_one_figure_family():
+    """The second family must not come back.
+
+    Replaces `test_the_two_figure_families_never_share_a_filename`, which
+    checked that the two families' filenames were disjoint. There is one family
+    now; the thing worth guarding is that a `psa_`-prefixed spec cannot
+    reappear and glob the same directories, which is how one dataset ends up
+    drawn twice in one paper.
+    """
     plots = _plots_module()
-    option_d = {spec.filename for spec in plots.EXPERIMENTS}
-    psa_names = {spec.filename for spec in plots.PSA_EXPERIMENTS}
-    assert not (option_d & psa_names)
+    assert not hasattr(plots, "PSA_EXPERIMENTS"), (
+        "a second figure family reappeared; both would glob exp<N>_* and draw "
+        "the same results twice"
+    )
+    for spec in plots.EXPERIMENTS:
+        assert spec.prefix == "", f"exp{spec.number} spec carries prefix {spec.prefix!r}"
+        assert not spec.filename.startswith("fig_psa_")
 
 
-def test_psa_exp1_figure_draws_one_curve_per_scope(config):
-    """§VI's second dimension must reach the figure as four series.
+def test_exp1_figure_draws_one_curve_per_scope(config):
+    """SVI's second dimension must reach the figure as four series.
 
     `collect` takes the FIRST matching directory per scheme and stops, which is
     right for a cross-scheme figure and wrong for an arm sweep: without the
@@ -407,8 +417,11 @@ def test_psa_exp1_figure_draws_one_curve_per_scope(config):
     dropped, labelled with the scheme name.
     """
     plots = _plots_module()
-    spec = next(s for s in plots.PSA_EXPERIMENTS if s.number == 1)
-    slugs = dict(plots.variants_for(spec))
+    spec = next(s for s in plots.EXPERIMENTS if s.number == 1)
+    # `proposed_variants`, not `variants_for`: Exp. 1 is a MIXED figure -- the
+    # proposed scheme contributes four scope curves while each baseline
+    # contributes one, which a single `variants` field cannot express.
+    slugs = dict(spec.proposed_variants)
     assert set(slugs) == set(psa.PSA_EXP1_VARIANTS)
     # Every arm needs its own style slot or the four curves draw identically
     # and the figure is unreadable in grayscale.
@@ -416,17 +429,17 @@ def test_psa_exp1_figure_draws_one_curve_per_scope(config):
     assert len(slots) == len(slugs) and None not in slots
 
 
-def test_psa_exp6_figure_uses_the_psa_variant_slugs(config):
+def test_exp6_figure_uses_the_runners_variant_slugs(config):
     """The plotter's arm names must be the ones the runner writes as directories.
 
-    Option D's Exp. 6 arms are `ias`/`broadcast`/`full_rebuild` — frozen by the
-    directories its banked runs live in. The PSA track has no banked data, so
-    `psa_experiments.py` names its arms outright. Reusing the Option D
-    vocabulary here would find no directories and draw an empty figure with
-    three "missing variant" notes.
+    `psa_experiments.py` names the DIAS arms `dias`/`incremental_all`/
+    `full_state`; `experiments.py` carries an older `ias`/`broadcast`/
+    `full_rebuild` vocabulary. Only the first reaches disk, because `--
+    construction` accepts only `psa`. Reusing the other here would find no
+    directories and draw an empty figure with three "missing variant" notes.
     """
     plots = _plots_module()
-    spec = next(s for s in plots.PSA_EXPERIMENTS if s.number == 6)
+    spec = next(s for s in plots.EXPERIMENTS if s.number == 6)
     assert dict(plots.variants_for(spec)).keys() == set(psa.PSA_EXP6_VARIANTS)
 
 

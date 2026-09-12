@@ -216,23 +216,46 @@ def test_exp6_sweeps_the_ratio_not_an_update_count(config, source):
     assert max(experiment.values) == pytest.approx(1.0)
 
 
+def _records_under_affected(experiment, ratio):
+    """The records the dependency chain reaches at this ratio, counted exactly.
+
+    `AA_k -> P_k^aff -> R_k^aff`. Derived from the prepared state rather than
+    from `ratio * policy_population`, which was only the record count while the
+    arm synthesised one record per policy.
+    """
+    prepared = experiment.prepare(ratio)
+    policies = sorted({r["policy"] for r in prepared["records"]})
+    affected = set(policies[: prepared["affected_count"]])
+    return sum(1 for r in prepared["records"] if r["policy"] in affected)
+
+
 def test_exp6_dias_evolves_only_the_affected_fraction(config, source):
+    """DIAS touches exactly the records under the affected policies.
+
+    Was `round(ratio * policy_population)` -- true only when each policy held
+    one synthetic record. On real corpus records the policies carry different
+    numbers of records (the patient-hash buckets are uneven), so the expected
+    count is the actual size of `R_k^aff` and not a fraction of the policy
+    count.
+    """
     experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     for ratio in experiment.values:
-        sample = _run(experiment, ratio)
-        evolved = sample.secondaries["policies_evolved"]
-        expected = round(ratio * experiment.policy_population)
-        assert evolved == pytest.approx(expected, abs=1)
+        evolved = _run(experiment, ratio).secondaries["records_evolved"]
+        assert evolved == pytest.approx(_records_under_affected(experiment, ratio), abs=1)
 
 
 def test_exp6_full_state_ignores_the_ratio(config, source):
     """Its cost is flat because it re-evolves everything however little changed."""
     experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     evolved = {
-        _run(experiment, ratio).secondaries["policies_evolved"]
+        _run(experiment, ratio).secondaries["records_evolved"]
         for ratio in experiment.values
     }
-    assert evolved == {float(experiment.policy_population)}
+    # One value across every ratio -- that flatness IS the property. The value
+    # is the whole drawn population; it was `policy_population` only while the
+    # arm held one record per policy.
+    assert len(evolved) == 1, f"full_state must be flat in the ratio, got {evolved}"
+    assert evolved == {float(len(experiment.prepare(0.1)["records"]))}
 
 
 def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(config, source):
@@ -240,15 +263,15 @@ def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(conf
 
     Incremental-All ablates SELECTIVE delivery only: it evolves exactly the same
     policies as DIAS and differs solely in fan-out. If the two ever differ in
-    `policies_evolved`, the arm has stopped being an ablation of one variable.
+    `records_evolved`, the arm has stopped being an ablation of one variable.
     """
     dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
-        config=config, variant=psa.VARIANT_INCREMENTAL_ALL
+        config=config, variant=psa.VARIANT_INCREMENTAL_ALL, source=source
     )
     for ratio in dias.values:
         a, b = _run(dias, ratio), _run(everyone, ratio)
-        assert a.secondaries["policies_evolved"] == b.secondaries["policies_evolved"]
+        assert a.secondaries["records_evolved"] == b.secondaries["records_evolved"]
         assert a.secondaries["entries_retokenized"] == b.secondaries["entries_retokenized"]
         assert b.secondaries["delivered_kb"] > a.secondaries["delivered_kb"]
 
@@ -262,8 +285,8 @@ def test_exp6_dias_advantage_over_full_state_narrows_toward_one(config, source):
     def advantage(ratio):
         """How many times more policies Full-State evolves than DIAS."""
         return (
-            _run(full, ratio).secondaries["policies_evolved"]
-            / _run(dias, ratio).secondaries["policies_evolved"]
+            _run(full, ratio).secondaries["records_evolved"]
+            / _run(dias, ratio).secondaries["records_evolved"]
         )
 
     low, high = advantage(0.1), advantage(1.0)

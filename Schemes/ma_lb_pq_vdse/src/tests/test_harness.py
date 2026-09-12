@@ -1168,7 +1168,9 @@ def test_injected_stub_group_is_never_reportable():
 # main.py — the CLI
 # ===========================================================================
 def test_cli_parses_experiment_selections():
-    assert main_mod.parse_experiments("all") == [1, 2, 3, 4, 5, 6, 7, 8, 9]
+    # 1..8. Exp. 9 was folded into Exp. 4 on 2026-09-12 -- Section VI
+    # defines one Exp. 4 with a two-panel figure, and 9 is its second arm.
+    assert main_mod.parse_experiments("all") == [1, 2, 3, 4, 5, 6, 7, 8]
     assert main_mod.parse_experiments("2") == [2]
     assert main_mod.parse_experiments("1,2,5") == [1, 2, 5]
     assert main_mod.parse_experiments("5,1,5") == [1, 5]
@@ -1207,7 +1209,13 @@ def test_cli_folders_match_the_plotting_paths():
             # exists, so an ablation is checked against its arms.
             arms = sorted(scheme_root.glob(f"{folder}__*"))
             arms = [a for a in arms if a.is_dir() and "points-" not in a.name]
-            assert arms or number == 9, f"{folder} has neither a directory nor arms"
+            # Exp. 1 joined 6/7/8 as an ablation on 2026-09-12: it sweeps the
+            # authorization scope and writes only `__pu<N>` arms, so it has no
+            # unsuffixed directory either. An experiment that has simply never
+            # been run has neither, which is the third legitimate case.
+            assert arms or not any(scheme_root.glob(f"{folder}*")), (
+                f"{folder} has directories but none the plotter can find"
+            )
 
 
 def test_cli_writes_all_three_files_per_experiment():
@@ -1216,9 +1224,13 @@ def test_cli_writes_all_three_files_per_experiment():
         ["--experiment", "1", "--smoke", "--quiet", "--output", str(output)]
     )
     assert code == 0
-    folder = output / main_mod.FOLDERS[1]
-    for name in ("raw_runs.csv", "results.csv", "run_meta.json"):
-        assert (folder / name).is_file()
+    # Exp. 1 writes ONE DIRECTORY PER SCOPE (`__pu1`..`__pu8`), not a single
+    # folder: SVI sweeps q and |P_U| together and each scope is its own curve.
+    arms = sorted(output.glob(f"{main_mod.FOLDERS[1]}__*"))
+    assert arms, f"no {main_mod.FOLDERS[1]}__* arm directories under {output}"
+    for arm in arms:
+        for name in ("raw_runs.csv", "results.csv", "run_meta.json"):
+            assert (arm / name).is_file(), f"{arm.name} is missing {name}"
 
 
 def test_cli_require_reportable_matches_the_actual_reportability():
@@ -1270,13 +1282,14 @@ def test_cli_reportability_and_its_reasons_always_agree():
     main_mod.run(
         ["--experiment", "1", "--smoke", "--quiet", "--output", str(output)]
     )
-    meta = json.loads(
-        (output / main_mod.FOLDERS[1] / "run_meta.json").read_text()
-    )
-    if meta["reportable"]:
-        assert not meta["not_reportable_because"]
-    else:
-        assert meta["not_reportable_because"]
+    arms = sorted(output.glob(f"{main_mod.FOLDERS[1]}__*"))
+    assert arms, f"no {main_mod.FOLDERS[1]}__* arm directories under {output}"
+    for arm in arms:
+        meta = json.loads((arm / "run_meta.json").read_text())
+        if meta["reportable"]:
+            assert not meta["not_reportable_because"], arm.name
+        else:
+            assert meta["not_reportable_because"], arm.name
 
 
 # ===========================================================================

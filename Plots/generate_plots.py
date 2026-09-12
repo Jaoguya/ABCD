@@ -683,15 +683,25 @@ ABLATION_VARIANTS: Tuple[Tuple[str, str], ...] = (
 #: place the two vocabularies meet, so the figure can carry the paper's names
 #: without any measured data being moved or relabelled.
 #:
-#:   `broadcast`    -> Incremental-All: updates only affected state, but
-#:                     delivers the delta to every FSN. Ablates SELECTIVE.
-#:   `full_rebuild` -> Full-State: every authority recomputes its commitment
-#:                     and the AIM republishes it. Ablates INCREMENTAL.
-#:   `ias`          -> DIAS: the published rule, both halves together.
+#:   `incremental_all` -> Incremental-All: updates only affected state, but
+#:                        delivers the delta to every FSN. Ablates SELECTIVE.
+#:   `full_state`      -> Full-State: every authority recomputes its commitment
+#:                        and the AIM republishes it. Ablates INCREMENTAL.
+#:   `dias`            -> DIAS: the published rule, both halves together.
+#:
+#: RESLUGGED 2026-09-12. These were `broadcast`/`full_rebuild`/`ias`, frozen by
+#: the directories the pre-revision runs were written into. But `--construction`
+#: accepts only `psa`, so the arm names that reach disk are
+#: `psa_experiments.PSA_EXP6_VARIANTS` -- `dias`/`incremental_all`/`full_state`
+#: -- and the old slugs matched no directory. Fig. 6 would have drawn three
+#: "missing variant" notes and no data. The pre-revision Exp. 6 dirs are
+#: superseded (they carry the stipulated policy topology), so nothing measured
+#: is stranded by the rename. Pinned by
+#: test_exp6_figure_uses_the_runners_variant_slugs.
 EXP6_VARIANTS: Tuple[Tuple[str, str], ...] = (
-    ("broadcast", "Incremental-All"),
-    ("full_rebuild", "Full-State Synchronization"),
-    ("ias", "DIAS (proposed)"),
+    ("incremental_all", "Incremental-All"),
+    ("full_state", "Full-State Synchronization"),
+    ("dias", "DIAS (proposed)"),
 )
 
 

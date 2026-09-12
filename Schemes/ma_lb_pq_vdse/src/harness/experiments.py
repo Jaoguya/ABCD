@@ -85,6 +85,20 @@ KB = "KB"
 QPS = "queries/s"
 COUNT = "count"
 
+#: Open decision 3 — the corpus carries no access policy, so the number of
+#: policies per domain is a benchmark decision. 2 is the campaign default and
+#: sizes the `domain_policy` bitmap set that produces Exp. 2's `n_eff`, so
+#: changing it is results-affecting for every experiment that indexes records.
+#:
+#: It is a PARAMETER rather than a literal because Exp. 6's independent variable
+#: is the *fraction* of policies an authority update affects, swept 10%..100%
+#: per SVI. At 2 per domain the corpus yields 8 policies at SVI's d=4, and 10%
+#: of 8 is 0.8 -- the sweep's lowest point is not representable, which is the
+#: sole reason Exp. 6 used to stipulate its policy topology instead of reading
+#: the corpus. Exp. 6 now asks for a resolution that makes every step exact and
+#: keeps the records, shards and FSNs real; nothing else passes the argument.
+DEFAULT_POLICIES_PER_DOMAIN = 2
+
 
 # ===========================================================================
 # Record sources
@@ -106,10 +120,21 @@ class SyntheticRecordSource:
     corpus_type: str = "synthetic"
     corpus_sha256: Optional[str] = None
 
-    def records(self, count: int, *, domains: Optional[int] = None):
+    def records(
+        self,
+        count: int,
+        *,
+        domains: Optional[int] = None,
+        policies_per_domain: Optional[int] = None,
+    ):
         domain_count = len(self.domains) if domains is None else domains
         assignment = extract_mod.BucketedPolicyAssignment(
-            policies_per_domain=2, domains=max(domain_count, 1)
+            policies_per_domain=(
+                DEFAULT_POLICIES_PER_DOMAIN
+                if policies_per_domain is None
+                else int(policies_per_domain)
+            ),
+            domains=max(domain_count, 1)
         )
         # Slicing past the end truncates silently, and a short-but-non-empty
         # slice is still truthy — so an `or` fallback never fires and Exp. 3
@@ -218,7 +243,13 @@ class CorpusRecordSource:
                 for i in range(self._available_domains)
             )
 
-    def records(self, count: int, *, domains: Optional[int] = None):
+    def records(
+        self,
+        count: int,
+        *,
+        domains: Optional[int] = None,
+        policies_per_domain: Optional[int] = None,
+    ):
         from Dataset.corpus import read_corpus
 
         domain_count = self._available_domains if domains is None else domains
@@ -238,7 +269,12 @@ class CorpusRecordSource:
             )
 
         assignment = extract_mod.BucketedPolicyAssignment(
-            policies_per_domain=2, domains=domain_count
+            policies_per_domain=(
+                DEFAULT_POLICIES_PER_DOMAIN
+                if policies_per_domain is None
+                else int(policies_per_domain)
+            ),
+            domains=domain_count,
         )
         names = self.domains[:domain_count]
 

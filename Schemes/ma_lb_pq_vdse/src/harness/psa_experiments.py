@@ -360,7 +360,14 @@ def psa_search_token(profile, tokens):
     )
 
 
-def corpus_world(source, *, records: int, domains: Optional[int] = None):
+def corpus_world(
+    source,
+    *,
+    records: int,
+    domains: Optional[int] = None,
+    policies_per_domain: Optional[int] = None,
+    collect: bool = False,
+):
     """A ``_World`` whose policies come from the corpus, plus its vocabulary.
 
     The policy ids ``extract`` produces are already ``<domain>/polN``, which is
@@ -368,7 +375,17 @@ def corpus_world(source, *, records: int, domains: Optional[int] = None):
     governing set -- and therefore every ``PV_ell`` -- is derived from the real
     corpus rather than stipulated.
 
-    Returns ``(world, vocabulary)`` with the vocabulary sorted for determinism.
+    ``policies_per_domain`` overrides the campaign default only for callers
+    whose measurement is a function of the policy COUNT -- Exp. 6, whose sweep
+    is a fraction of the policy population. Everything else leaves it alone.
+
+    ``collect`` additionally returns the drawn records grouped by their real
+    policy id, so a caller can follow the manuscript's dependency chain
+    ``AA_k -> P_k^aff -> R_k^aff`` on real records instead of synthesising one
+    record per policy. Grouping is free here: the draw already happens.
+
+    Returns ``(world, vocabulary)``, or ``(world, vocabulary, by_policy)`` when
+    ``collect`` is set. The vocabulary is sorted for determinism.
     """
     domain_count = len(source.domains) if domains is None else domains
     names = tuple(source.domains[:domain_count])
@@ -379,9 +396,14 @@ def corpus_world(source, *, records: int, domains: Optional[int] = None):
     roster = sorted(authorities.values())
     seen_policies: set = set()
     vocabulary: set = set()
-    for record in source.records(records, domains=domain_count):
+    by_policy: Dict[str, List[Any]] = {}
+    for record in source.records(
+        records, domains=domain_count, policies_per_domain=policies_per_domain
+    ):
         seen_policies.add(record.policy_id)
         vocabulary.update(record.keywords)
+        if collect:
+            by_policy.setdefault(record.policy_id, []).append(record)
     if not seen_policies:
         raise RuntimeError(
             f"no policy found in {records} corpus records; PV_ell cannot be derived"
@@ -400,6 +422,8 @@ def corpus_world(source, *, records: int, domains: Optional[int] = None):
         commitments={a: bytes([i + 1]) * 32 for i, a in enumerate(roster)},
         policies=tuple(sorted(seen_policies)),
     )
+    if collect:
+        return world, tuple(sorted(vocabulary)), by_policy
     return world, tuple(sorted(vocabulary))
 
 
@@ -987,9 +1011,10 @@ class PsaExp6AffectedRatio:
     """
 
     config: scheme_config.Configuration
-    #: Optional: supplies the keyword vocabulary. The policy topology is
-    #: stipulated regardless, so this arm is not CORPUS_BACKED.
+    #: Required. Supplies the policies, the records under them, and the
+    #: vocabulary -- see `policy_population`.
     source: Any = None
+    CORPUS_BACKED: ClassVar[bool] = True
     name: str = "exp6_authorization_sync"
     number: int = 6
     variable: str = "affected_policy_ratio"
@@ -997,35 +1022,65 @@ class PsaExp6AffectedRatio:
     variant: str = VARIANT_DIAS
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
-        MetricSpec("policies_evolved", COUNT),
+        # RECORDS, not policies: `evolved` increments once per record in
+        # the loop below. The two were indistinguishable while this arm
+        # synthesised one record per policy -- both read 40 -- so the
+        # mislabel was invisible. On real corpus records they differ by the
+        # records-per-policy factor (811 vs 4 at ratio 0.1), and a reader
+        # would have taken 811 as a policy count.
+        MetricSpec("records_evolved", COUNT),
         MetricSpec("entries_retokenized", COUNT),
         MetricSpec("delivered_kb", KB),
         MetricSpec("fsns_touched", COUNT),
     )
-    #: Policy population. Large enough that a 10% step is a whole number.
-    #: The policy population the ratio is taken over.
+    #: The policy population the ratio is taken over, and it is now READ FROM
+    #: THE CORPUS rather than stipulated.
     #:
-    #: **WHY THIS IS STIPULATED AND NOT READ FROM THE CORPUS.** This experiment
-    #: sets the governing sets itself (`with_overrides` below) so that exactly
-    #: `ratio` of policies depend on the moved authority — that control IS the
-    #: measurement. It therefore cannot inherit the corpus's policy topology.
+    #: What had to be separated to get here. Two things were conflated:
     #:
-    #: It also cannot inherit its policy COUNT. `extract` assigns
-    #: `policies_per_domain=2`, so the corpus yields **8** policies at §VI's
-    #: four domains, and §VI Exp. 6 sweeps the affected ratio "from 10% to
-    #: 100%" — 10% of 8 is one policy, i.e. 12.5%. The sweep's lowest point is
-    #: not representable on the corpus's own policy set, so a population of 40
-    #: is stipulated to make 10% exact.
+    #: 1. **Which** policies the moved authority governs. That is the
+    #:    independent variable -- `with_overrides` below sets it so exactly
+    #:    `ratio` of the population depends on `moved`. It is stated by
+    #:    construction in any honest version of this experiment, because the
+    #:    ratio is what the x-axis IS.
+    #: 2. **How many** policies exist, and **which records, shards and FSNs**
+    #:    sit under them. That is not the variable, and it was being invented
+    #:    along with (1): one synthetic record per policy, so
+    #:    `entries_retokenized` was `affected_count * keywords_per_record` --
+    #:    linear in the ratio by construction rather than by measurement.
     #:
-    #: Consequence, stated rather than hidden: this arm is **not**
-    #: `CORPUS_BACKED`. Its keywords are the corpus's (below), but its policy
-    #: dimension is constructed, so it prices the DIAS propagation rule and not
-    #: the corpus. That is legitimate for a proposed-scheme-only ablation —
-    #: §VI Exp. 6 compares three arms of one scheme, not five schemes — but it
-    #: means the run stays non-reportable and §VI must say so.
+    #: Only (1) needs stipulating. (2) comes from the corpus:
+    #: `BucketedPolicyAssignment` hashes the patient pseudonym, so a patient's
+    #: records are governed together -- which is what an access policy over
+    #: clinical data means -- and `R_k^aff` becomes the real records under the
+    #: affected policies, with the real skew in how many records each policy
+    #: carries. The chain `AA_k -> P_k^aff -> R_k^aff -> S_k^aff -> F_k^aff` is
+    #: then real from `P` onward.
+    #:
+    #: **Why the resolution is 40 and not the campaign's 8.** The corpus admits
+    #: any policy count; the campaign default of `policies_per_domain=2` yields
+    #: 8 at §VI's d=4, and §VI sweeps 10%..100%. 10% of 8 is 0.8 -- not
+    #: representable, and that single fact is why this arm used to be
+    #: stipulated. `AFFECTED_RATIOS` needs a population divisible by 20, so 40
+    #: policies (10 per domain at d=4) makes every step exact: 4, 10, 20, 30,
+    #: 40. The policy count is a benchmark decision either way (open decision
+    #: 3); choosing the resolution that makes the manuscript's own sweep exact
+    #: is the defensible one, and `DEFAULT_POLICIES_PER_DOMAIN` is untouched so
+    #: no other experiment moves.
+    #:
+    #: Consequence: this arm IS `CORPUS_BACKED`, inherits the corpus SHA and
+    #: `corpus_type: synthea`, and can therefore be reportable.
     policy_population: int = 40
     keywords_per_record: int = 6
     fog_search_nodes: int = 4
+    #: Records drawn to populate the policies. Must be large enough that every
+    #: one of `policy_population` buckets is actually hit -- an empty policy
+    #: would silently shrink the population the ratio is taken over.
+    #: 8000 over 40 policies is ~200 records each, deliberately NOT capped to an
+    #: equal count per policy: an equal cap would make the records under the
+    #: affected policies exactly `affected_count x cap`, which is the same
+    #: linear-by-construction artefact as one record per policy, just scaled.
+    sample_records: int = 8000
 
     def __post_init__(self) -> None:
         if self.variant not in PSA_EXP6_VARIANTS:
@@ -1036,17 +1091,36 @@ class PsaExp6AffectedRatio:
 
     def prepare(self, value: Any) -> Any:
         ratio = float(value)
-        per_domain = self.policy_population // len(DOMAIN_NAMES)
-        world = build_world(policies_per_domain=per_domain)
-        # Keywords from the corpus; policy topology stipulated — see
-        # `policy_population` for why the two cannot both come from the corpus.
-        _cw, vocabulary = corpus_world(
-            self.source, records=EXP1_SAMPLE_RECORDS,
-            domains=int(self.config.defaults.domains),
-        ) if self.source is not None else (None, None)
-        if not vocabulary:
-            vocabulary = tuple(f"kw:{i:05d}" for i in range(2006))
+        if self.source is None:
+            raise ValueError(
+                "Exp. 6 reads its policies, records and vocabulary from the "
+                "corpus; pass the same source build_deployment is given"
+            )
+        domain_count = int(self.config.defaults.domains)
+        # The resolution that makes every AFFECTED_RATIOS step a whole number of
+        # policies -- see `policy_population`. Ceil so a smaller d still reaches
+        # the population rather than silently under-filling it.
+        per_domain = -(-self.policy_population // max(1, domain_count))
+        world, vocabulary, by_policy = corpus_world(
+            self.source,
+            records=self.sample_records,
+            domains=domain_count,
+            policies_per_domain=per_domain,
+            collect=True,
+        )
         policies = list(world.policies)
+        # An unhit bucket would shrink the population the ratio is taken over,
+        # making "10%" mean 10% of something smaller than the figure claims.
+        expected = per_domain * domain_count
+        if len(policies) != expected:
+            raise RuntimeError(
+                f"Exp. 6 drew {self.sample_records} corpus records and saw "
+                f"{len(policies)} of {expected} policies "
+                f"({per_domain}/domain x d={domain_count}). The affected-policy "
+                f"ratio is a fraction of the population, so a missing policy "
+                f"would silently redefine every point on the x-axis. Raise "
+                f"`sample_records`."
+            )
         roster = sorted(world.authorities.values())
         moved, other = roster[0], roster[1]
 
@@ -1062,31 +1136,38 @@ class PsaExp6AffectedRatio:
 
         scheme = _keyed_scheme()
         records = []
-        for rid, policy in enumerate(policies):
+        # R_k^aff -- the REAL records under each policy, with the corpus's own
+        # keyword sets and its own skew in how many records a policy carries.
+        # One synthetic record per policy used to make `entries_retokenized`
+        # exactly `affected_count * keywords_per_record`, i.e. linear in the
+        # ratio by construction; the retokenization cost is now a function of
+        # what the affected policies actually govern.
+        #
+        # Policies are taken in sorted order, so which policies land in the
+        # affected set is deterministic and reproducible across runs and hosts.
+        for policy in policies:
             domain = policy.split("/", 1)[0]
             pv = world.pv(policy)
-            cid = f"bafyPSA{rid:08d}"
-            # REAL keywords, so the hashed inputs are the corpus's own lengths
-            # and distribution even though the policy topology is stipulated.
-            keywords = [
-                vocabulary[(rid * self.keywords_per_record + k) % len(vocabulary)]
-                for k in range(self.keywords_per_record)
-            ]
-            records.append(
-                dict(
-                    cid=cid, policy=policy, domain=domain, keywords=keywords,
-                    pv=pv,
-                    entries=[
-                        psa_records.PolicyStateIndexEntry(
-                            token=scheme.index_token(
-                                w, policy_id=policy, pv=pv, domain=domain
-                            ),
-                            cid=cid, policy_id=policy, pv=pv,
-                        )
-                        for w in keywords
-                    ],
+            for record in by_policy[policy]:
+                cid = f"bafyPSA{record.record_id:08d}"
+                keywords = list(dict.fromkeys(record.keywords))[
+                    : self.keywords_per_record
+                ]
+                records.append(
+                    dict(
+                        cid=cid, policy=policy, domain=domain,
+                        keywords=keywords, pv=pv,
+                        entries=[
+                            psa_records.PolicyStateIndexEntry(
+                                token=scheme.index_token(
+                                    w, policy_id=policy, pv=pv, domain=domain
+                                ),
+                                cid=cid, policy_id=policy, pv=pv,
+                            )
+                            for w in keywords
+                        ],
+                    )
                 )
-            )
         # F^aff -- the FSN layer the dependency chain ends at. One shard per
         # node, domains assigned round-robin the way `assign_domains_to_fsns`
         # does, so at d = m = 4 each node holds exactly one domain. Without a
@@ -1228,7 +1309,7 @@ class PsaExp6AffectedRatio:
         return Sample(
             primary=elapsed / 1e6,
             secondaries={
-                "policies_evolved": float(evolved),
+                "records_evolved": float(evolved),
                 "entries_retokenized": float(retokenized),
                 "delivered_kb": delivered_bytes / 1024.0,
                 # DISTINCT nodes, which is what `F_k^aff` is and what Option D's
@@ -2005,6 +2086,12 @@ def build(
         # oblivious arms' behaviour too. Fig. 8(c) was therefore measuring one
         # scheduler against itself.
         if number in (7, 8) and variant:
+            return cls(config=config, source=source, variant=variant)
+        # Exp. 6 became CORPUS_BACKED on 2026-09-12, which moved it into THIS
+        # branch. Its DIAS propagation arm must still be carried through, or the
+        # move would have reintroduced the 7-8 defect on a third experiment:
+        # three arms built at the default, written to three directories.
+        if number == 6 and variant:
             return cls(config=config, source=source, variant=variant)
         return cls(config=config, source=source)
     if number == 1 and variant:
