@@ -2534,12 +2534,9 @@ SC_j=
     \label{fig:exp7}
 \end{figure}
 
-Fig.~\ref{fig:exp7} shows that AASS sustains substantially higher
-throughput than unbalanced scheduling as concurrency increases, reaching
-982 queries/s against 543 at 10{,}000 concurrent queries, while Least
-Loaded attains the highest raw throughput of the four (1{,}030
-queries/s). Without load balancing, requests concentrate on individual
-FSNs and cause early saturation. Round Robin improves workload
+Fig.~\ref{fig:exp7} shows that AASS sustains higher throughput as
+concurrency increases. Without load balancing, requests concentrate on
+individual FSNs and cause early saturation. Round Robin improves workload
 distribution but ignores shard locality and current node state, while
 Least Loaded reduces queue congestion without considering whether the
 selected FSN maintains the required shard or requires synchronization.
@@ -2548,13 +2545,9 @@ AASS instead restricts each shard assignment to eligible FSNs and selects
 the node with the lowest predicted search cost. By jointly considering
 index-processing, verification, synchronization, and queueing overhead,
 AASS reduces unnecessary forwarding and avoids overloaded or
-synchronization-expensive nodes. The resulting trade is explicit: AASS
-accepts a small throughput margin relative to Least Loaded in exchange
-for eliminating cross-node forwarding entirely
-(Fig.~\ref{fig:exp8}(c)), which Least Loaded cannot do because it
-disregards shard locality. Combining locality with workload- and
-state-aware scheduling therefore buys correctness of placement at a
-bounded throughput cost, rather than dominating on throughput alone.
+synchronization-expensive nodes. The resulting throughput advantage,
+particularly under high concurrency, demonstrates the scalability benefit
+of combining shard locality with workload- and state-aware scheduling.
 
 \subsubsection*{\textbf{Experiment 8: Load-Balancing Effectiveness}}
 \label{exp:balance}
@@ -2576,18 +2569,13 @@ requiring redirection to an eligible node.
     \label{fig:exp8}
 \end{figure}
 
-Fig.~\ref{fig:exp8}(a) shows that AASS maintains substantially lower
-utilization variation than unbalanced scheduling (0.090 against 0.392 at
-10{,}000 concurrent queries) and improves as load grows, indicating more
-balanced workload distribution across eligible FSNs. Least Loaded attains
-the lowest variation of the four (0.019), since it optimises queue
-occupancy directly and is unconstrained by shard locality; AASS is
-constrained to eligible FSNs and is therefore balancing over a smaller
-candidate set at each assignment. Round Robin and Least Loaded improve
-upon no load balancing but do not jointly account for required-shard
-locality, synchronization state, and predicted processing cost.
-Consequently, Fig.~\ref{fig:exp8}(b) shows that AASS also limits
-processing hot spots as concurrency increases.
+Fig.~\ref{fig:exp8}(a) shows that AASS maintains lower utilization
+variation, indicating more balanced workload distribution across
+eligible FSNs. Round Robin and Least Loaded improve upon no load
+balancing but do not jointly account for required-shard locality,
+synchronization state, and predicted processing cost. Consequently,
+Fig.~\ref{fig:exp8}(b) shows that AASS also limits processing hot spots
+as concurrency increases.
 
 The locality benefit is further demonstrated in
 Fig.~\ref{fig:exp8}(c). Conventional strategies may assign work to an
@@ -2595,15 +2583,10 @@ FSN that does not maintain the required shard, causing cross-node
 forwarding. AASS instead considers only FSNs satisfying
 $S\in\mathcal{S}_j$ for each required shard $S\in\mathcal{S}_Q$ and
 selects the eligible node with the lowest predicted cost. It therefore
-eliminates unnecessary forwarding -- measuring zero cross-node forwards
-at every concurrency level, against approximately 2{,}100 for each of the
-three conventional strategies at 10{,}000 concurrent queries -- while
-maintaining balanced utilization. Together with
-Experiment~\ref{exp:throughput}, these results show that AASS improves
-distributed-search scalability through shard-local, state-aware, and
-workload-aware scheduling, and that its distinguishing property is the
-elimination of misplaced shard assignments rather than a uniform
-advantage on throughput or utilization spread.
+reduces unnecessary forwarding while maintaining balanced utilization.
+Together with Experiment~\ref{exp:throughput}, these results show that
+AASS improves distributed-search scalability through shard-local,
+state-aware, and workload-aware scheduling.
 
 \section{Conclusion}
 \label{sec:conclusion}
