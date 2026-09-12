@@ -7,8 +7,8 @@
 # global.yaml defaults).
 #
 # AUTHORITY. `Overleaf/MA-LB-PQ-VDSE.tex` §VI is what `published` means; this
-# file is synced to it, most recently 2026-09-07. `SystemConfiguration.md` is
-# the operator's guide and carries the rest of the reasoning. (`SystemConfiguration.md` was
+# file is synced to it, most recently 2026-09-07. skill.md is
+# the operator's guide and carries the rest of the reasoning. (skill.md was
 # deleted 2026-09-07; comments below no longer cite it.)
 #
 # Provenance key for every entry below:
@@ -17,8 +17,8 @@
 #   benchmark  — a benchmark choice; NOT specified in any paper
 #
 # CHANGING A VALUE HERE IS RESULTS-AFFECTING and invalidates the results.csv
-# files measured under the old one. Record any change in `needfix.md` and, if
-# it moves a number, in `.claude/skills/bug-sweep/DECISIONS.md`.
+# files measured under the old one. Record any change in the scheme documents and, if
+# it moves a number, in `.claude/skills/bug-sweep/the scheme documents.
 #
 # DELIBERATELY PERMISSIVE. Sweeps are the points the FIGURES draw, not a
 # whitelist: a scheme may measure a superset (several baselines already do) and
@@ -100,12 +100,31 @@ experiments:
   exp3_crossdomain_scalability:
     variable: domains
     values: [2, 4, 6, 8, 10]                      # published: §VI "2 to 10"
+    # PUBLISHED CONVENTION, benchmark VALUE. SVI Exp. 3: "The query size and
+    # per-domain index size are fixed to isolate cross-domain search overhead."
+    # PER-DOMAIN, not total -- so total data GROWS with d and each domain's
+    # shard stays the same size at every point.
+    #
+    # The five schemes previously held OPPOSITE quantities constant: all four
+    # baselines fixed TOTAL at 100,000 and sharded by d, so per-domain SHRANK
+    # 50,000 -> 10,000 and Scheme 35's latency FELL as d grew; the proposed
+    # scheme fixed per-domain at 4 records. A 2,500x data disparity on one axis,
+    # with the curve directions set by the two sizing rules rather than by the
+    # schemes.
+    #
+    # The VALUE is a benchmark choice (SVI states the convention, not the
+    # number): 10,000 keeps total at 100,000 when d=10, which is what the
+    # baselines already indexed, so the campaign cost is unchanged.
+    # RESULTS-AFFECTING: the banked baseline Exp. 3 results PREDATE this and
+    # were measured under the fixed-total rule.
+    held_constant:
+      per_domain_index_size: 10000                # benchmark: see above
     schemes: [ma_lb_pq_vdse, guo_vdsse, thingom_pq_abse, perera_lv_pqabse, yue_ge]
   exp4_verification_overhead:
     variable: returned_results
     values: [10, 50, 100, 500, 1000]              # published: §VI "10 to 1000"
     # yue_ge = Peony++ = Scheme [30] in the current manuscript (it was cited as
-    # Ref[55] before the 2026-09-06 re-sync; §VI now reads
+    # Scheme 30 before the 2026-09-06 re-sync; §VI now reads
     # "Scheme~\cite{ref30} (Peony++)"). Added to Exp. 4 on 2026-08-28 -- it has
     # a scheme-native Verify, so Exp. 4 has a third participant.
     #
@@ -128,40 +147,52 @@ experiments:
     #      `scheme.verify_record` is its verification half alone and is what
     #      the runner times, so Ref[54]'s number covers the same work as every
     #      other arm's. `retrieve_verify` still performs both halves.
-    schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge, perera_lv_pqabse]
-  exp9_verification_granularity:
-    variable: tampered_records
-    # Fixed result-set size, swept tamper count. Exp. 4 asks what verification
-    # COSTS; this asks what it BUYS. Guo and Ge verify with a single accumulator
-    # over the complete result set, so a failure is all-or-nothing -- the batch
-    # is discarded and no record can be named. Ours verifies a Merkle path per
-    # record, so the failed records are identified and excised.
+    # ---- Arm `granularity` -- SVI Fig. 4(b) ----------------------------------
+    # FOLDED IN 2026-09-12. This was `exp9_verification_granularity`, an
+    # experiment number Section VI does not define: the paper has one Experiment
+    # 4 making a two-part claim, drawn as a two-panel figure. Panel (a) sweeps
+    # `r` and asks what verification COSTS; panel (b) pins `r` and sweeps the
+    # tamper count `t`, asking what it BUYS. Two sweeps, so two arms of one
+    # experiment rather than two experiments.
     #
-    # t = 0 is deliberately NOT swept: the figure is log-log, and the no-tamper
-    # case is already Exp. 4. src/tests pin the t=0 behaviour instead.
-    values: [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
+    # Scheme 35 and Scheme 30 verify with a single accumulator over the complete
+    # result set, so a failure is all-or-nothing -- the batch is discarded and no
+    # record can be named. Ours verifies a Merkle path per record, so the failed
+    # records are identified and excised. That contrast is the panel.
+    #
+    # t = 0 is deliberately NOT swept: the figure is log-log and the no-tamper
+    # case is arm (a). src/tests pin the t=0 behaviour instead.
+    tamper_values: [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000]
     held_constant:
       returned_results: 20000
-    schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
+    schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge, perera_lv_pqabse]
   exp5_keyword_update:
     variable: keyword_document_pairs
     values: [100, 1000, 10000, 100000]            # published: §VI "10^2-10^5"
     # perera_lv_pqabse (Ref[54]) excluded 2026-08-27: no incremental-update
     # primitive in the paper -- indexes are (re)built at Phase 3, no
-    # standalone update algorithm to measure. Was zhuang's slot; not carried
-    # over, see debug_history.md.
+    # standalone update algorithm to measure.
     # yue_ge (Scheme [30], Peony++) added 2026-08-28: has a native incremental
     # Add (new batch appended, nothing rewritten), which is what Exp. 5 measures.
     schemes: [ma_lb_pq_vdse, guo_vdsse, yue_ge]
   exp6_authorization_sync:
-    variable: authorization_updates
-    values: [100, 1000, 10000, 100000]            # published: §VI "10^2-10^5"
+    # CHANGED 2026-09-11 to the variable §VI actually states. Exp. 6 reads
+    # "the fraction of policies affected by an authority-state update increases
+    # from 10% to 100%" -- a RATIO, not an update count. The old
+    # `authorization_updates` axis (10^2-10^5) was divergence D8: the three arms
+    # corresponded but the x-axis did not, so banked Exp. 6 data could not be
+    # plotted against the manuscript's stated axis at all.
+    #
+    # RESULTS-AFFECTING for the proposed scheme only. No baseline runs Exp. 6
+    # (see `schemes:` below), so no baseline result is invalidated.
+    variable: affected_policy_ratio
+    values: [0.1, 0.25, 0.5, 0.75, 1.0]           # published: §VI "10% to 100%"
     # perera_lv_pqabse (Ref[54]) excluded 2026-08-27: the paper explicitly
     # self-discloses NO fine-grained/immediate revocation, only coarse
     # epoch-based key evolution (whole-epoch invalidation, not per-update
     # sync) -- using it here would claim a capability it doesn't have, the
     # same mistake already caught and fixed for Ref[41]'s PQ claim. Was
-    # zhuang's slot; not carried over, see debug_history.md.
+    # excluded.
     #
     # No baseline: Exp. 6 is a proposed-scheme-only ablation, like Exp. 7-8.
     # A baseline here needs a fine-grained authorization-sync primitive, and

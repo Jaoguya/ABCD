@@ -4,7 +4,7 @@ Variable:  returned records ``r`` = 10 → 1000
 Primary:   latency (ms)
 Secondary: proof size (KB), proof elements
 
-Measurement boundary (README §5, Exp. 4):
+Measurement boundary (skill.md, Exp. 4):
     Client-side verification only.
 
 For Guo, verification is the XOR-accumulated tag check from Algorithm 4
@@ -20,7 +20,7 @@ Verification is O(r): one F3 (HMAC-SHA256) evaluation per returned
 document per proof.  Proof size is constant (two XOR tags sized by
 crypto.yaml verification_tag_bits) and does NOT grow with r.
 
-SCHEME.md Exp. 4: "Use this scheme's own verification mechanism as published."
+35.md Exp. 4: "Use this scheme's own verification mechanism as published."
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ SECONDARY_NAMES = ["proof_size_kb", "proof_elements"]
 # Variable range: returned records
 VARIABLE_RANGE = [10, 20, 50, 100, 200, 500, 1000]
 
-# README §6 default index size, matching exp3_crossdomain.DEFAULT_N.
+# skill.md default index size, matching exp3_crossdomain.DEFAULT_N.
 DEFAULT_N = 100_000
 
 
@@ -89,7 +89,7 @@ def run(
     points: Optional[str] = None,
 ) -> None:
     """Run Experiment 4: Verification Overhead."""
-    # Setup — not timed, and SCOPED to the README §6 default index size.
+    # Setup — not timed, and SCOPED to the skill.md default index size.
     #
     # This indexed the ENTIRE corpus (1,143,792 records). Guo's forward index
     # holds a t-punctured GGM key per document — 50.5 KB at the configured

@@ -18,7 +18,7 @@ Phase VIII Step 2:
     Commit_i* = H( Root_i ‖ PID_i ‖ VID_i ‖ AuthRoot_U )
     accept iff Commit_i* = Commit_i
 
-**This is the Exp. 4 measured path.** README §5: "client-side verification only:
+**This is the Exp. 4 measured path.** global.yaml: "client-side verification only:
 Merkle proof, ``Commit_i*`` recomputation, chain consistency. IPFS fetch and
 decryption excluded." Steps 4-6 (retrieval, decryption, audit logging) are
 therefore not implemented here, and the timings this module reports cover only
@@ -26,7 +26,7 @@ what Exp. 4 is allowed to count.
 
 ---
 
-**Two blockers in Step 2 as published.** Both are recorded in ``SCHEME.md``; both
+**Two blockers in Step 2 as published.** Both are recorded author decisions; both
 would make Exp. 4 report a 0% acceptance rate if implemented literally.
 
 1. ``Commit_i*`` is recomputed with **``AuthRoot_U``**, the *Data User's*
@@ -42,7 +42,7 @@ would make Exp. 4 report a 0% acceptance rate if implemented literally.
    catalog.
 
 2. ``VID_i = VID_U`` equates a **record's** version with a **user's** profile
-   version — two of the four distinct counters ``VID`` denotes (``SCHEME.md``).
+   version — two of the four distinct counters ``VID`` denotes.
    Requiring equality makes verification fail whenever they differ, which is the
    normal case. Implemented as :func:`check_version_equality` so it can be
    measured, with the alternative (verify the record's version against the
@@ -210,7 +210,7 @@ class VerificationResult:
 
     @property
     def proof_size_kb(self) -> float:
-        """README §9 reports sizes in KB."""
+        """global.yaml reports sizes in KB."""
         return self.proof_size_bytes / 1024.0
 
     def step(self, name: str) -> StepResult:

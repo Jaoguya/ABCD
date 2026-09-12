@@ -5,7 +5,7 @@
 # Run this ONCE on a fresh m6i.xlarge, confirm the primitive tests pass, then
 # snapshot the instance as an AMI and launch the whole fleet from it.
 #
-# Building once and cloning is not just faster. It makes README §1's parity
+# Building once and cloning is not just faster. It makes skill.md's parity
 # claim exact: every node is a byte-identical image, which is a stronger
 # statement in §V than "we installed the same packages on each host".
 #
@@ -26,7 +26,7 @@ log "Checking the OS is what the benchmark specifies"
 # -----------------------------------------------------------------------------
 . /etc/os-release
 if [[ "${VERSION_ID:-}" != "22.04" ]]; then
-    echo "WARNING: this is ${PRETTY_NAME}, but README §1 specifies Ubuntu 22.04 LTS."
+    echo "WARNING: this is ${PRETTY_NAME}, but skill.md specifies Ubuntu 22.04 LTS."
     echo "charm-crypto (required for Ref[41]'s Type-I pairing) is fragile and"
     echo "is only expected to build on 22.04 with Python 3.11."
     read -rp "Continue anyway? [y/N] " reply

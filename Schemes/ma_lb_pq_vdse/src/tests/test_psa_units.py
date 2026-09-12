@@ -12,7 +12,7 @@ That is the same class of defect as ``d1cdf9c`` (Exp. 4's ``r`` counted index
 entries, not returned records) and the 2026-09-05 Exp. 9 fix (the sweep counted
 entries where the baselines counted documents): the number is plausible, the
 figure renders, and the axis quietly means something other than what the
-caption says. README §5 records both. These tests are the guard for the third
+caption says. global.yaml records both. These tests are the guard for the third
 instance.
 """
 
@@ -39,18 +39,32 @@ def config():
     return scheme_config.load()
 
 
+@pytest.fixture
+def source():
+    """The record source the corpus-backed PSA experiments need.
+
+    Exps. 3, 4 and 5 became corpus-backed on 2026-09-10 when they stopped
+    inventing `kw:00042` keywords and `hospital/pol0` policies. Exp. 6 takes one
+    for its vocabulary but stipulates its policy topology, so it is not
+    CORPUS_BACKED — see `PsaExp6AffectedRatio.policy_population`.
+    """
+    from Schemes.ma_lb_pq_vdse.src.harness import experiments as option_d_mod
+
+    return option_d_mod.SyntheticRecordSource()
+
+
 # ===========================================================================
 # Exp. 5 — the swept k must be the work done, in BOTH constructions
 # ===========================================================================
 @pytest.mark.parametrize("k", [100, 1000])
-def test_psa_exp5_retokenizes_the_k_it_was_asked_for(config, k):
+def test_psa_exp5_retokenizes_the_k_it_was_asked_for(config, source, k):
     """The x-axis is (keyword, document) pairs; so must the work be.
 
     Sized by affected entries rather than by total entries: records whose
     policy no governing authority touches are still built (the skip path is
     part of what Exp. 5 times) but do not count toward ``k``.
     """
-    experiment = psa.PsaExp5ReTokenization(config=config)
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     sample = experiment.measure(experiment.prepare(k))
     applied = sample.secondaries["entries_retokenized"]
     assert applied >= k, (
@@ -63,13 +77,13 @@ def test_psa_exp5_retokenizes_the_k_it_was_asked_for(config, k):
     assert applied < k + experiment.keywords_per_record
 
 
-def test_psa_exp5_still_exercises_the_unaffected_path(config):
+def test_psa_exp5_still_exercises_the_unaffected_path(config, source):
     """Sizing by affected entries must not turn the pool all-dependent.
 
     If every record were governed by the moved authority, eq:unaffected-policy
     would never be taken and Exp. 5 would silently stop measuring the skip.
     """
-    experiment = psa.PsaExp5ReTokenization(config=config)
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     prepared = experiment.prepare(experiment.values[0])
     world = prepared["world"]
     moved = sorted(world.authorities.values())[0]
@@ -81,7 +95,7 @@ def test_psa_exp5_still_exercises_the_unaffected_path(config):
 
 
 @pytest.mark.parametrize("k", [100, 1000])
-def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, k):
+def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, source, k):
     """The cross-check that makes the two Exp. 5 curves comparable.
 
     ``psa/__init__.py`` says the two curves "against the same ``k``" are the
@@ -93,7 +107,7 @@ def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, k):
     theirs = option_d.build_experiment(
         5, config, option_d.SyntheticRecordSource()
     )
-    ours = psa.PsaExp5ReTokenization(config=config)
+    ours = psa.PsaExp5ReTokenization(config=config, source=source)
     rewritten = theirs.measure(theirs.prepare(k)).secondaries["entries_rewritten"]
     retokenized = ours.measure(ours.prepare(k)).secondaries["entries_retokenized"]
     assert abs(rewritten - retokenized) <= ours.keywords_per_record, (
@@ -106,7 +120,7 @@ def test_both_constructions_agree_on_what_one_pair_of_exp5_is(config, k):
 # ===========================================================================
 # Exp. 6 — what the PRIMARY metric can and cannot separate
 # ===========================================================================
-def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
+def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config, source):
     """§VI Exp. 6, as an ordering the figure must show.
 
     The manuscript defines three configurations and claims a strict ranking:
@@ -120,57 +134,111 @@ def test_psa_exp6_arms_rank_the_way_the_manuscript_says(config):
     evidence in the primary metric. The arms now deliver to real `_PsaShard`
     recipients that ingest the message, so the extra fan-out is work.
     """
-    def median(variant, ratio):
+    def arm(variant, ratio):
         import statistics
-        experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant)
+        experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant, source=source)
         prepared = experiment.prepare(ratio)
         for _ in range(2):
             experiment.measure(prepared)          # warm
-        return statistics.median(
+        latency = statistics.median(
             experiment.measure(prepared).primary for _ in range(9)
         )
+        return latency, experiment.measure(prepared).secondaries["delivered_kb"]
 
-    dias = median(psa.VARIANT_DIAS, 0.1)
-    everyone = median(psa.VARIANT_INCREMENTAL_ALL, 0.1)
-    full = median(psa.VARIANT_FULL_STATE, 0.1)
-    assert dias <= everyone, (
-        f"unnecessary propagation must cost something: DIAS {dias:.3f} ms vs "
-        f"Incremental-All {everyone:.3f} ms"
+    dias, dias_kb = arm(psa.VARIANT_DIAS, 0.1)
+    everyone, everyone_kb = arm(psa.VARIANT_INCREMENTAL_ALL, 0.1)
+    full, full_kb = arm(psa.VARIANT_FULL_STATE, 0.1)
+
+    # SELECTIVE PROPAGATION, asserted on DELIVERED PAYLOAD -- where the claim
+    # actually holds. Measured: 3.52 / 14.06 / 141.05 KB, i.e. a clean 4x from
+    # the 1-vs-4 FSN fan-out and 40x for full reconstruction, identical across
+    # repeated runs.
+    assert dias_kb < everyone_kb < full_kb, (
+        f"selective propagation must send less: DIAS {dias_kb:.2f} KB vs "
+        f"Incremental-All {everyone_kb:.2f} KB vs Full-State {full_kb:.2f} KB"
     )
+
+    # INCREMENTAL EVOLUTION, asserted on latency -- an 11x gap that reproduces.
     assert everyone < full, (
         f"full state reconstruction must dominate: Incremental-All "
         f"{everyone:.3f} ms vs Full-State {full:.3f} ms"
     )
 
+    # DIAS vs Incremental-All in LATENCY is deliberately NOT asserted.
+    #
+    # It used to be, and the test failed ~15% of the time (measured: 8/10 and
+    # 9/10 passes over ten isolated runs at two different commits) -- because
+    # the two do the same sender-side work and differ only in how many local
+    # recipients they hand a message to. The measured gap is ~2%
+    # (0.9425 vs 0.9645 ms), i.e. noise, which `generate_plots.py` also records
+    # ("the campaign measured +2%, a local rerun measured -4.5%").
+    #
+    # A 15%-flaky assertion is worse than none: it makes every regression run
+    # ambiguous and trains a reader to re-run until green. The claim it was
+    # trying to make is real, and it is the payload assertion above.
+    # SV must therefore say the selective advantage is in BYTES, not in time.
 
-def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config):
+
+def test_psa_exp6_dias_advantage_narrows_toward_a_full_ratio(config, source):
     """§VI: the advantage "narrows because a larger portion of the system
-    becomes dependency relevant". At 100% DIAS and Full-State evolve the same
-    set, so the latency ratio must fall toward 1."""
-    def ratio_at(affected):
-        import statistics
+    becomes dependency relevant".
+
+    Asserted on the WORK DONE, which is exact, rather than on latency, which is
+    not. This compared median latencies with `rel=0.35` and failed ~7% of the
+    time (14/15 in isolation) — the second timing-ratio assertion in this file
+    to do so. Measured, the work ratios are integers:
+
+        policies_evolved     full/dias = 10.000 @0.1  ->  1.000 @1.0
+        entries_retokenized  full/dias = 10.000 @0.1  ->  1.000 @1.0
+
+    At ratio 1.0 the two arms evolve exactly the same set (40 policies, 240
+    entries), so the ratio is exactly 1 — which is what §VI's sentence claims,
+    stated as a fact about work rather than a hope about a clock.
+
+    NOTE FOR §V: the narrowing is NOT total. `delivered_kb` goes 40.1x -> 4.0x,
+    because at 100% DIAS still delivers selectively where Full-State republishes
+    every authority's commitment to every FSN. The INCREMENTAL advantage
+    vanishes at a full ratio; the SELECTIVE advantage does not.
+    """
+    def work_at(affected):
         out = {}
         for variant in (psa.VARIANT_DIAS, psa.VARIANT_FULL_STATE):
-            experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant)
+            experiment = psa.PsaExp6AffectedRatio(config=config, variant=variant, source=source)
             prepared = experiment.prepare(affected)
-            experiment.measure(prepared)
-            out[variant] = statistics.median(
-                experiment.measure(prepared).primary for _ in range(9)
-            )
-        return out[psa.VARIANT_FULL_STATE] / out[psa.VARIANT_DIAS]
+            out[variant] = experiment.measure(prepared).secondaries
+        return out
 
-    assert ratio_at(0.1) > ratio_at(1.0)
-    assert ratio_at(1.0) == pytest.approx(1.0, rel=0.35)
+    sparse, full = work_at(0.1), work_at(1.0)
+    for metric in ("policies_evolved", "entries_retokenized"):
+        sparse_ratio = (sparse[psa.VARIANT_FULL_STATE][metric]
+                        / sparse[psa.VARIANT_DIAS][metric])
+        full_ratio = (full[psa.VARIANT_FULL_STATE][metric]
+                      / full[psa.VARIANT_DIAS][metric])
+        assert sparse_ratio > full_ratio, (
+            f"{metric}: the DIAS advantage must narrow as the affected ratio "
+            f"grows, got {sparse_ratio:.3f} at 0.1 and {full_ratio:.3f} at 1.0"
+        )
+        assert full_ratio == pytest.approx(1.0), (
+            f"{metric}: at a full ratio both arms evolve the same set, so the "
+            f"ratio must be exactly 1, got {full_ratio}"
+        )
+
+    # The selective advantage SURVIVES a full ratio -- see the note above.
+    assert (full[psa.VARIANT_FULL_STATE]["delivered_kb"]
+            > full[psa.VARIANT_DIAS]["delivered_kb"]), (
+        "at ratio 1.0 DIAS still delivers selectively where Full-State "
+        "republishes to every FSN; that advantage does not narrow"
+    )
 
 
-def test_psa_exp6_fsns_touched_is_the_affected_node_set(config):
+def test_psa_exp6_fsns_touched_is_the_affected_node_set(config, source):
     """``F_k^aff``, the last link of the dependency chain — DISTINCT nodes.
 
     It accumulated `fan_out` per evolved policy before, reporting 160 "FSNs
     touched" on a four-node deployment. Option D's metric of the same name
     counts nodes, so the two were not the same quantity under one label.
     """
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -191,7 +259,7 @@ def test_psa_exp6_fsns_touched_is_the_affected_node_set(config):
     )
 
 
-def test_psa_exp6_full_state_redistributes_authority_state(config):
+def test_psa_exp6_full_state_redistributes_authority_state(config, source):
     """§VI: Full-State propagates the authorization/index state to ALL FSNs.
 
     The index half is the policy loop. The authorization half is every OTHER
@@ -204,7 +272,7 @@ def test_psa_exp6_full_state_redistributes_authority_state(config):
     payload is small next to 40 policies' entries, so a hardcoded KB figure
     would be brittle without being any more informative.
     """
-    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -219,9 +287,9 @@ def test_psa_exp6_full_state_redistributes_authority_state(config):
     )
 
 
-def test_psa_exp6_full_state_stays_flat_across_the_ratio(config):
+def test_psa_exp6_full_state_stays_flat_across_the_ratio(config, source):
     """Its cost does not depend on how little changed — that is the point."""
-    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     delivered = {
         round(full.measure(full.prepare(r)).secondaries["delivered_kb"], 3)
         for r in full.values
@@ -229,7 +297,7 @@ def test_psa_exp6_full_state_stays_flat_across_the_ratio(config):
     assert len(delivered) == 1, f"Full-State payload varied with the ratio: {delivered}"
 
 
-def test_psa_exp6_delivered_bytes_are_summed_per_delivery(config):
+def test_psa_exp6_delivered_bytes_are_summed_per_delivery(config, source):
     """Never `payload x fan_out` — the derivation experiments.py records as wrong.
 
     Measured per delivery, so an arm whose messages differ in size cannot be
@@ -237,7 +305,7 @@ def test_psa_exp6_delivered_bytes_are_summed_per_delivery(config):
     where DIAS sends it to the affected ones, so the ratio must track the node
     counts the run actually reports.
     """
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -342,7 +410,7 @@ def test_psa_exp1_figure_draws_one_curve_per_scope(config):
     slugs = dict(plots.variants_for(spec))
     assert set(slugs) == set(psa.PSA_EXP1_VARIANTS)
     # Every arm needs its own style slot or the four curves draw identically
-    # and the figure is unreadable in grayscale (README §10).
+    # and the figure is unreadable in grayscale.
     slots = {plots.ABLATION_STYLE_SLOT.get(label) for label in slugs.values()}
     assert len(slots) == len(slugs) and None not in slots
 
@@ -432,7 +500,7 @@ def _source():
     return option_d_mod.SyntheticRecordSource()
 
 
-def test_psa_deployment_reads_the_same_source_as_option_d(config):
+def test_psa_deployment_reads_the_same_source_as_option_d(config, source):
     """The whole point of the seam.
 
     Before this, every PSA number came from `build_world()` — invented
@@ -482,9 +550,12 @@ def test_psa_shards_are_real_indexes_not_dicts(config):
         config=config, source=_source(), records=80
     )
     total = 0
-    for _node_id, served, index in ours.nodes:
-        assert hasattr(index, "authorized_bitmap"), "not a DynamicSearchIndex"
-        total += index.entry_count
+    # PSA nodes are real `FogSearchNode`s since 2026-09-10, sharing Option D's
+    # Phase I-III scaffolding — that is what lets the AIM check and AASS run
+    # inside the timed path, as §VI Exp. 2 and Exp. 3 describe.
+    for node in ours.nodes:
+        assert hasattr(node.index, "authorized_bitmap"), "not a DynamicSearchIndex"
+        total += node.index.entry_count
     assert total == ours.entry_count > 0
 
 
@@ -501,7 +572,7 @@ def test_psa_exp2_issues_q_times_pu_tokens(config):
     assert issued % q == 0
 
 
-def test_psa_exp2_shares_fewer_posting_lists_than_option_d(config):
+def test_psa_exp2_shares_fewer_posting_lists_than_option_d(config, source):
     """The measured cost of D1 on index structure.
 
     Option D's `H(w)` shares one posting list across every record carrying the
@@ -541,7 +612,7 @@ def test_psa_exp2_survives_the_multiprocess_replay_boundary(config):
     ours = psa_mod.psa_build_deployment(
         config=config, source=_source(), records=40
     )
-    index = ours.nodes[0][2]
+    index = ours.nodes[0].index
     assert pickle.loads(pickle.dumps(index)).entry_count == index.entry_count
     entry = ours.records[0]["entries"][0]
     assert pickle.loads(pickle.dumps(entry)) == entry
@@ -589,7 +660,7 @@ def test_psa_exp7_shards_hold_psa_entries_and_tokens_scale_with_pu(config):
     assert len(trapdoor.tokens) > q
 
 
-def test_psa_exp7_uses_the_same_keyword_count_as_option_d(config):
+def test_psa_exp7_uses_the_same_keyword_count_as_option_d(config, source):
     """Otherwise the comparison measures two workloads, not two constructions.
 
     A draft took q=5 here while Option D's trace takes one keyword, and the
@@ -618,8 +689,8 @@ def test_psa_exp8_shares_the_ablation_and_its_metrics(config):
     assert ours.variable == theirs.variable
 
 
-def test_both_exp7_traces_use_the_published_q(config):
-    """README §6 fixes q=5 from §VI; the trace used ONE keyword until 2026-09-06.
+def test_both_exp7_traces_use_the_published_q(config, source):
+    """global.yaml fixes q=5 from §VI; the trace used ONE keyword until 2026-09-06.
 
     Asserted for BOTH constructions, because the moment they differ the Exp. 7
     comparison measures two workloads rather than two schemes.

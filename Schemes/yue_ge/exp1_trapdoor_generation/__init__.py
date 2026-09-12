@@ -1,1 +1,1 @@
-"""Ref[55] exp1_trapdoor_generation — see runner.py."""
+"""Scheme 30 exp1_trapdoor_generation — see runner.py."""

@@ -1,2 +1,0 @@
-variable_value,primary_mean,primary_ci95,n_eff_mean,n_eff_ci95,entries_traversed_mean,entries_traversed_ci95,prune_ratio_mean,prune_ratio_ci95,n_runs
-50000,19232.735385,7489.192479,4326.566667,1716.642611,1990.8,843.402926,0.27323,0.153745,30

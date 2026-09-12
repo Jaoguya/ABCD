@@ -1,4 +1,4 @@
-"""Aggregation for the experiment harness — README §7.
+"""Aggregation for the experiment harness — global.yaml.
 
 "Report mean ± 95% CI" over 10 runs. Two reviewer checks
 are enforced here rather than left to discipline:
@@ -7,7 +7,7 @@ are enforced here rather than left to discipline:
   takes the sample and nothing else, so there is no parameter through which a
   narrower interval could be supplied.
 * **Outliers are kept.** There is deliberately no trimming, winsorising or
-  filtering function in this module. README §7: "Keep them. If a run fails, record
+  filtering function in this module. global.yaml: "Keep them. If a run fails, record
   ``status=failed`` in ``raw_runs.csv`` and re-run to restore n=10 rather than
   dropping it."
 

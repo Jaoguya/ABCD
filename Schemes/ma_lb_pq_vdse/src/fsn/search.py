@@ -20,7 +20,7 @@ online search cost depends mainly on the effective authorized candidate set
 matched first and filtered after would return identical results and refute its
 own claim, so ``n_eff`` is measured here rather than derived.
 
-**What is timed.** README §5's Exp. 2 rule measures the full online path — AIM
+**What is timed.** global.yaml's Exp. 2 rule measures the full online path — AIM
 check, AASS selection, shard search, response assembly. This module owns the
 third of those and reports its own elapsed time, so the experiment harness can
 attribute latency to a stage rather than to the whole path.
@@ -112,7 +112,7 @@ class SearchResponse:
 
     @property
     def elapsed_ms(self) -> float:
-        """Shard-search latency in ms, the unit README §9 requires."""
+        """Shard-search latency in ms, the unit global.yaml requires."""
         return self.elapsed_ns / 1e6
 
     @property
@@ -242,7 +242,7 @@ def execute_search_across(
     encrypted-search operations over unrelated domains are avoided" claim.
 
     Each node is searched independently and no state crosses between them —
-    README §1 makes them separate processes, and a shared intermediate here would
+    SystemConfiguration.md makes them separate processes, and a shared intermediate here would
     not survive that split.
     """
     responses = []

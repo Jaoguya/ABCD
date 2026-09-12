@@ -1,6 +1,6 @@
-"""Server-side encrypted index for Ref[55] — the pair ``I_c = (A_c, T_c)``.
+"""Server-side encrypted index for Scheme 30 — the pair ``I_c = (A_c, T_c)``.
 
-Ref[55] Algorithm 1, Update line 17: "Send ``I_c <- (A_c, T_c)`` to the server",
+Scheme 30 Algorithm 1, Update line 17: "Send ``I_c <- (A_c, T_c)`` to the server",
 and the server's only job is "Store the received encrypted index by setting
 ``I = I union I_c``".
 

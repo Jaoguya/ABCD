@@ -111,7 +111,7 @@ def optimal_num_hashes(array_bits: int, expected_items: int) -> int:
     """The k minimising false positives for a given load: ``(l/n) * ln 2``.
 
     Provided for sizing OUR scheme's filters. Ref[52]'s k is published and
-    must not be re-derived from this — README §14 forbids tuning a baseline
+    must not be re-derived from this — skill.md forbids tuning a baseline
     away from its published construction.
     """
     if expected_items <= 0:

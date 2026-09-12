@@ -1,11 +1,11 @@
 """ML-KEM-768 (FIPS 203) key encapsulation.
 
 Used by the proposed scheme for post-quantum session key establishment
-(README §1). Provided in the shared layer because ``run_meta.json`` must
+(skill.md). Provided in the shared layer because ``run_meta.json`` must
 record which ML-KEM implementation produced a number, and because Exp. 1's
 measurement rule depends on encapsulation being separable:
 
-    README §5, Exp. 1: "ML-KEM-768 encapsulation runs once at session
+    skill.md, Exp. 1: "ML-KEM-768 encapsulation runs once at session
     establishment and is EXCLUDED; report it separately as a one-time setup
     cost in the text, not inside the per-query curve."
 
@@ -234,7 +234,7 @@ def available_backends() -> dict[str, bool]:
 def measure_setup_cost(repetitions: int = 30) -> dict[str, object]:
     """Time keygen/encapsulate/decapsulate for the separately-reported figure.
 
-    README §5 keeps this OUT of the Exp. 1 curve and asks for it in the text
+    skill.md keeps this OUT of the Exp. 1 curve and asks for it in the text
     as a one-time session-establishment cost. Timings are in milliseconds;
     the ``backend`` key names the implementation that produced them, because
     a number from the pure-Python backend must not be reported.
@@ -244,7 +244,7 @@ def measure_setup_cost(repetitions: int = 30) -> dict[str, object]:
     kem = MLKEM768()
     timings = {"keygen_ms": 0.0, "encapsulate_ms": 0.0, "decapsulate_ms": 0.0}
 
-    for _ in range(5):  # warm-up, discarded (README §7)
+    for _ in range(5):  # warm-up, discarded (skill.md)
         kp = kem.keygen()
         enc = kem.encapsulate(kp.encapsulation_key)
         kem.decapsulate(kp.decapsulation_key, enc.ciphertext)

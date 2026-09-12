@@ -1,11 +1,11 @@
-"""The eight experiments of README §5, as measurable objects.
+"""The eight experiments of global.yaml, as measurable objects.
 
 Each declares its sweep variable, its primary and secondary metrics, an **untimed**
 ``prepare`` and a **timed** ``measure``. The split is the measurement boundary: what
 ``measure`` touches is what the reported number covers, and each class's docstring
 quotes the rule it implements.
 
-The boundaries, from README §5 and ``SCHEME.md``:
+The boundaries, from ``SystemConfiguration.md`` section 5:
 
 * Exp. 1 — online trapdoor generation only; ML-KEM encapsulation excluded.
 * Exp. 2 — AIM check → AASS selection → shard search → response assembly; index
@@ -94,7 +94,7 @@ class SyntheticRecordSource:
     """In-process records with the frozen corpus's shape but none of its content.
 
     ``corpus_type`` is ``"synthetic"``, which makes every run built on it
-    non-reportable — README §4 admits only ``synthea``. This exists so the harness
+    non-reportable — dataset.yaml admits only ``synthea``. This exists so the harness
     can be written and tested while the v2 manifest is missing, not as a substitute
     for the corpus: keyword co-occurrence here is arbitrary, and Exp. 2's ``n_eff``
     depends on exactly that.
@@ -144,23 +144,23 @@ class CorpusRecordSource:
     do not care which one they were given, but with three real differences:
 
     * ``corpus_type`` is ``"synthea"`` and ``corpus_sha256`` is the verified
-      digest, so runs built on it can actually satisfy README §4/§15.
+      digest, so runs built on it can actually satisfy dataset.yaml/§15.
     * Keyword co-occurrence is the corpus's own. Exp. 2's ``n_eff`` depends on
       exactly that, which is why the synthetic source can never stand in for a
       reportable number.
     * It **streams**. ``load_verified_corpus()`` materialises all 1.14M records
-      (~1-2 GB per process — README §14 issue #9); every experiment here needs
+      (~1-2 GB per process); every experiment here needs
       only the first ``count``, so this verifies the digest and then reads
       lazily, taking what it needs and stopping.
 
     DOMAIN LIMIT — a real constraint, deliberately not papered over. The frozen
     corpus carries exactly ``len(per_domain_counts)`` domains (4: balanced
-    whole-organization buckets, README §4). Exp. 3 sweeps ``d = 2..10``. For
+    whole-organization buckets, dataset.yaml). Exp. 3 sweeps ``d = 2..10``. For
     ``d <= 4`` each record keeps its real ``dom``, which is the point of using
     the corpus at all. For ``d > 4`` the corpus simply has no such partition,
     and inventing one by re-bucketing ``rid`` would silently replace real
     institutional boundaries with a synthetic split *while still reporting
-    ``corpus_type: synthea``* — the exact class of misrepresentation README §13
+    ``corpus_type: synthea``* — the exact class of misrepresentation SystemConfiguration.md
     forbids. So it raises instead, naming the decision.
     """
 
@@ -230,7 +230,7 @@ class CorpusRecordSource:
                 f"requested. Splitting it further would replace real "
                 f"institutional boundaries with a synthetic partition while "
                 f"still reporting corpus_type={self.corpus_type!r}, which "
-                f"README §13 forbids. This needs a recorded benchmark decision: "
+                f"SystemConfiguration.md forbids. This needs a recorded benchmark decision: "
                 f"either cap Exp. 3 at d<={self._available_domains}, or "
                 f"regenerate the corpus with more domains and re-freeze "
                 f"(results-affecting), or state in §VI that d>"
@@ -361,7 +361,21 @@ def build_deployment(
             faithful_ops = _BackedGroupOperations(_backend)
         except Exception:  # noqa: BLE001 - absence is expected off the host
             group_provider = _unfaithful_group_provider
-    domain_count = len(source.domains) if domains is None else domains
+    # §VI's FOUR DOMAINS, from the config — not the corpus's width.
+    #
+    # This read `len(source.domains)`, which for the frozen corpus is **10**
+    # (`dataset_manifest.json`'s `per_domain_counts`). So Exps. 2, 4, 5, 7 and 8
+    # ran on ten domains and ten AAs while §VI says "four administrative
+    # healthcare domains" and `global.yaml` says `defaults.domains: 4` and
+    # `authorities.count: 4`. Three sources, two answers, and the code followed
+    # neither of the two that agreed.
+    #
+    # Resolved 2026-09-10 in the paper's favour. Exp. 3 is unaffected: it passes
+    # `domains=` explicitly because §VI sweeps d = 2…10 for that experiment.
+    # RESULTS-AFFECTING for Exps. 2, 4, 5, 7, 8.
+    domain_count = (
+        int(config.defaults.domains) if domains is None else domains
+    )
     domain_names = tuple(
         source.domains[:domain_count]
         if domain_count <= len(source.domains)
@@ -695,7 +709,7 @@ class Exp2SearchLatency:
 
     All four stages are inside ``measure``; the index is built in ``prepare``.
     ``n_eff`` is reported alongside latency because it is "the only thing that can
-    demonstrate the paper's claim" (README §5).
+    demonstrate the paper's claim".
     """
 
     config: scheme_config.Configuration
@@ -708,6 +722,12 @@ class Exp2SearchLatency:
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("n_eff", COUNT),
         MetricSpec("entries_traversed", COUNT),
+        # THE SAME QUANTITY AS `n_eff` HERE, under the name the other four
+        # schemes now use. `n_eff` is not comparable across schemes -- matched
+        # entries here, traversal counters in [30]/[35]/[54] -- so SVI Exp. 2's
+        # "query selectivity is kept constant" could not be checked against it
+        # in either direction. Emitted under a name that means one thing.
+        MetricSpec("matched_records", COUNT),
     )
 
     def __post_init__(self) -> None:
@@ -861,6 +881,7 @@ class Exp2SearchLatency:
             secondaries={
                 "n_eff": float(response.n_eff),
                 "entries_traversed": float(response.statistics.entries_traversed),
+                "matched_records": float(response.n_eff),
             },
         )
 
@@ -894,27 +915,70 @@ class Exp3CrossDomain:
             self.values = tuple(self.config.experiment("exp3").values)
 
     def prepare(self, value: Any) -> Any:
+        """PER-DOMAIN index size fixed, so total data grows with ``d``.
+
+        §VI Exp. 3: "The query size and per-domain index size are fixed to
+        isolate cross-domain search overhead." This built ``records=d*4`` — a
+        per-domain size of FOUR records, so d=10 indexed 40 records while every
+        baseline indexed 100,000 at the same point on the shared axis. The
+        convention was right and the size made the comparison meaningless.
+
+        The baselines had the opposite defect: they fixed TOTAL at 100,000 and
+        sharded by ``d``, so their per-domain size SHRANK 50,000 -> 10,000 and
+        Scheme [35]'s latency actually FELL as ``d`` grew. §VI read that pair as
+        the proposed scheme "exhibiting slower growth" when the curve directions
+        were set by the two designs.
+
+        All five now hold per-domain fixed at ``global.yaml``'s
+        ``exp3 -> held_constant.per_domain_index_size``.
+        """
         domain_count = int(value)
+        held = self.config.experiment("exp3").held_constant or {}
+        per_domain = int(held.get("per_domain_index_size", 0))
+        if per_domain <= 0:
+            raise ValueError(
+                "global.yaml exp3_crossdomain_scalability.held_constant."
+                "per_domain_index_size must be a positive record count; §VI "
+                "fixes the per-domain index size and the value cannot come "
+                "from a literal here"
+            )
+        record_count = per_domain * domain_count
+        # Same guard and the same measured constant as Exp. 2: a refusal beats
+        # an OOM kill, which is SIGKILL and leaves no traceback.
+        _BYTES_PER_RECORD = 6_800 * self.source.keywords_per_record / 6
+        crypto_config.assert_memory_for(
+            record_count * _BYTES_PER_RECORD,
+            f"exp3 index at d={domain_count} x {per_domain:,} records/domain",
+        )
         deployment = build_deployment(
             config=self.config, source=self.source,
-            records=domain_count * 4, domains=domain_count,
+            records=record_count, domains=domain_count,
         )
-        shared = "kw:00000"
-        # Index one shared keyword in every domain so a single trapdoor can hit
-        # all of them — the property this experiment measures.
+        # A q-KEYWORD CONJUNCTIVE QUERY, per §VI's "each query contains five
+        # keywords". This issued ONE keyword until 2026-09-09 — the defect the
+        # 2026-09-06 sweep fixed for Exp. 7/8 and the 2026-09-03 one for Exp. 2,
+        # both of which missed Exp. 3.
+        q = max(1, int(self.config.defaults.keywords_per_query))
+        shared = [f"kw:{i:05d}" for i in range(q)]
+        # One representative record per domain, in ONE pass. The per-domain
+        # `next(...)` scan was O(d*N) and N is now 10,000x larger.
+        first_in_domain: Dict[str, Any] = {}
+        for entry in deployment.records:
+            first_in_domain.setdefault(entry["record"].domain, entry)
+        # Index the shared keywords in every domain so one trapdoor can hit all
+        # of them — the property this experiment measures.
         for domain in deployment.domains:
             node = deployment.node_for(domain)
-            record = next(
-                r for r in deployment.records if r["record"].domain == domain
-            )
+            record = first_in_domain[domain]
             node.insert_entries(
                 [
                     types.IndexEntry(
-                        token=deployment.scheme.index_token(shared),
+                        token=deployment.scheme.index_token(keyword),
                         cid=record["cid"],
                         policy_id=record["record"].policy_id,
                         vid=record["record"].metadata.vid,
                     )
+                    for keyword in shared
                 ],
                 domain=domain,
             )
@@ -923,14 +987,14 @@ class Exp3CrossDomain:
         )
         return dict(
             deployment=deployment, profile=profile, authority_ids=authority_ids,
-            attributes=attributes, resolver=resolver, keyword=shared,
+            attributes=attributes, resolver=resolver, keywords=shared,
         )
 
     def measure(self, prepared: Any) -> Sample:
         d = prepared["deployment"]
         started = time.perf_counter_ns()
         token = token_mod.generate_search_token(
-            d.scheme, prepared["profile"], [prepared["keyword"]]
+            d.scheme, prepared["profile"], prepared["keywords"]
         )
         decision = authz_mod.verify_search_request(
             d.aim, token, prepared["profile"],
@@ -948,8 +1012,25 @@ class Exp3CrossDomain:
         return Sample(
             primary=elapsed / 1e6,
             secondaries={
-                # ONE trapdoor, however many domains. This is the claim.
-                "trapdoors_issued": 1.0,
+                # ONE trapdoor, however many domains. This is the claim -- so it
+                # is COUNTED from the token the DU actually issued, not asserted.
+                #
+                # It was the literal `1.0` until 2026-09-08. That made the
+                # experiment's headline secondary unfalsifiable: a regression
+                # that made the trapdoor domain-dependent would have kept
+                # reporting 1.0, and §VI cites this number as the difference
+                # between the proposed scheme and baselines that issue d of
+                # them. `len(token.tokens)` is q under Option D -- one PRF
+                # evaluation per keyword, no domain factor -- so it stays 1.0
+                # for the current q=1 workload and no banked number moves,
+                # while a per-domain trapdoor would now read q*d.
+                #
+                # Note this measures what it says only while the query is
+                # single-keyword: when 3-4 raises q to the published 5, the
+                # honest reading of this column is "trapdoors, not one per
+                # domain", i.e. q rather than q*d, and §VI's sentence should
+                # say so.
+                "trapdoors_issued": float(len(token.tokens)),
                 "nodes_searched": float(len(responses)),
             },
         )
@@ -1052,7 +1133,7 @@ class Exp4Verification:
                 prepared["bundles"],
                 auth_root=prepared["auth_root"],
                 # Phase VIII Step 2's VID_i = VID_U compares two different
-                # counters; see SCHEME.md. Skipped so the measurement is of the
+                # counters. Skipped so the measurement is of the
                 # cryptographic work rather than of a check that rejects every
                 # record.
                 require_version_match=False,
@@ -1211,12 +1292,12 @@ class Exp6AuthorizationSync:
 
     **Boundary.** Phase VII Step 5 (anchoring ``BC_i'``) is OUTSIDE this
     measurement: no ledger is passed to ``synchronize``, so nothing is anchored on
-    the timed path. That matches README §5, whose Exp. 6 boundary ends at "until
+    the timed path. That matches global.yaml, whose Exp. 6 boundary ends at "until
     all affected FSNs report the new ``VID``", and ``tab:cost``'s authorization-
     synchronization row ``O(delta)T_H + O(log d)T_MT``, which carries no chain
     term. Anchoring is also identical across all three variants, so including it
     could not change which one wins — only add a constant. §VI must state the
-    exclusion and report the anchor cost separately, the way README §5 already
+    exclusion and report the anchor cost separately, the way global.yaml already
     handles ML-KEM encapsulation for Exp. 1.
 
     **What ``fsns_touched`` can and cannot show.** ``assign_domains_to_fsns`` gives
@@ -1224,7 +1305,7 @@ class Exp6AuthorizationSync:
     domain, so selective delivery touches exactly one node for ANY ``d`` and ``m``.
     Under ``ias`` the metric is therefore a constant 1 BY CONSTRUCTION, and is
     evidence of nothing unless read against ``broadcast``'s ``m``. Every run before
-    2026-09-03 reported it alone, which is why README §5's "selective propagation
+    2026-09-03 reported it alone, which is why global.yaml's "selective propagation
     is the claim" had no measurement behind it.
 
     **Why ``delivered_kb`` is measured and not derived.** It is the quantity the
@@ -1352,7 +1433,7 @@ class _WorkloadOutcome:
 
 
 def _default_ramp_seconds() -> float:
-    """README §7's ramp, from global.yaml with a hard fallback.
+    """global.yaml's ramp, from global.yaml with a hard fallback.
 
     Resolved once at import rather than per call so there is a single name to
     override -- the test suite zeroes RAMP_SECONDS in conftest, and reading the
@@ -1365,7 +1446,7 @@ def _default_ramp_seconds() -> float:
     return 30.0 if configured is None else float(configured)
 
 
-#: README §7: "Cold vs warm. Defaults: Exp. 1-6 warm, Exp. 7-8 warm after a 30 s
+#: global.yaml: "Cold vs warm. Defaults: Exp. 1-6 warm, Exp. 7-8 warm after a 30 s
 #: ramp." Applied once per sweep point, inside prepare(), which run_point()
 #: excludes from every timing.
 RAMP_SECONDS = _default_ramp_seconds()
@@ -1375,7 +1456,7 @@ RAMP_SECONDS = _default_ramp_seconds()
 class SchedulerAblation:
     """The shared engine for Exp. 7 and Exp. 8.
 
-    README §5: "Exp. 7 and Exp. 8 report different metrics over **the same
+    global.yaml: "Exp. 7 and Exp. 8 report different metrics over **the same
     recorded arrival trace**, replayed once per experiment per variant." The
     trace is recorded once in prepare() and both experiments record the same
     one; they do NOT share a replay. Each runs its own, so the two differ by
@@ -1383,7 +1464,7 @@ class SchedulerAblation:
     specific Exp. 7 throughput. The per-point cross-variant comparison the
     figures show is unaffected.
 
-    **Not reportable, for two reasons beyond the λ sweep.** README §1 requires each
+    **Not reportable, for two reasons beyond the λ sweep.** SystemConfiguration.md requires each
     FSN to be an independent process; this replays in one interpreter, so a
     concurrency figure would not measure the stated topology. Both reasons are
     recorded in ``run_meta.json``.
@@ -1394,7 +1475,7 @@ class SchedulerAblation:
     variant: str = aass_mod.VARIANT_AASS
 
     #: Set False only to compare against the legacy single-interpreter path.
-    #: README §1 requires independent FSN processes and
+    #: SystemConfiguration.md requires independent FSN processes and
     #: provenance.reportability() blocks a concurrency result without them.
     independent_processes: bool = True
 
@@ -1413,7 +1494,7 @@ class SchedulerAblation:
     def _replay_multiprocess(
         self, deployment: Deployment, requests, concurrency: int
     ) -> _WorkloadOutcome:
-        """Each FSN in its own OS process, as README §1 requires.
+        """Each FSN in its own OS process, as SystemConfiguration.md requires.
 
         The scheduler still chooses the node in the parent — that decision IS
         the thing Exp. 7-8 ablate. What changes is that the chosen node then
@@ -1592,7 +1673,7 @@ class SchedulerAblation:
         term of the previous manuscript revision. ``eq:search-cost`` has four
         and the code was aligned to it on 2026-09-07.)
 
-        **Benchmark choice, not published.** Neither §VI nor README fixes how many
+        **Benchmark choice, not published.** Neither §VI nor SystemConfiguration.md fixes how many
         domains one query spans; §VI fixes only d=4. Uniform over subset sizes
         1..d with the starting domain rotated is the neutral choice — it spans
         the range from single-domain queries (where authorization locality
@@ -1638,7 +1719,7 @@ class SchedulerAblation:
         return population
 
     def _ramp(self, deployment: Deployment, requests, concurrency: int) -> None:
-        """README §7: "Exp. 7-8 warm after a 30 s ramp."
+        """global.yaml: "Exp. 7-8 warm after a 30 s ramp."
 
         Here rather than in ``measure`` because ``run_point`` calls ``prepare``
         once per point and excludes it from every timing — which is what "warm
@@ -1667,7 +1748,7 @@ class SchedulerAblation:
         itself is never reproducible.
         """
         concurrency = int(value)
-        # README §6 fixes index_size at 10^5 for every experiment that does not
+        # global.yaml fixes index_size at 10^5 for every experiment that does not
         # sweep it, and Exp. 7-8 sweep concurrency. This built `records=32` —
         # 8 entries per shard, 3,125x under the default. Measured consequence:
         # execute_search is linear in shard size while select() is flat, so at
@@ -1675,9 +1756,14 @@ class SchedulerAblation:
         # variant could saturate a node, because the work unit was cheaper than
         # the IPC round-trip delivering it. At 8,000 records the same search is
         # 297us. Sized as Exp. 2 sizes it, so "N" means the same thing in both.
-        record_count = max(
-            1, int(self.config.defaults.index_size) // self.source.keywords_per_record
-        )
+        # N IN RECORDS, as Exp. 2 sizes it and as §VI's axis reads.
+        #
+        # This divided by `keywords_per_record`, so at the frozen corpus's
+        # |W_i| = 31.70 the default `index_size: 100000` became ~3,125 records
+        # — a 32x smaller index than Exp. 2 builds at the same configured value.
+        # The comment claimed "sized as Exp. 2 sizes it", which stopped being
+        # true when Exp. 2 dropped its own division on 2026-09-07.
+        record_count = max(1, int(self.config.defaults.index_size))
         deployment = build_deployment(
             config=self.config, source=self.source, records=record_count
         )
@@ -1698,7 +1784,7 @@ class SchedulerAblation:
             if not pool_for_domain:
                 continue
             record = pool_for_domain[index % len(pool_for_domain)]
-            # q KEYWORDS, per README §6 and §VI's "each query contains five
+            # q KEYWORDS, per global.yaml and §VI's "each query contains five
             # keywords". This was `[keywords[0]]` -- one keyword, uncommented --
             # so Exp. 7's throughput and Exp. 8's spread were both measured on a
             # q=1 workload and reported against a paper that says 5. Same class
@@ -1815,193 +1901,7 @@ class Exp8LoadBalance(SchedulerAblation):
 # sweep different variables -- Exp. 4 sweeps r at zero tampering, this sweeps the
 # tamper count t at pinned r -- and a single sweep cannot produce both. See
 # ``Plots/generate_plots.py``, where ExperimentSpec(4, ...) draws panel (b) with
-# ``folder="exp9_verification_granularity"``.
-# ===========================================================================
-@dataclass
-class Exp9VerificationGranularity:
-    """What verification BUYS, where Exp. 4 measures what it COSTS.
-
-    Feeds Fig. 4(b) of the manuscript; there is no Experiment 9 in Section VI.
-
-    The result-set size is PINNED (``global.yaml``: ``returned_results: 20000``)
-    and the number of tampered records is swept. The question is not how fast a
-    scheme verifies but what it can do once verification fails.
-
-    **Why this is a fair comparison and not a strawman.** Guo's Alg. 4 checks a
-    single XOR-accumulated tag computed over the COMPLETE result set
-    (``guo_vdsse/src/scheme.py:566-590``), and Peony++'s prooflist entry commits
-    to every file added at that level in that batch (``yue_ge`` §VI-A). In both,
-    a subset does not balance -- ``yue_ge``'s own runner docstring says
-    "verifying a truncated subset is *supposed* to fail -- the XOR would not
-    cancel". So neither construction can bisect its way to the bad record
-    without the server issuing fresh proofs per sub-batch, which neither paper
-    defines. The all-or-nothing outcome is a property of the published designs,
-    not of this implementation, and §VI must say so in those terms.
-
-    **The tamper.** One byte of an index entry's ``T_j``, leaving ``CID_i``
-    intact so the bundle stays well-formed. ``entry_leaf`` covers every field, so
-    Phase VIII Step 1 rejects it as "the proof's leaf is not the entry this
-    bundle names" -- a detected tamper, not a malformed bundle. Those are
-    different code paths (``VerificationError`` vs ``accepted = False``) and
-    timing the wrong one would measure parse failure.
-
-    **Not swept at t = 0.** The figure is log-log and the untampered case is
-    Exp. 4. ``test_exp9_granularity.py`` pins the t=0 behaviour instead, which is
-    where a false-positive rejection would show up.
-
-    **The unit is a RECORD, not an index entry.** One bundle per returned
-    ciphertext, the same rule Exp. 4 adopted in ``d1cdf9c``. Both are panels of
-    the same figure, so a mismatch here would put panel (a) in records and panel
-    (b) in entries under one caption. ``build_response`` emits one bundle per
-    entry, so taking all of them is the easy mistake and is what this arm did
-    until 2026-09-05.
-    """
-
-    config: scheme_config.Configuration
-    source: SyntheticRecordSource
-    name: str = "exp9_verification_granularity"
-    number: int = 9
-    variable: str = "tampered_records"
-    values: Tuple[Any, ...] = ()
-    #: Not a timing. The primary is how many records the client must throw away,
-    #: which is the whole point of the comparison; latency rides along as a
-    #: secondary so the price of the granularity stays visible in the same table.
-    primary: MetricSpec = MetricSpec("records_discarded", COUNT)
-    secondaries: Tuple[MetricSpec, ...] = (
-        MetricSpec("usable_recovered", COUNT),
-        MetricSpec("tampered_localised", COUNT),
-        MetricSpec("latency", MS, is_timing=True),
-    )
-    returned_results: int = 0
-
-    def __post_init__(self) -> None:
-        spec = self.config.experiment("exp9")
-        if not self.values:
-            self.values = tuple(spec.values)
-        if not self.returned_results:
-            held = spec.held_constant or {}
-            if "returned_results" not in held:
-                raise scheme_config.ConfigError(
-                    "exp9 must pin returned_results in global.yaml's "
-                    "held_constant block; sweeping both would make the figure "
-                    "unreadable"
-                )
-            self.returned_results = int(held["returned_results"])
-
-    def _tampered(
-        self, bundle: proof_mod.VerificationBundle
-    ) -> proof_mod.VerificationBundle:
-        """One flipped bit in ``T_j``. ``CID_i`` is untouched on purpose."""
-        token = bytearray(bundle.entry.token)
-        token[0] ^= 0x01
-        entry = dataclasses.replace(bundle.entry, token=bytes(token))
-        return dataclasses.replace(bundle, entry=entry)
-
-    def prepare(self, value: Any) -> Any:
-        tampered = int(value)
-        wanted = self.returned_results
-        if tampered > wanted:
-            raise ValueError(
-                f"cannot tamper {tampered} of {wanted} returned records"
-            )
-        # ONE bundle per returned ciphertext, exactly as Exp. 4 builds it.
-        #
-        # This used to size the draw as `ceil(wanted / keywords_per_record)` and
-        # then `extend` every bundle of every record, because `build_response`
-        # emits one bundle per INDEX ENTRY. At the frozen corpus's |W_i| ~= 32
-        # that made the pinned 20,000 into ~632 records carrying 20,000 entries,
-        # so this arm's denominator counted entries while both baselines counted
-        # records -- guo picks a keyword matching ~19,975 DOCUMENTS, yue_ge
-        # returns 20,000 result ids. Panel (b) then compared one tampered entry
-        # against a 20,000-RECORD result set, and `records_discarded` did not
-        # measure records at all.
-        #
-        # That is defect d1cdf9c, which had already forced an Exp. 4 re-run:
-        # "r counted index entries, not returned records". Exp. 9 kept it. Both
-        # panels of fig:exp4 now sweep the same unit, which is the whole reason
-        # they can share an axis.
-        deployment = build_deployment(
-            config=self.config, source=self.source, records=wanted
-        )
-        bundles: List[proof_mod.VerificationBundle] = []
-        for record in deployment.records:
-            responses = proof_mod.build_response(
-                record["commitment"], record["entries"]
-            )
-            if responses:
-                bundles.append(responses[0])
-            if len(bundles) >= wanted:
-                break
-        if len(bundles) < wanted:
-            raise RuntimeError(
-                f"built {len(bundles)} bundles from {len(deployment.records)} "
-                f"records but exp9 pins {wanted}; the source yielded fewer "
-                f"records than requested"
-            )
-        bundles = bundles[:wanted]
-
-        # Evenly spaced rather than clustered or random: a run whose tampered
-        # records all land in one region would measure locality, not
-        # granularity, and a seeded shuffle would put a different set under each
-        # sweep point.
-        marked = sorted(
-            {(i * wanted) // tampered for i in range(tampered)}
-        ) if tampered else []
-        for index in marked:
-            bundles[index] = self._tampered(bundles[index])
-
-        return dict(
-            deployment=deployment,
-            bundles=tuple(bundles),
-            auth_root=deployment.owner_profile.auth_root,
-            tampered=len(marked),
-        )
-
-    def measure(self, prepared: Any) -> Sample:
-        d = prepared["deployment"]
-        # BATCHED, for the same reason Exp. 4 batched it in `e252cc9`:
-        # `lookup_anchor` sorts the entire version-identifier namespace on every
-        # call, so a per-record checker makes Step 3 O(r^2). That was invisible
-        # here while this arm built ~632 records' worth of index entries and
-        # measured 20,000 bundles against a 632-anchor namespace; correcting the
-        # unit to one bundle per RECORD put 20,000 anchors in the namespace and
-        # the quadratic term surfaced -- 192 us/record at r=2,000 against
-        # 1,561 us/record at r=20,000, an 8x per-record regression across a
-        # 10x size increase. Both panels of fig:exp4 now use the same Step 3
-        # path, which is also what makes their latencies comparable.
-        checker = vledger_mod.batched_chain_checker(
-            d.ledger,
-            [b.cid for b in prepared["bundles"]],
-            check_chain_integrity=False,
-        )
-        started = time.perf_counter_ns()
-        batch = proof_mod.verify_response(
-            prepared["bundles"],
-            auth_root=prepared["auth_root"],
-            require_version_match=False,
-            chain_check=checker,
-        )
-        elapsed = time.perf_counter_ns() - started
-
-        discarded = len(batch.rejected)
-        expected = prepared["tampered"]
-        # A mismatch either way is a real failure, not a metric: fewer means a
-        # tamper went undetected (soundness), more means an intact record was
-        # thrown away (completeness). Both invalidate the figure, so neither is
-        # allowed to be silently averaged into it.
-        if discarded != expected:
-            raise RuntimeError(
-                f"{discarded} records rejected but {expected} were tampered; "
-                f"verification is neither sound nor complete under this build"
-            )
-        return Sample(
-            primary=float(discarded),
-            secondaries={
-                "usable_recovered": float(batch.accepted_count),
-                "tampered_localised": float(len(batch.rejected)),
-                "latency": elapsed / 1e6,
-            },
-        )
+# ``folder="exp4_verification_overhead__granularity"``.
 
 
 EXPERIMENTS = {
@@ -2013,7 +1913,6 @@ EXPERIMENTS = {
     6: Exp6AuthorizationSync,
     7: Exp7Throughput,
     8: Exp8LoadBalance,
-    9: Exp9VerificationGranularity,
 }
 
 
@@ -2023,9 +1922,9 @@ def build_experiment(
     source: Optional[SyntheticRecordSource] = None,
     variant: Optional[str] = None,
 ):
-    """Instantiate one experiment by its README §5 number.
+    """Instantiate one experiment by its global.yaml number.
 
-    ``variant`` selects the scheduler for Exp. 7-8, which README §5 defines as a
+    ``variant`` selects the scheduler for Exp. 7-8, which global.yaml defines as a
     four-way ablation (no_lb / round_robin / least_loaded / aass). It was
     reachable only by editing the dataclass default, so every campaign so far
     measured `aass` alone and the ablation the paper claims had never been run.
@@ -2038,8 +1937,9 @@ def build_experiment(
     """
     if number not in EXPERIMENTS:
         raise KeyError(
-            f"no experiment {number}; README §5 defines 1-8, and Exp. 9 is "
-            f"the tamper-granularity companion to Exp. 4"
+            f"no experiment {number}; Section VI defines 1-8. The "
+            f"tamper-granularity sweep is Exp. 4's `granularity` arm, not an "
+            f"experiment of its own"
         )
     kwargs = dict(config=config, source=source or SyntheticRecordSource())
     if variant and "variant" in {f.name for f in dataclasses.fields(EXPERIMENTS[number])}:
@@ -2062,5 +1962,4 @@ __all__ = [
     "Exp6AuthorizationSync",
     "Exp7Throughput",
     "Exp8LoadBalance",
-    "Exp9VerificationGranularity",
 ]

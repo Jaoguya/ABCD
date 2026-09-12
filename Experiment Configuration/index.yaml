@@ -94,7 +94,7 @@ bitmap:
 #
 # NOTE: ours is sized from OUR corpus. Ref[52]'s BF(32,3) in crypto.yaml is
 # that paper's PUBLISHED parameter and must not be copied here, nor this one
-# copied there (SystemConfiguration.md: a shared construction means one is unfaithful).
+# copied there (skill.md: a shared construction means one is unfaithful).
 # -----------------------------------------------------------------------------
 bloom:
   enabled: true                 # benchmark

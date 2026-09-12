@@ -150,10 +150,10 @@ class MerkleTree:
         Returns the number of internal nodes recomputed — the Exp. 5
         secondary metric "Merkle nodes recomputed". Counting it here rather
         than deriving it as ``log2(N)`` keeps the reported figure a
-        measurement, which is what README §14 requires.
+        measurement, which is what skill.md requires.
 
         Rebuilding the whole tree instead would be the Phase VII bug that
-        README §5's Exp. 5 rule explicitly calls out.
+        skill.md's Exp. 5 rule explicitly calls out.
         """
         self._check_index(index)
         self._leaf_data[index] = bytes(data)
@@ -199,7 +199,7 @@ def commitment(items: Sequence[bytes]) -> bytes:
 # the leaves gives set-determined roots, but then inserting one element shifts
 # every leaf after it, so a single insertion costs a full O(n) rebuild — and
 # ``delta`` insertions with a root read after each cost O(delta^2). That is
-# exactly what made the proposed scheme's Exp. 6 unable to complete (README §14
+# exactly what made the proposed scheme's Exp. 6 unable to complete (skill.md
 # item 10, measured at O(n^2.02)).
 #
 # A binary radix trie keyed by the leaf digest fixes it. The trie shape is

@@ -1,7 +1,7 @@
 # =============================================================================
 # infra/fabric/docker-compose.yaml — Hyperledger Fabric v2.5 for the benchmark
 # =============================================================================
-# README §1 specifies "Hyperledger Fabric v2.5 (on-chain commitments, off-chain
+# skill.md specifies "Hyperledger Fabric v2.5 (on-chain commitments, off-chain
 # data)" and §11 tells you to bring it up with:
 #
 #     docker compose -f infra/fabric/docker-compose.yaml up -d
@@ -142,7 +142,7 @@ services:
       - fabric
 
   # ---------------------------------------------------------------------------
-  # IPFS — README §1 "Storage | IPFS", §11 runs `ipfs daemon`. Encrypted
+  # IPFS — skill.md "Storage | IPFS", §11 runs `ipfs daemon`. Encrypted
   # payloads go off-chain here; only the CID is anchored.
   # ---------------------------------------------------------------------------
   ipfs:

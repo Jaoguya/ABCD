@@ -1,6 +1,6 @@
 """D6-D9 — the experiments the manuscript's construction calls for.
 
-``MANUSCRIPT_DIVERGENCE.md`` D7-D9 are experiment-design divergences and D6 is a
+Divergences D7-D9 are experiment-design divergences and D6 is a
 cost-table one. They cannot be measured against the implemented scheme, because
 each is a consequence of the construction in ``src/psa/`` (D1-D5). This module
 supplies them.
@@ -43,21 +43,26 @@ deciding whether to adopt D1-D5, not for quoting in §VI.
 
 from __future__ import annotations
 
+import random
 import sys
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, ClassVar, Dict, List, Optional, Sequence, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from Common.crypto import hashes, merkle  # noqa: E402
+from Common.crypto import config as crypto_config  # noqa: E402
 from Common.crypto.rng import DeterministicRNG  # noqa: E402
 from Common.timing import gc_quiesced  # noqa: E402
 
 from ..index import dsi as dsi_mod  # noqa: E402
 from ..aim import verification as authz_mod  # noqa: E402
 from ..user import token as token_mod  # noqa: E402
+from ..user import profile as profile_mod  # noqa: E402
+from ..scheduler import aass as aass_mod  # noqa: E402
+from .. import types as types_mod  # noqa: E402
 from . import experiments as experiments_mod  # noqa: E402
 from ..chain import outsourcing as out_mod  # noqa: E402
 from ..chain import select as chain_select  # noqa: E402
@@ -189,6 +194,13 @@ class PsaDeployment:
     records: List[Dict[str, Any]] = field(default_factory=list)
     corpus_type: str = "psa_in_process"
     corpus_sha256: Optional[str] = None
+    #: Phase I-III, shared with Option D so both constructions authorize the
+    #: same way. Without these the PSA track could not run the AIM check §VI
+    #: puts inside the measured path.
+    aim: Any = None
+    authorities: Dict[str, Any] = field(default_factory=dict)
+    owner_profile: Any = None
+    scaffold: Any = None
 
     @property
     def entry_count(self) -> int:
@@ -204,7 +216,10 @@ def psa_build_deployment(
     authorities_per_policy: int = psa_gov.DEFAULT_AUTHORITIES_PER_POLICY,
 ) -> PsaDeployment:
     """Build a PSA deployment over ``source``'s records — untimed by construction."""
-    domain_count = len(source.domains) if domains is None else domains
+    # §VI's four domains, from the config — see build_deployment's note.
+    domain_count = (
+        int(config.defaults.domains) if domains is None else domains
+    )
     names = tuple(source.domains[:domain_count])
     if len(names) < domain_count:
         names = tuple(f"dom{i}" for i in range(domain_count))
@@ -224,25 +239,36 @@ def psa_build_deployment(
     )
     scheme = _keyed_scheme()
 
-    # REAL DSI shards, not the dict `_PsaShard` Exp. 6 uses for delivery. Exp. 2
-    # measures the online search path -- authorization bitmap, Bloom prune,
-    # posting-list traversal -- and a dict lookup would measure none of it. The
-    # index needed no change to hold a PolicyStateIndexEntry; it keys on
-    # token/cid/policy_id and stores the entry opaquely.
-    node_count = min(config.topology.fog_search_nodes, len(names))
-    shards = []
-    for i in range(node_count):
-        served = [d for j, d in enumerate(names) if j % node_count == i]
-        shards.append((
-            f"FSN{i}", frozenset(served),
-            dsi_mod.DynamicSearchIndex.from_config(served, config),
-        ))
-    nodes = tuple(shards)
+    # REAL `FogSearchNode`s, sharing Option D's Phase I-III scaffolding.
+    #
+    # This built bare `(node_id, served, DynamicSearchIndex)` tuples, which gave
+    # the PSA track no AIM, no VAP and no scheduler — so `PsaExp2` and
+    # `PsaExp3` timed token derivation plus a posting-list lookup while §VI
+    # describes four stages: *"the Authorization Index Manager validates the
+    # current VAP and derives … AASS then assigns each required shard"*. Option
+    # D's Exp. 2/3 ran all four, so the two tracks were not measuring the same
+    # path and could not be compared. Exp. 7-8 ran the AIM check in BOTH tracks,
+    # so the PSA track was also inconsistent with itself.
+    #
+    # `build_deployment` with `records=0` yields exactly the scaffolding —
+    # context, ledger, AIM, real `Authority` objects, the FSN set and an owner
+    # VAP — with empty indexes for the PSA entries below. Reused rather than
+    # reimplemented because the AIM is construction-agnostic: it validates the
+    # authorization envelope (nonce, `AuthRoot_U`, version) and never inspects
+    # the keyword tokens.
+    scaffold = experiments_mod.build_deployment(
+        config=config, source=source, records=0, domains=domain_count
+    )
+    nodes = scaffold.nodes
 
     deployment = PsaDeployment(
         config=config, world=world, scheme=scheme, nodes=nodes,
         corpus_type=getattr(source, "corpus_type", "psa_in_process"),
         corpus_sha256=getattr(source, "corpus_sha256", None),
+        aim=scaffold.aim,
+        authorities=scaffold.authorities,
+        owner_profile=scaffold.owner_profile,
+        scaffold=scaffold,
     )
 
     seen: set = set()
@@ -263,9 +289,9 @@ def psa_build_deployment(
             record_id=record.record_id, cid=cid, entries=entries,
             policy_id=policy, pv=pv, auth_state=world.auth_state(policy),
         )
-        for _node_id, served, index in nodes:
-            if domain in served:
-                index.insert_record(entries, domain=domain)
+        for node in nodes:
+            if domain in node.domains:
+                node.index.insert_record(entries, domain=domain)
         deployment.records.append(
             dict(cid=cid, policy=policy, domain=domain,
                  keywords=list(record.keywords), entries=entries,
@@ -287,6 +313,51 @@ def psa_build_deployment(
 #: 4,000 is well above what is needed to see every policy (there are
 #: ``policies_per_domain x domains``) and yields a vocabulary in the thousands.
 EXP1_SAMPLE_RECORDS = 4000
+
+
+def psa_enrol(deployment, uid: str, domains: Sequence[str]):
+    """A Data User authorized across ``domains``, for the PSA track.
+
+    Mirrors ``experiments._enrol``, but reads the PSA deployment's own record
+    dicts (`policy`/`domain` keys) rather than Option D's ``record`` objects.
+    The AIM, the authorities and the VAP are the SAME objects Option D uses —
+    the authorization layer is construction-agnostic, because
+    ``verify_search_request`` validates the envelope (nonce, ``AuthRoot_U``,
+    version) and never inspects the keyword tokens.
+    """
+    authority_ids = [deployment.authorities[d].authority_id for d in domains]
+    attributes = sorted(
+        attr for d in domains for attr in deployment.authorities[d].attributes[:3]
+    )
+    profile = profile_mod.build_profile_from_aim(
+        deployment.aim, uid=uid, authority_ids=authority_ids,
+        attributes=attributes,
+    )
+    mapping = {
+        (uid, domain): tuple(sorted(
+            r["policy"] for r in deployment.records if r["domain"] == domain
+        ))
+        for domain in domains
+    }
+    return (
+        profile, authority_ids, attributes,
+        authz_mod.MappingPolicyResolver(mapping),
+    )
+
+
+def psa_search_token(profile, tokens):
+    """``ST = (T_Q, AuthRoot_U, VID_U, rho)`` carrying the PSA token set.
+
+    ``generate_search_token`` builds the trapdoor itself with Option D's
+    scheme, so the envelope is assembled directly here while the tokens come
+    from ``psa_tokens.generate_query_tokens``.
+    """
+    return types_mod.SearchToken(
+        tokens=tuple(tokens),
+        auth_root=profile.auth_root,
+        vid_u=profile.vid,
+        nonce=token_mod.fresh_nonce(),
+    )
 
 
 def corpus_world(source, *, records: int, domains: Optional[int] = None):
@@ -368,7 +439,7 @@ class PsaExp1TokenGeneration:
 
     §VI varies ``q ∈ {1,5,10,15,20}`` while varying ``|P_U| ∈ {1,2,4,8}``. The
     runner sweeps one variable, so ``q`` is the sweep and ``|P_U|`` is the ARM:
-    one run per scope, written to ``psa_exp1_token_generation__pu<N>/``, drawn
+    one run per scope, written to ``exp1_trapdoor_generation__pu<N>/``, drawn
     as one curve each. ``|T_Q| = q·|P_U|`` is checked on every sample rather
     than assumed, and reported as the ``tokens`` secondary.
 
@@ -383,7 +454,7 @@ class PsaExp1TokenGeneration:
 
     config: scheme_config.Configuration
     source: Any = None
-    name: str = "psa_exp1_token_generation"
+    name: str = "exp1_trapdoor_generation"
     number: int = 1
     variable: str = "keywords"
     values: Tuple[Any, ...] = ()
@@ -419,7 +490,14 @@ class PsaExp1TokenGeneration:
         # stipulated `hospital/pol0` policies were what made this experiment
         # `psa_in_process` and therefore unquotable.
         world, vocabulary = corpus_world(
-            self.source, records=EXP1_SAMPLE_RECORDS
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            # §VI's four domains. Left to `corpus_world`'s own default this
+            # took the corpus's width (10), so Exp. 1 derived its policy set
+            # over ten domains while every other non-sweeping experiment is
+            # pinned to four. `corpus_world` keeps its `None` default rather
+            # than taking a config, because its other callers are tests that
+            # want the source's own width.
+            domains=int(self.config.defaults.domains),
         )
         if len(world.policies) < self.policy_scope:
             raise RuntimeError(
@@ -477,33 +555,57 @@ class PsaExp1TokenGeneration:
 
 # ===========================================================================
 # D9 — trapdoors a cross-domain query must issue
+
+
+# ===========================================================================
+# §VI Exp. 3 — cross-domain SEARCH LATENCY under the policy-bound token
 # ===========================================================================
 @dataclass
-class PsaExp3CrossDomainTokens:
-    """What Exp. 3's ``trapdoors_issued`` becomes under this construction.
+class PsaExp3CrossDomainLatency:
+    """§VI Exp. 3, which measures LATENCY — the figure the manuscript includes.
 
-    ``Exp3CrossDomain`` reports a constant ``1.0``: Option D's token is
-    ``H(w)``, so one trapdoor serves every domain. Under eq:policy-bound-token
-    a token names its domain and policy state, so a query spanning ``d`` domains
-    must issue a token per ``(keyword, authorized policy)`` — and the count
-    grows with ``d`` instead of staying flat.
+    §VI: *"This experiment evaluates encrypted-search latency as the number of
+    participating healthcare domains d increases from 2 to 10 … compared with
+    Schemes [30], [35], [41], [54],"* captioned *"Cross-domain search latency
+    versus number of participating domains."*
 
-    This experiment reports that count directly. It is the measurement behind
-    D9's claim that the single-trapdoor property does not survive the
-    manuscript's token, and the reason the manuscript's own Exp. 3 no longer
-    states it.
+    The PSA track had no such experiment. :class:`PsaExp3CrossDomainTokens`
+    reports a token COUNT, which is the D9 companion claim, not §VI's Fig. 3 —
+    so under the PSA construction seven of the manuscript's eight figures had a
+    source and Fig. 3 did not. This is that source.
+
+    **Per-domain index size is fixed**, per §VI's own sentence, at
+    ``global.yaml``'s ``exp3 -> held_constant.per_domain_index_size``. Total
+    data therefore grows with ``d``. The four baselines fixed *total* instead
+    and sharded by ``d``, which shrank their per-domain size as ``d`` grew and
+    is why [35]'s latency FELL across the sweep; all five now hold the same
+    quantity constant.
+
+    **Authorization scope grows with ``d``**, and that is the measurement, not
+    an accident. A cross-domain query is authorized under one policy per
+    participating domain, so ``|P_U| = d`` and the token count is ``q·d`` where
+    Option D issues ``q``. That cost is D9, and it is what §VI's Exp. 3 buys
+    for the policy-state binding.
+
+    The query is posed the way :class:`PsaExp2SearchLatency` poses it — a
+    disjunction across authorized policies of a conjunction over keywords —
+    because a flat ``q·|P_U|`` token set asks one record to satisfy tokens bound
+    to several policies at once, which no record can.
     """
 
     config: scheme_config.Configuration
-    name: str = "psa_exp3_crossdomain_tokens"
+    source: Any
+    name: str = "exp3_crossdomain_scalability"
     number: int = 3
     variable: str = "domains"
     values: Tuple[Any, ...] = ()
+    #: Reads the corpus, so it inherits the corpus provenance.
+    CORPUS_BACKED: ClassVar[bool] = True
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("tokens_issued", COUNT),
-        MetricSpec("policies", COUNT),
-        MetricSpec("option_d_tokens_issued", COUNT),
+        MetricSpec("nodes_searched", COUNT),
+        MetricSpec("n_eff", COUNT),
     )
 
     def __post_init__(self) -> None:
@@ -512,30 +614,119 @@ class PsaExp3CrossDomainTokens:
 
     def prepare(self, value: Any) -> Any:
         domain_count = int(value)
-        world = build_world(domains=domain_count, policies_per_domain=1)
-        keywords = [f"kw:{i:05d}" for i in range(self.config.defaults.keywords_per_query)]
+        held = self.config.experiment("exp3").held_constant or {}
+        per_domain = int(held.get("per_domain_index_size", 0))
+        if per_domain <= 0:
+            raise ValueError(
+                "global.yaml exp3_crossdomain_scalability.held_constant."
+                "per_domain_index_size must be a positive record count; §VI "
+                "fixes the per-domain index size and the value cannot come "
+                "from a literal here"
+            )
+        record_count = per_domain * domain_count
+        # Refuse rather than be OOM-killed, exactly as Exp. 2 and Option D's
+        # Exp. 3 do. An OOM is SIGKILL: no traceback, no partial results.
+        crypto_config.assert_memory_for(
+            record_count * 6_800 * self.source.keywords_per_record / 6,
+            f"psa exp3 index at d={domain_count} x {per_domain:,} records/domain",
+        )
+        deployment = psa_build_deployment(
+            config=self.config, source=self.source,
+            records=record_count, domains=domain_count,
+        )
+        world = deployment.world
+        # ONE AUTHORIZED POLICY PER PARTICIPATING DOMAIN, so |P_U| = d. Picked
+        # from the policies the corpus actually produced, first per domain, so
+        # the scope is derived rather than stipulated.
+        by_domain: Dict[str, str] = {}
+        for policy in world.policies:
+            domain = policy.split("/", 1)[0]
+            by_domain.setdefault(domain, policy)
+        scopes = [
+            world.scope(by_domain[d]) for d in world.domains if d in by_domain
+        ]
+        if not scopes:
+            raise RuntimeError(
+                f"no policy found for any of {len(world.domains)} domains; "
+                f"a cross-domain query needs at least one authorized policy"
+            )
+        pool = [r["keywords"] for r in deployment.records]
+        # Phase III enrolment across every participating domain — untimed, as
+        # session establishment is not per query.
+        profile, authority_ids, attributes, resolver = psa_enrol(
+            deployment, "DU-1", deployment.world.domains
+        )
         return dict(
-            scheme=_keyed_scheme(),
-            keywords=keywords,
-            scopes=[world.scope(p) for p in world.policies],
-            domains=domain_count,
+            deployment=deployment, scopes=scopes, pool=pool, cursor=[0],
+            profile=profile, authority_ids=authority_ids,
+            attributes=attributes, resolver=resolver,
         )
 
     def measure(self, prepared: Any) -> Sample:
+        deployment = prepared["deployment"]
+        pool, cursor = prepared["pool"], prepared["cursor"]
+        keywords = pool[cursor[0] % len(pool)]
+        cursor[0] += 1
+        q = min(self.config.defaults.keywords_per_query, len(keywords))
+        query = list(dict.fromkeys(keywords))[:q]
+
+        issued = 0
+        hits = 0
+        searched: set = set()
         with gc_quiesced():
             started = time.perf_counter_ns()
-            produced = psa_tokens.generate_query_tokens(
-                prepared["scheme"], prepared["keywords"], prepared["scopes"]
+            # §VI Exp. 3: "The AIM first validates the current VAP and derives
+            # policy-state-aware tokens and the required authorized shard set
+            # S_Q. AASS then assigns each required shard to an eligible FSN."
+            # Both stages were outside the timed region until 2026-09-10.
+            all_tokens = tuple(
+                t for scope in prepared["scopes"]
+                for t in psa_tokens.generate_query_tokens(
+                    deployment.scheme, query, [scope]
+                )
             )
+            decision = authz_mod.verify_search_request(
+                deployment.aim,
+                psa_search_token(prepared["profile"], all_tokens),
+                prepared["profile"],
+                authority_ids=prepared["authority_ids"],
+                attributes=prepared["attributes"],
+                resolver=prepared["resolver"],
+            )
+            if not decision.accepted:
+                raise RuntimeError(f"authorization rejected: {decision.reason}")
+            aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(
+                deployment.nodes,
+                aass_mod.SearchRequest(
+                    tokens=all_tokens,
+                    authorized=decision.authorized_shards,
+                    vid_u=prepared["profile"].vid,
+                    query_versions=decision.query_versions,
+                ),
+            )
+            for scope in prepared["scopes"]:
+                scope_tokens = psa_tokens.generate_query_tokens(
+                    deployment.scheme, query, [scope]
+                )
+                issued += len(scope_tokens)
+                for node in deployment.nodes:
+                    if scope.domain not in node.domains:
+                        continue
+                    found, _stats = node.index.lookup(
+                        scope_tokens, [(scope.domain, scope.policy_id)]
+                    )
+                    hits += len(found)
+                    searched.add(node.node_id)
             elapsed = time.perf_counter_ns() - started
+
         return Sample(
             primary=elapsed / 1e6,
             secondaries={
-                "tokens_issued": float(len(produced)),
-                "policies": float(len(prepared["scopes"])),
-                # The comparison the panel exists to make: Option D issues one
-                # trapdoor whatever d is (Exp3CrossDomain's headline secondary).
-                "option_d_tokens_issued": 1.0,
+                # q*|P_U| = q*d, COUNTED from what was issued rather than
+                # asserted. Option D issues q here, flat in d (D9).
+                "tokens_issued": float(issued),
+                "nodes_searched": float(len(searched)),
+                "n_eff": float(hits),
             },
         )
 
@@ -553,22 +744,30 @@ class PsaExp5ReTokenization:
     affected entries, then rebuilds ``Commit_i``.
 
     The two curves against the same ``k`` are the price of D1, and
-    ``PHASE_IV_PLAN.md`` §1.3's ~9.0M-entry estimate is the thing they settle.
+    Phase IV §1.3's ~9.0M-entry estimate is the thing they settle.
     """
 
     config: scheme_config.Configuration
-    name: str = "psa_exp5_retokenization"
+    source: Any
+    name: str = "exp5_keyword_update"
     number: int = 5
     variable: str = "keyword_document_pairs"
     values: Tuple[Any, ...] = ()
+    #: Reads the corpus, so it inherits corpus provenance.
+    CORPUS_BACKED: ClassVar[bool] = True
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("entries_retokenized", COUNT),
         MetricSpec("merkle_nodes_recomputed", COUNT),
         MetricSpec("commitments_rebuilt", COUNT),
     )
-    #: Keywords per record, matching the frozen corpus's mean |W_i|.
-    keywords_per_record: int = 6
+    #: WAS a hardcoded 6, commented "matching the frozen corpus's mean |W_i|".
+    #: The frozen corpus's mean is **31.70** (`dataset_manifest.json`), so the
+    #: constant was wrong by ~5x and this experiment sized its record pool from
+    #: it. Read from the source, which reports the manifest's own figure.
+    @property
+    def keywords_per_record(self) -> int:
+        return max(1, int(getattr(self.source, "keywords_per_record", 6)))
 
     def __post_init__(self) -> None:
         if not self.values:
@@ -576,8 +775,19 @@ class PsaExp5ReTokenization:
 
     def prepare(self, value: Any) -> Any:
         pairs = int(value)
-        world = build_world()
+        # REAL policies and REAL keyword co-occurrence. This invented both
+        # (`hospital/pol0`, `kw:00042`), which prices the construction and
+        # nothing else — the reason the banked runs are `psa_in_process`.
+        world, _vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            domains=int(self.config.defaults.domains),
+        )
         scheme = _keyed_scheme()
+        corpus_records = list(
+            self.source.records(
+                EXP1_SAMPLE_RECORDS, domains=int(self.config.defaults.domains)
+            )
+        )
         # The pool is sized by the AFFECTED entries, not by every entry built.
         # `measure` skips records no governing authority touched (that skip IS
         # eq:unaffected-policy), so sizing at ceil(k / |W_i|) records left the
@@ -594,14 +804,12 @@ class PsaExp5ReTokenization:
         rid = -1
         while affected_entries < pairs:
             rid += 1
-            policy = world.policies[rid % len(world.policies)]
+            corpus_record = corpus_records[rid % len(corpus_records)]
+            policy = corpus_record.policy_id
             domain = policy.split("/", 1)[0]
             pv = world.pv(policy)
             cid = f"bafyPSA{rid:08d}"
-            keywords = [
-                f"kw:{(rid * self.keywords_per_record + k) % 2006:05d}"
-                for k in range(self.keywords_per_record)
-            ]
+            keywords = list(dict.fromkeys(corpus_record.keywords))
             entries = [
                 psa_records.PolicyStateIndexEntry(
                     token=scheme.index_token(w, policy_id=policy, pv=pv, domain=domain),
@@ -621,7 +829,9 @@ class PsaExp5ReTokenization:
                 )
             )
             if moved in world.governance.governing(policy):
-                affected_entries += self.keywords_per_record
+                # The record's OWN entry count, not a nominal constant: with the
+                # corpus, |W_i| varies per record (5..64, mean 31.70).
+                affected_entries += len(entries)
         return dict(world=world, scheme=scheme, records=records, pairs=pairs)
 
     def measure(self, prepared: Any) -> Sample:
@@ -777,7 +987,10 @@ class PsaExp6AffectedRatio:
     """
 
     config: scheme_config.Configuration
-    name: str = "psa_exp6_affected_ratio"
+    #: Optional: supplies the keyword vocabulary. The policy topology is
+    #: stipulated regardless, so this arm is not CORPUS_BACKED.
+    source: Any = None
+    name: str = "exp6_authorization_sync"
     number: int = 6
     variable: str = "affected_policy_ratio"
     values: Tuple[Any, ...] = AFFECTED_RATIOS
@@ -790,6 +1003,26 @@ class PsaExp6AffectedRatio:
         MetricSpec("fsns_touched", COUNT),
     )
     #: Policy population. Large enough that a 10% step is a whole number.
+    #: The policy population the ratio is taken over.
+    #:
+    #: **WHY THIS IS STIPULATED AND NOT READ FROM THE CORPUS.** This experiment
+    #: sets the governing sets itself (`with_overrides` below) so that exactly
+    #: `ratio` of policies depend on the moved authority — that control IS the
+    #: measurement. It therefore cannot inherit the corpus's policy topology.
+    #:
+    #: It also cannot inherit its policy COUNT. `extract` assigns
+    #: `policies_per_domain=2`, so the corpus yields **8** policies at §VI's
+    #: four domains, and §VI Exp. 6 sweeps the affected ratio "from 10% to
+    #: 100%" — 10% of 8 is one policy, i.e. 12.5%. The sweep's lowest point is
+    #: not representable on the corpus's own policy set, so a population of 40
+    #: is stipulated to make 10% exact.
+    #:
+    #: Consequence, stated rather than hidden: this arm is **not**
+    #: `CORPUS_BACKED`. Its keywords are the corpus's (below), but its policy
+    #: dimension is constructed, so it prices the DIAS propagation rule and not
+    #: the corpus. That is legitimate for a proposed-scheme-only ablation —
+    #: §VI Exp. 6 compares three arms of one scheme, not five schemes — but it
+    #: means the run stays non-reportable and §VI must say so.
     policy_population: int = 40
     keywords_per_record: int = 6
     fog_search_nodes: int = 4
@@ -805,6 +1038,14 @@ class PsaExp6AffectedRatio:
         ratio = float(value)
         per_domain = self.policy_population // len(DOMAIN_NAMES)
         world = build_world(policies_per_domain=per_domain)
+        # Keywords from the corpus; policy topology stipulated — see
+        # `policy_population` for why the two cannot both come from the corpus.
+        _cw, vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            domains=int(self.config.defaults.domains),
+        ) if self.source is not None else (None, None)
+        if not vocabulary:
+            vocabulary = tuple(f"kw:{i:05d}" for i in range(2006))
         policies = list(world.policies)
         roster = sorted(world.authorities.values())
         moved, other = roster[0], roster[1]
@@ -825,7 +1066,12 @@ class PsaExp6AffectedRatio:
             domain = policy.split("/", 1)[0]
             pv = world.pv(policy)
             cid = f"bafyPSA{rid:08d}"
-            keywords = [f"kw:{rid:04d}:{k}" for k in range(self.keywords_per_record)]
+            # REAL keywords, so the hashed inputs are the corpus's own lengths
+            # and distribution even though the policy topology is stipulated.
+            keywords = [
+                vocabulary[(rid * self.keywords_per_record + k) % len(vocabulary)]
+                for k in range(self.keywords_per_record)
+            ]
             records.append(
                 dict(
                     cid=cid, policy=policy, domain=domain, keywords=keywords,
@@ -1023,7 +1269,7 @@ class PsaExp2SearchLatency:
 
     config: scheme_config.Configuration
     source: Any
-    name: str = "psa_exp2_search_latency"
+    name: str = "exp2_search_latency"
     number: int = 2
     variable: str = "index_size"
     values: Tuple[Any, ...] = ()
@@ -1056,7 +1302,16 @@ class PsaExp2SearchLatency:
         # every run of every point, which measured the repeatability of one
         # query rather than search latency.
         pool = [r["keywords"] for r in deployment.records]
-        return dict(deployment=deployment, scopes=scopes, pool=pool, cursor=[0])
+        # Phase III enrolment, so the AIM check §VI puts inside the search path
+        # can actually run. Untimed: session establishment is not per query.
+        profile, authority_ids, attributes, resolver = psa_enrol(
+            deployment, "DU-1", deployment.world.domains
+        )
+        return dict(
+            deployment=deployment, scopes=scopes, pool=pool, cursor=[0],
+            profile=profile, authority_ids=authority_ids,
+            attributes=attributes, resolver=resolver,
+        )
 
     def measure(self, prepared: Any) -> Sample:
         deployment = prepared["deployment"]
@@ -1071,6 +1326,36 @@ class PsaExp2SearchLatency:
         issued = 0
         with gc_quiesced():
             started = time.perf_counter_ns()
+            # THE FOUR STAGES §VI NAMES, in its order. This timed only token
+            # derivation and the posting-list walk, so Figs. 2 and 3 excluded
+            # both of the paper's named contributions — the AIM's VAP
+            # validation and AASS's shard assignment — while Option D's Exp. 2
+            # timed all four and Exp. 7-8 timed the AIM check in BOTH tracks.
+            all_tokens = tuple(
+                t for scope in prepared["scopes"]
+                for t in psa_tokens.generate_query_tokens(
+                    deployment.scheme, query, [scope]
+                )
+            )
+            decision = authz_mod.verify_search_request(
+                deployment.aim,
+                psa_search_token(prepared["profile"], all_tokens),
+                prepared["profile"],
+                authority_ids=prepared["authority_ids"],
+                attributes=prepared["attributes"],
+                resolver=prepared["resolver"],
+            )
+            if not decision.accepted:
+                raise RuntimeError(f"authorization rejected: {decision.reason}")
+            aass_mod.Scheduler(aass_mod.VARIANT_AASS).select(
+                deployment.nodes,
+                aass_mod.SearchRequest(
+                    tokens=all_tokens,
+                    authorized=decision.authorized_shards,
+                    vid_u=prepared["profile"].vid,
+                    query_versions=decision.query_versions,
+                ),
+            )
             # ONE CONJUNCTIVE LOOKUP PER AUTHORIZED POLICY, unioned.
             #
             # A PSA query is a disjunction ACROSS policies of a conjunction
@@ -1090,10 +1375,10 @@ class PsaExp2SearchLatency:
                     deployment.scheme, query, [scope]
                 )
                 issued += len(scope_tokens)
-                for _node_id, served, index in deployment.nodes:
-                    if scope.domain not in served:
+                for node in deployment.nodes:
+                    if scope.domain not in node.domains:
                         continue
-                    found, stats = index.lookup(
+                    found, stats = node.index.lookup(
                         scope_tokens, [(scope.domain, scope.policy_id)]
                     )
                     hits += len(found)
@@ -1101,7 +1386,7 @@ class PsaExp2SearchLatency:
             elapsed = time.perf_counter_ns() - started
 
         entries = deployment.entry_count
-        distinct = sum(ix.token_count for _, _, ix in deployment.nodes)
+        distinct = sum(node.index.token_count for node in deployment.nodes)
         return Sample(
             primary=elapsed / 1e6,
             secondaries={
@@ -1205,17 +1490,25 @@ class PsaExp4Verification:
     #: backend, not the construction.
 
     config: scheme_config.Configuration
-    name: str = "psa_exp4_verification_overhead"
+    source: Any
+    name: str = "exp4_verification_overhead"
     number: int = 4
     variable: str = "returned_results"
     values: Tuple[Any, ...] = ()
+    #: Reads the corpus for its policies and keywords.
+    CORPUS_BACKED: ClassVar[bool] = True
     primary: MetricSpec = MetricSpec("latency", MS, is_timing=True)
     secondaries: Tuple[MetricSpec, ...] = (
         MetricSpec("proof_size", KB),
         MetricSpec("path_length", COUNT),
         MetricSpec("records_verified", COUNT),
     )
-    keywords_per_record: int = 6
+    #: WAS a hardcoded 6. The frozen corpus's mean |W_i| is **31.70**, and this
+    #: sets the Merkle tree's leaf count — so the constant understated the tree
+    #: height Exp. 4's proof paths are measured against. Read from the source.
+    @property
+    def keywords_per_record(self) -> int:
+        return max(1, int(getattr(self.source, "keywords_per_record", 6)))
 
     def __post_init__(self) -> None:
         if not self.values:
@@ -1223,7 +1516,12 @@ class PsaExp4Verification:
 
     def prepare(self, value: Any) -> Any:
         wanted = int(value)
-        world = build_world()
+        # Policies and keywords from the corpus, so the hashed inputs and the
+        # governing sets behind every `PV_i` are the corpus's own.
+        world, vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            domains=int(self.config.defaults.domains),
+        )
         scheme = _keyed_scheme()
         # ABCD_LEDGER decides, exactly as build_deployment decides it. `fabric`
         # refuses to fall back, so a run stamped Fabric-backed was Fabric-backed.
@@ -1237,7 +1535,10 @@ class PsaExp4Verification:
             entries = [
                 psa_records.PolicyStateIndexEntry(
                     token=scheme.index_token(
-                        f"kw:{rid:05d}:{k}", policy_id=policy, pv=pv, domain=domain
+                        vocabulary[
+                            (rid * self.keywords_per_record + k) % len(vocabulary)
+                        ],
+                        policy_id=policy, pv=pv, domain=domain,
                     ),
                     cid=cid, policy_id=policy, pv=pv,
                 )
@@ -1289,6 +1590,169 @@ class PsaExp4Verification:
                     sum(r.proof_path_length for r in results) / len(results)
                 ),
                 "records_verified": float(len(results)),
+            },
+        )
+
+
+
+def _flip_token_byte(bundle):
+    """Corrupt one byte of the bundle's index-entry token.
+
+    ``cid`` is left intact so the bundle stays well-formed and Phase VIII Step 1
+    rejects it as a DETECTED tamper rather than a parse failure.
+    """
+    entry = bundle.entry
+    raw = bytearray(entry.token)
+    raw[0] ^= 0x01
+    return replace(bundle, entry=replace(entry, token=bytes(raw)))
+
+
+
+# ---------------------------------------------------------------------------
+# Exp. 4, arm `granularity` — SVI Fig. 4(b)
+# ---------------------------------------------------------------------------
+@dataclass
+class PsaExp4Granularity:
+    """What per-entry verification BUYS, where the default arm measures its COST.
+
+    Panel (b) of SVI's Fig. 4. There is no Experiment 9 in the manuscript; this
+    is the second arm of Experiment 4 and shares its figure.
+
+    The result-set size is PINNED and the number of tampered records is swept.
+    The question is not how fast a scheme verifies but what it can do once
+    verification fails.
+
+    **Why this is a fair comparison and not a strawman.** Scheme 35's Alg. 4
+    checks a single XOR-accumulated tag over the COMPLETE result set, and
+    Scheme 30's prooflist entry commits to every file added at that level in
+    that batch. In both, a subset does not balance -- verifying a truncated
+    subset is *supposed* to fail, because the XOR would not cancel. So neither
+    construction can bisect its way to the bad record without the server issuing
+    fresh proofs per sub-batch, which neither paper defines. The all-or-nothing
+    outcome is a property of the published designs, not of this implementation.
+
+    **The tamper.** One byte of an index entry's token, leaving ``cid`` intact
+    so the bundle stays well-formed. The leaf covers every field, so Phase VIII
+    Step 1 rejects it as a detected tamper rather than a malformed bundle --
+    different code paths, and timing the wrong one would measure parse failure.
+
+    **Not swept at t = 0.** The figure is log-log and the untampered case is the
+    default arm.
+
+    **The unit is a RECORD, not an index entry**, the same rule the default arm
+    adopted: both are panels of one figure, so a mismatch would put panel (a) in
+    records and panel (b) in entries under a single caption.
+    """
+
+    config: scheme_config.Configuration
+    source: Any
+    name: str = "exp4_verification_overhead"
+    number: int = 4
+    variable: str = "tampered_records"
+    values: Tuple[Any, ...] = ()
+    CORPUS_BACKED: ClassVar[bool] = True
+    primary: MetricSpec = MetricSpec("records_discarded", COUNT)
+    secondaries: Tuple[MetricSpec, ...] = (
+        MetricSpec("usable_recovered", COUNT),
+        MetricSpec("tampered_localised", COUNT),
+        MetricSpec("latency", MS, is_timing=True),
+    )
+
+    @property
+    def keywords_per_record(self) -> int:
+        return max(1, int(getattr(self.source, "keywords_per_record", 6)))
+
+    @property
+    def result_set_size(self) -> int:
+        """``r``, pinned. Swept quantity is ``t``, so ``r`` must not move."""
+        held = self.config.experiment("exp4").held_constant or {}
+        return int(held.get("returned_results", 20000))
+
+    def __post_init__(self) -> None:
+        if not self.values:
+            self.values = tuple(self.config.experiment("exp4").tamper_values)
+
+    def prepare(self, value: Any) -> Any:
+        tampered = int(value)
+        total = self.result_set_size
+        world, vocabulary = corpus_world(
+            self.source, records=EXP1_SAMPLE_RECORDS,
+            domains=int(self.config.defaults.domains),
+        )
+        scheme = _keyed_scheme()
+        ledger = chain_select.make_ledger()
+        bundles = []
+        for rid in range(total):
+            policy = world.policies[rid % len(world.policies)]
+            domain = policy.split("/", 1)[0]
+            pv = world.pv(policy)
+            cid = f"bafyPSA{rid:08d}"
+            entries = [
+                psa_records.PolicyStateIndexEntry(
+                    token=scheme.index_token(
+                        vocabulary[
+                            (rid * self.keywords_per_record + k) % len(vocabulary)
+                        ],
+                        policy_id=policy, pv=pv, domain=domain,
+                    ),
+                    cid=cid, policy_id=policy, pv=pv,
+                )
+                for k in range(self.keywords_per_record)
+            ]
+            commitment = psa_commit.commit_record(
+                record_id=rid, cid=cid, entries=entries, policy_id=policy,
+                pv=pv, auth_state=world.auth_state(policy),
+            )
+            bundles.append(psa_verify.build_response(commitment, entries)[0])
+            out_mod.anchor_initial_commitment(
+                ledger, cid=cid,
+                commitment=_PsaAnchoredCommitment(
+                    commit=commitment.commit, root=commitment.root
+                ),
+                vid=0,
+            )
+
+        # Tamper OUTSIDE the timed region: forging a response is the adversary's
+        # work, not the verifier's. Deterministic in t so a re-run tampers with
+        # the same records.
+        rng = random.Random(20260912 + tampered)
+        marked = rng.sample(range(len(bundles)), min(tampered, len(bundles)))
+        for i in marked:
+            bundles[i] = _flip_token_byte(bundles[i])
+
+        return dict(
+            bundles=tuple(bundles), ledger=ledger,
+            cids=[b.cid for b in bundles], tampered=len(marked),
+        )
+
+    def measure(self, prepared: Any) -> Sample:
+        checker = _psa_batched_chain_checker(prepared["ledger"], prepared["cids"])
+        with gc_quiesced():
+            started = time.perf_counter_ns()
+            results = [
+                psa_verify.verify_bundle(bundle, chain_check=checker)
+                for bundle in prepared["bundles"]
+            ]
+            elapsed = time.perf_counter_ns() - started
+
+        rejected = [r for r in results if not r.accepted]
+        discarded = len(rejected)
+        expected = prepared["tampered"]
+        # A mismatch either way is a real failure, not a metric: fewer means a
+        # tamper went undetected (soundness), more means an intact record was
+        # thrown away (completeness). Both invalidate the figure, so neither is
+        # silently averaged into it.
+        if discarded != expected:
+            raise RuntimeError(
+                f"{discarded} records rejected but {expected} were tampered; "
+                f"verification is neither sound nor complete under this build"
+            )
+        return Sample(
+            primary=float(discarded),
+            secondaries={
+                "usable_recovered": float(len(results) - discarded),
+                "tampered_localised": float(discarded),
+                "latency": elapsed / 1e6,
             },
         )
 
@@ -1428,7 +1892,7 @@ class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
             ]
             # THE SAME KEYWORD SET Option D's trace uses, so the only
             # difference between the two arms is the construction. Both are now
-            # q per README §6; when that was q=5 here and 1 there, the resulting
+            # q per global.yaml; when that was q=5 here and 1 there, the resulting
             # "PSA is 1.38x faster" was the workload mismatch, not a result.
             keywords = list(dict.fromkeys(record["record"].keywords))[
                 : self.config.defaults.keywords_per_query
@@ -1458,7 +1922,7 @@ class PsaSchedulerAblation(experiments_mod.SchedulerAblation):
 class PsaExp7Throughput(PsaSchedulerAblation, experiments_mod.Exp7Throughput):
     """Exp. 7 under the PSA construction."""
 
-    name: str = "psa_exp7_search_throughput"
+    name: str = "exp7_search_throughput"
     number: int = 7
     CORPUS_BACKED: ClassVar[bool] = True
 
@@ -1467,22 +1931,34 @@ class PsaExp7Throughput(PsaSchedulerAblation, experiments_mod.Exp7Throughput):
 class PsaExp8LoadBalance(PsaSchedulerAblation, experiments_mod.Exp8LoadBalance):
     """Exp. 8 under the PSA construction."""
 
-    name: str = "psa_exp8_load_balance"
+    name: str = "exp8_load_balance"
     number: int = 8
     CORPUS_BACKED: ClassVar[bool] = True
 
 
 #: Registry, mirroring ``experiments.py``'s numbering so a PSA run and an
 #: Option D run of the same experiment number are directly comparable.
+#: Experiment 4's second arm. Section VI has no Experiment 9; its
+#: localization/retention measurement is Fig. 4(b), so it lives here as an
+#: arm of Exp. 4 rather than as an experiment the paper does not define.
+PSA_EXP4_VARIANTS: Tuple[str, ...] = ("granularity",)
+
 PSA_EXPERIMENTS = {
     1: PsaExp1TokenGeneration,
     2: PsaExp2SearchLatency,
-    3: PsaExp3CrossDomainTokens,
+    # 3 is SVI's Fig. 3, which measures LATENCY. The token-count experiment is
+    # the D9 companion and moves to 9, mirroring how the Option D track parks
+    # the Exp. 4 companion (Exp9VerificationGranularity) at 9 rather than
+    # letting a companion occupy a manuscript figure's slot.
+    3: PsaExp3CrossDomainLatency,
     4: PsaExp4Verification,
     5: PsaExp5ReTokenization,
     6: PsaExp6AffectedRatio,
     7: PsaExp7Throughput,
     8: PsaExp8LoadBalance,
+    # 10, NOT 9: in the Option D track 9 is Exp9VerificationGranularity, and
+    # giving the same number two different meanings across constructions would
+    # make `--experiment 9` mean one thing and `--experiment 9 --construction
 }
 
 
@@ -1494,7 +1970,7 @@ def build(
     if number not in PSA_EXPERIMENTS:
         raise KeyError(
             f"no policy-state-aware experiment {number}; D6-D9 cover "
-            f"{sorted(PSA_EXPERIMENTS)} — see MANUSCRIPT_DIVERGENCE.md and the "
+            f"{sorted(PSA_EXPERIMENTS)} — see the divergence notes and the "
             f"scope note in this module's docstring"
         )
     cls = PSA_EXPERIMENTS[number]
@@ -1513,11 +1989,20 @@ def build(
                 config=config, source=source,
                 policy_scope=policy_scope_of(variant),
             )
+        # Exp. 4's two arms: the default r sweep is Fig. 4(a), the
+        # `granularity` t sweep is Fig. 4(b). One experiment, one figure.
+        if number == 4 and variant == "granularity":
+            return PsaExp4Granularity(config=config, source=source)
         return cls(config=config, source=source)
     if number == 1 and variant:
         return cls(config=config, policy_scope=policy_scope_of(variant))
-    if number == 6 and variant:
-        return cls(config=config, variant=variant)
+    if number == 6:
+        # Exp. 6 is the one arm that takes a source WITHOUT being CORPUS_BACKED:
+        # it uses the corpus vocabulary but stipulates its policy topology, so
+        # it must not inherit corpus provenance. See `policy_population`.
+        if variant:
+            return cls(config=config, variant=variant, source=source)
+        return cls(config=config, source=source)
     return cls(config=config)
 
 
@@ -1530,7 +2015,9 @@ __all__ = [
     "PSA_EXPERIMENTS",
     "PsaExp1TokenGeneration",
     "PsaExp2SearchLatency",
-    "PsaExp3CrossDomainTokens",
+    "PsaExp3CrossDomainLatency",
+    "PsaExp4Granularity",
+    "PSA_EXP4_VARIANTS",
     "PsaExp4Verification",
     "PsaExp5ReTokenization",
     "PsaExp6AffectedRatio",

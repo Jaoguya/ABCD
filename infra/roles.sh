@@ -41,7 +41,7 @@ Plots/generate_plots.py, and watching a running campaign for crashes and stalls.
 Follow the recipe. If what you hit is not covered by one, stop and say so rather
 than improvising.
 
-READER half -- search and cite: README.md, the per-scheme SCHEME.md files,
+READER half -- search and cite: README.md, the per-scheme skill.md files,
 Overleaf/PQ-AVDSE-OJCOMS (the .tex is authoritative; the .md
 is a lossy pandoc export and its algorithm blocks are BROKEN), References/.
 Answer what the spec, manuscript or history actually says, with file:line

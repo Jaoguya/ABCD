@@ -1,13 +1,13 @@
-"""Exp. 4 — Verification Overhead. Ref[55] §VI-A, ``Verify``.
+"""Exp. 4 — Verification Overhead. Scheme 30 §VI-A, ``Verify``.
 
-Variable:  records verified ``r`` = 10 -> 1000 (README §5)
+Variable:  records verified ``r`` = 10 -> 1000 (skill.md)
 Primary:   verification latency (ms)
 Secondary: proof size (KB), entries combined (path length)
 
 WHY THIS SCHEME IS IN EXP. 4 AT ALL
 -----------------------------------
 Exp. 4 previously had only two participants (``ma_lb_pq_vdse`` and
-``guo_vdsse``). Ref[55] is the natural third: Peony++ has a genuine public
+``guo_vdsse``). Scheme 30 is the natural third: Peony++ has a genuine public
 verification algorithm, and the paper benchmarks it *directly against Guo* —
 its "[37]" is this repo's Ref[35] (see ``References/Ref[55]/Ref[55].md`` §7).
 So this is not a slot filled by analogy; it is the comparison the paper itself
@@ -22,7 +22,7 @@ folding in the deletion digest, hashing the returned result set, and comparing.
 That is ordinary CPU work which runs identically on- or off-chain; only the
 *transaction* is chain-bound.
 
-This mirrors how README §5 already scopes Exp. 4 for the proposed scheme —
+This mirrors how skill.md already scopes Exp. 4 for the proposed scheme —
 "client-side verification only: Merkle proof, ``Commit_i*`` recomputation, chain
 consistency. IPFS fetch and decryption excluded."
 
@@ -126,7 +126,7 @@ def run(
         # SINGLE BATCH for Exp. 4 — deliberate, and worth stating.
         #
         # Verification is only well-defined when the querying level can actually
-        # reach every batch the prooflist commits to. Ref[55] stores bottom in
+        # reach every batch the prooflist commits to. Scheme 30 stores bottom in
         # T_c for any level absent from a batch (peony.list_gen's "ON X_w"
         # note), so with c > 1 a keyword whose files miss level l in some batch
         # produces a prooflist entry covering files the search cannot return —

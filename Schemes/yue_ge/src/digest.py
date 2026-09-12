@@ -1,4 +1,4 @@
-"""keccak256 and the XOR multiset accumulator — Ref[55] §VI-A / §VII-A.
+"""keccak256 and the XOR multiset accumulator — Scheme 30 §VI-A / §VII-A.
 
 The paper builds its verification digests with keccak256 (§VII-A names it
 alongside SHA-256 in the OpenSSL toolchain, and the digests are consumed by an
@@ -12,7 +12,7 @@ pycryptodome's `Crypto.Hash.keccak`, already pinned in `requirements.txt`, and
 implementation fails loudly instead of producing plausible wrong numbers.
 
 This lives in the scheme rather than in `Common/` because keccak256 is specific
-to Ref[55]'s on-chain digests; no other scheme here uses it (README §8:
+to Scheme 30's on-chain digests; no other scheme here uses it (skill.md:
 `Common/` holds primitives that *multiple* schemes cite).
 """
 

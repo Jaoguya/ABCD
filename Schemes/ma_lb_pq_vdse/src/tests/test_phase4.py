@@ -15,7 +15,7 @@ and is also collectible by pytest if it is installed.
 Covers ``index/extract.py`` (Step 1), ``index/dsi.py`` (Step 3) and
 ``index/commit.py`` (Steps 4-5). Step 2 has no tests because it has no
 implementation: the matching relation is an open author decision
-(``PHASE_IV_PLAN.md`` §1). Every token below is an opaque byte string produced by
+(Phase IV §1). Every token below is an opaque byte string produced by
 the test, which is exactly how ``dsi.py`` treats them.
 
 The corpus is NOT read: the committed manifest is the superseded v1 and
@@ -223,7 +223,7 @@ def test_extract_keeps_one_patient_under_one_policy():
 
 
 def test_extract_per_patient_assignment_is_available_and_labelled():
-    """The README §4 reading, offered explicitly rather than as a default."""
+    """The dataset.yaml reading, offered explicitly rather than as a default."""
     assignment = extract_mod.PerPatientPolicyAssignment(patients=38000)
     extracted = extract_mod.extract(
         make_corpus_record(patient="patient-0001"), assignment=assignment
@@ -281,7 +281,7 @@ def test_extract_metadata_binds_all_four_fields():
 
 
 def test_extract_all_streams_and_honours_a_limit():
-    """A generator: materialising 1.14M records costs 1-2 GB (README §14 issue 9)."""
+    """A generator: materialising 1.14M records costs 1-2 GB."""
     records = (make_corpus_record(rid=i, patient=f"p{i}") for i in range(50))
     taken = list(
         extract_mod.extract_all(records, assignment=make_assignment(), limit=10)
@@ -769,7 +769,7 @@ def test_commit_verification_recomputes_from_inputs():
 
 
 def test_commit_incremental_update_matches_a_rebuild():
-    """Phase VII Step 3: MerkleUpdate, not a rebuild (README §5, Exp. 5 rule)."""
+    """Phase VII Step 3: MerkleUpdate, not a rebuild (global.yaml, Exp. 5 rule)."""
     record, entries, auth_root_do, commitment = committed_record(keywords=6)
     replacement = entries[2].with_policy(policy_id=record.policy_id, vid=2)
     updated, recomputed = commit_mod.update_record_commitment(

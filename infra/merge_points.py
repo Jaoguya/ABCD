@@ -11,7 +11,7 @@ WHY RE-AGGREGATE RATHER THAN CONCATENATE results.csv
 ----------------------------------------------------
 ``results.csv`` holds means and 95% CIs. Averaging two shards' means is only
 correct when they carry equal run counts, and a CI cannot be recovered from
-other CIs at all. README §9 makes ``raw_runs.csv`` the source of truth — one row
+other CIs at all. skill.md makes ``raw_runs.csv`` the source of truth — one row
 per run, never aggregated — so the merge re-derives the aggregate from raw runs,
 which is exactly what a single unsharded process would have produced.
 
@@ -284,7 +284,7 @@ def _refuse_projected(shards: List[Path]) -> None:
 
 def _reaggregate(rows: List[Dict[str, str]], out: Path,
                  *, template: List[str]) -> None:
-    """mean +/- 95% CI per sweep point, from the raw runs (README §7)."""
+    """mean +/- 95% CI per sweep point, from the raw runs (skill.md)."""
     import math
     from scipy import stats
 

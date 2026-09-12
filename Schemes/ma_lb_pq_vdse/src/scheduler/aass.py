@@ -84,7 +84,7 @@ produced the vector in use. ``determined_on`` and ``determined_by`` are null in
 Renormalising preserves the ratio the sweep chose among the four surviving
 terms, which is the most defensible thing to do without re-running it -- but it
 is an inference from a sweep over a different objective, not a result of one.
-Re-running ``harness/lambda_sweep.py`` over the four-term cost is what would
+Re-running the documented hold-out sweep over the four-term cost is what would
 make ``status: fixed`` mean what it says.
 """
 
@@ -101,7 +101,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from .. import config as scheme_config  # noqa: E402
 from ..fsn.fsn import FogSearchNode  # noqa: E402
 
-#: The four ablation variants of README §5 / SCHEME.md.
+#: The four ablation variants of ``SystemConfiguration.md`` section 5.
 VARIANT_NO_LB = "no_lb"
 VARIANT_ROUND_ROBIN = "round_robin"
 VARIANT_LEAST_LOADED = "least_loaded"
@@ -631,8 +631,24 @@ class Scheduler:
                     chosen = min(
                         pool, key=lambda node: (node.queue_length, node.node_id)
                     )
-                if shard not in chosen.index.policy_pairs:
-                    forwards += 1
+            # §VI'S DEFINITION, APPLIED TO EVERY ARM.
+            #
+            # §VI Exp. 8: "A cross-node forward occurs when a scheduler assigns
+            # a required shard to an FSN that does not maintain it, requiring
+            # redirection to an eligible node." That is scheduler-agnostic —
+            # any arm can score under it.
+            #
+            # This counter sat INSIDE the `else`, so the AASS branch never
+            # touched it: AASS read 0 by construction and the three oblivious
+            # arms read >0 by construction, and Fig. 8(c) measured the arm
+            # DEFINITIONS rather than scheduler quality. §V then read that
+            # figure as evidence that AASS "reduces unnecessary forwarding".
+            #
+            # Applied uniformly, AASS should still read 0 — but because its
+            # eligibility guard genuinely never misplaces a shard, which is a
+            # measurement, not a tautology.
+            if shard not in chosen.index.policy_pairs:
+                forwards += 1
             mapping.append((shard, chosen))
 
         return ShardAssignment(

@@ -122,42 +122,64 @@ def test_exp1_tokens_are_distinct(config, source):
 
 
 # ===========================================================================
-# D9 — the single-trapdoor property does not survive
+# §VI Exp. 3 — the LATENCY figure the manuscript includes
 # ===========================================================================
-def test_exp3_token_count_grows_with_domains(config):
-    experiment = psa.PsaExp3CrossDomainTokens(config=config)
-    issued = [
-        _run(experiment, d).secondaries["tokens_issued"] for d in experiment.values
-    ]
-    assert issued == sorted(issued)
-    assert issued[-1] > issued[0], (
-        "under eq:policy-bound-token a token names its domain, so a query over "
-        "more domains cannot reuse one trapdoor"
+def test_psa_exp3_latency_is_the_registered_experiment_3(config):
+    """§VI Fig. 3 plots latency, so experiment 3 must be the latency one.
+
+    The track once registered a token-count experiment at 3, which left the
+    manuscript's Fig. 3 with no source. That companion was removed entirely on
+    2026-09-12 -- Section VI does not define it, and with the `psa_` prefix gone
+    it would have needed a name implying it was one of the paper's experiments.
+    The property it measured is still covered, on the search path, by
+    ``test_psa_exp3_latency_issues_q_times_d_tokens``.
+    """
+    assert psa.PSA_EXPERIMENTS[3] is psa.PsaExp3CrossDomainLatency
+    assert main_mod.PSA_FOLDERS[3] == "exp3_crossdomain_scalability"
+    # Section VI defines eight experiments. Anything past 8 is one we invented.
+    assert max(psa.PSA_EXPERIMENTS) == 8
+    assert 9 not in psa.PSA_EXPERIMENTS
+
+
+def test_psa_exp3_latency_issues_q_times_d_tokens(config, source):
+    """|T_Q| = q*|P_U| with one authorized policy per participating domain.
+
+    This is D9 priced on the search path rather than asserted: Option D issues
+    q tokens whatever d is, the policy-bound token issues q*d.
+    """
+    experiment = psa.PsaExp3CrossDomainLatency(
+        config=config, source=source
+    )
+    q = config.defaults.keywords_per_query
+    issued = {}
+    for d in (2, 4):
+        prepared = experiment.prepare(d)
+        sample = experiment.measure(prepared)
+        issued[d] = sample.secondaries["tokens_issued"]
+        assert sample.secondaries["nodes_searched"] >= 1
+    assert issued[2] == q * 2, issued
+    assert issued[4] == q * 4, issued
+    assert issued[4] > issued[2], (
+        "a policy-bound token names its domain, so a wider cross-domain query "
+        "cannot reuse one trapdoor"
     )
 
 
-def test_exp3_reports_the_option_d_baseline_alongside(config):
-    """The panel's whole content is the contrast with a constant 1."""
-    experiment = psa.PsaExp3CrossDomainTokens(config=config)
-    for d in experiment.values:
-        sample = _run(experiment, d)
-        assert sample.secondaries["option_d_tokens_issued"] == 1.0
-        assert sample.secondaries["tokens_issued"] >= sample.secondaries["policies"]
 
 
 # ===========================================================================
 # D1 — re-tokenization is real work
 # ===========================================================================
-def test_exp5_retokenizes_and_rebuilds(config):
-    experiment = psa.PsaExp5ReTokenization(config=config)
+def test_exp5_retokenizes_and_rebuilds(config, source):
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     sample = _run(experiment, experiment.values[0])
     assert sample.secondaries["entries_retokenized"] > 0
     assert sample.secondaries["commitments_rebuilt"] > 0
     assert sample.secondaries["merkle_nodes_recomputed"] > 0
 
 
-def test_exp5_work_grows_with_k(config):
-    experiment = psa.PsaExp5ReTokenization(config=config)
+def test_exp5_work_grows_with_k(config, source):
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     small = _run(experiment, experiment.values[0])
     large = _run(experiment, experiment.values[1])
     assert (
@@ -166,9 +188,9 @@ def test_exp5_work_grows_with_k(config):
     )
 
 
-def test_exp5_skips_records_no_governing_authority_touched(config):
+def test_exp5_skips_records_no_governing_authority_touched(config, source):
     """eq:unaffected-policy, as an absence of work rather than an assertion."""
-    experiment = psa.PsaExp5ReTokenization(config=config)
+    experiment = psa.PsaExp5ReTokenization(config=config, source=source)
     prepared = experiment.prepare(experiment.values[-1])
     world = prepared["world"]
     moved = sorted(world.authorities.values())[0]
@@ -185,17 +207,17 @@ def test_exp5_skips_records_no_governing_authority_touched(config):
 # ===========================================================================
 # D8 — Exp. 6 over the affected-policy ratio
 # ===========================================================================
-def test_exp6_sweeps_the_ratio_not_an_update_count(config):
+def test_exp6_sweeps_the_ratio_not_an_update_count(config, source):
     """The axis that D8 is about."""
-    experiment = psa.PsaExp6AffectedRatio(config=config)
+    experiment = psa.PsaExp6AffectedRatio(config=config, source=source)
     assert experiment.variable == "affected_policy_ratio"
     assert experiment.values == psa.AFFECTED_RATIOS
     assert min(experiment.values) == pytest.approx(0.1)
     assert max(experiment.values) == pytest.approx(1.0)
 
 
-def test_exp6_dias_evolves_only_the_affected_fraction(config):
-    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+def test_exp6_dias_evolves_only_the_affected_fraction(config, source):
+    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     for ratio in experiment.values:
         sample = _run(experiment, ratio)
         evolved = sample.secondaries["policies_evolved"]
@@ -203,9 +225,9 @@ def test_exp6_dias_evolves_only_the_affected_fraction(config):
         assert evolved == pytest.approx(expected, abs=1)
 
 
-def test_exp6_full_state_ignores_the_ratio(config):
+def test_exp6_full_state_ignores_the_ratio(config, source):
     """Its cost is flat because it re-evolves everything however little changed."""
-    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    experiment = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
     evolved = {
         _run(experiment, ratio).secondaries["policies_evolved"]
         for ratio in experiment.values
@@ -213,14 +235,14 @@ def test_exp6_full_state_ignores_the_ratio(config):
     assert evolved == {float(experiment.policy_population)}
 
 
-def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(config):
+def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(config, source):
     """The two halves of the claim, separated.
 
     Incremental-All ablates SELECTIVE delivery only: it evolves exactly the same
     policies as DIAS and differs solely in fan-out. If the two ever differ in
     `policies_evolved`, the arm has stopped being an ablation of one variable.
     """
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
     everyone = psa.PsaExp6AffectedRatio(
         config=config, variant=psa.VARIANT_INCREMENTAL_ALL
     )
@@ -231,11 +253,11 @@ def test_exp6_dias_and_incremental_all_do_equal_work_but_differ_on_the_wire(conf
         assert b.secondaries["delivered_kb"] > a.secondaries["delivered_kb"]
 
 
-def test_exp6_dias_advantage_over_full_state_narrows_toward_one(config):
+def test_exp6_dias_advantage_over_full_state_narrows_toward_one(config, source):
     """§VI: the advantage "narrows because a larger portion becomes dependency
     relevant". At 100% the two must coincide in work."""
-    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS)
-    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE)
+    dias = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_DIAS, source=source)
+    full = psa.PsaExp6AffectedRatio(config=config, variant=psa.VARIANT_FULL_STATE, source=source)
 
     def advantage(ratio):
         """How many times more policies Full-State evolves than DIAS."""
@@ -269,19 +291,21 @@ def test_corpus_backed_experiments_refuse_to_run_without_a_source(config):
             psa.build(number, config)
 
 
-def test_build_refuses_an_experiment_with_no_psa_form(config):
-    # Experiment 9 (tamper granularity) is the only one left without a psa
-    # form. This said `2`, then `7`, and each time the number it named GAINED a
-    # psa form and the test stopped testing anything -- so it now asserts
-    # against the registry rather than a literal, and fails loudly if 9 is ever
-    # covered too.
+def test_build_refuses_an_unknown_experiment(config):
+    # Every experiment Section VI defines now has a psa form -- Exp. 9 was the
+    # last holdout and was folded into Exp. 4 on 2026-09-12. So the subject is
+    # no longer "which number lacks a form" but "an unknown number is refused",
+    # which is what the guard is actually for.
     uncovered = sorted(set(main_mod.FOLDERS) - set(psa.PSA_EXPERIMENTS))
-    assert uncovered, (
-        "every experiment now has a psa form; this test needs a new subject "
-        "or deleting, not a different number"
+    assert not uncovered, (
+        f"experiments {uncovered} have no psa form; every number main.py "
+        f"offers must be buildable"
     )
+    # A number that is not in the registry at all must be refused rather than
+    # silently building something else.
+    unknown = max(psa.PSA_EXPERIMENTS) + 1
     with pytest.raises(KeyError, match="no policy-state-aware experiment"):
-        psa.build(uncovered[0], config)
+        psa.build(unknown, config)
 
 
 @pytest.mark.parametrize("number", sorted(psa.PSA_EXPERIMENTS))

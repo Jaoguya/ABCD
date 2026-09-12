@@ -84,7 +84,7 @@ def make_share(
     """A placeholder SK_{U,i}.
 
     Opaque by design: Phase III Step 2's construction is undecided, and delivery
-    is agnostic to what it delivers (PHASE_III_PLAN.md open decision 1).
+    is agnostic to what it delivers (Phase III open decision 1).
     """
     return types.AttributeKeyShare(
         authority_id=authority_id,

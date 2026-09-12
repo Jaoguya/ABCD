@@ -22,7 +22,7 @@ authorities. Deriving the profile from the AIM's ledger-backed view is what make
 it verifiable: ``aim.verify_against_ledger()`` already proves that view matches
 the chain, so a profile built from it inherits that guarantee.
 
-**Decisions** — three, all `benchmark`, all recorded in ``PHASE_III_PLAN.md``.
+**Decisions** — three, all `benchmark`, all recorded as Phase III decisions.
 
 * ``H(S_U)`` and ``H(C_U)`` are unspecified, exactly as ``H(A_i)`` was in
   Phase II Step 2. Both use the rule already implemented there: SHA-256 over the

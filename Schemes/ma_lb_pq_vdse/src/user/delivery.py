@@ -10,7 +10,7 @@ A KEM-DEM hybrid: ML-KEM-768 establishes a per-delivery shared secret, HKDF
 expands it into an AES-256-GCM key, and the attribute key share is sealed under
 it. Every primitive comes from ``Common/crypto`` (liboqs 0.16.0 for ML-KEM), so
 this step needs no pairing backend and is complete today — which is why
-``PHASE_III_PLAN.md`` schedules it before Steps 1 and 4 despite the protocol
+The Phase III build order schedules it before Steps 1 and 4 despite the protocol
 order.
 
 The share being delivered is **opaque** to this module. Phase III Step 2's
@@ -19,7 +19,7 @@ undecided; delivery is agnostic to what it delivers, and nothing here will chang
 when that decision lands.
 
 **Two bindings the manuscript does not specify** (`benchmark` provenance, no
-measurable cost, both recorded in ``PHASE_III_PLAN.md``):
+measurable cost, both recorded as Phase III decisions):
 
 * HKDF ``info`` is ``(kdf.info_prefix, UID, ID_i, VID_i)``. The paper writes
   ``HKDF(ss_i)`` with no salt or info, which would let one derived key serve any

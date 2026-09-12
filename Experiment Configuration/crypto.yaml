@@ -9,8 +9,8 @@
 #   fips       — fixed by a standard (FIPS 203, FIPS 197, FIPS 180-4)
 #   benchmark  — a benchmark choice; NOT specified in any paper (§VI (defaults))
 #
-# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING. Per needfix.md, do not edit
-# without team consensus, and record the change in the SystemConfiguration.md Change Log.
+# CHANGING ANY VALUE HERE IS RESULTS-AFFECTING. Per the scheme documents, do not edit
+# without team consensus, and record the change in the skill.md Change Log.
 # =============================================================================
 
 meta:
@@ -182,7 +182,7 @@ guo_vdsse:
     # N = 10^6 at 128 bits (141 GB).
     #
     # DISCLOSE IN §VI: guo's punctured-PRF domain is sized to the keyword
-    # universe rather than to lambda, as Ref[55]'s is; this makes guo FASTER on
+    # universe rather than to lambda, as Scheme 30's is; this makes guo FASTER on
     # Exp. 2/4/5 than a 128-bit domain would. The decision was taken on the
     # grounds above, before any cross-scheme result was known.
     domain_bits: 64
@@ -201,7 +201,7 @@ guo_vdsse:
 #    as generators of I1. A bilinear map is defined as e : I1 x I1 -> I2"
 #
 # This is a TYPE-I (symmetric) pairing. Security rests on DBDH
-# (Ref[41].txt:280-300). Implemented AS PUBLISHED per needfix.md — do not
+# (Ref[41].txt:280-300). Implemented AS PUBLISHED per the scheme documents — do not
 # "upgrade" it to a post-quantum or Type-III setting.
 # -----------------------------------------------------------------------------
 thingom_pq_abse:
@@ -229,7 +229,7 @@ thingom_pq_abse:
     # attributes (l = 30)"), and the manuscript's §VI never sets one despite
     # declaring u, l and e in its cost-notation table.
     #
-    # 10 was chosen to match zhuang_lattice_mabse.attributes.l, which WAS
+    # 10 was chosen to match the attribute count of the scheme this one
     # published, so the two attribute-based baselines would be compared at the
     # same policy size. Ref[52] has since been dropped (2026-08-27) and that
     # block reduced to a status marker, so the original basis no longer exists
@@ -251,23 +251,8 @@ thingom_pq_abse:
     mode: independent_trapdoors
 
 # -----------------------------------------------------------------------------
-# Ref[52] — Zhuang et al. DROPPED 2026-08-27 (team decision). Not implemented as
-# an active baseline; see debug_history.md for the full reasoning. Its Exp. 2
-# runner never materialized a real N-record index (approximated an N-record
-# scan by replaying one real entry N times), which the team judged not
-# comparable on the same "build once, measure real thing" methodology every
-# other scheme (including this repo's own) uses -- rather than disclose the
-# approximation, the scheme was replaced with Ref[54] (see below), which is
-# genuinely lattice-based/postquantum and does not have that gap. Kept as a
-# related-work citation in the manuscript; removed as an empirical comparator.
-# Parameters intentionally absent and NOT to be populated.
-# -----------------------------------------------------------------------------
-zhuang_lattice_mabse:
-  status: dropped_replaced_by_ref54
-
-# -----------------------------------------------------------------------------
 # Ref[54] — Perera and Fugkeaw, "LV-PQ-ABSE", IEEE IoT-J, doi:
-# 10.1109/JIOT.2026.3695855. Added 2026-08-27 to replace Ref[52] (zhuang,
+# 10.1109/JIOT.2026.3695855. Added 2026-08-27 as the fourth baseline (
 # dropped above). Genuinely lattice-based throughout (LWE-hardness CP-ABE +
 # Kyber768 KEM + Dilithium3 signatures, NIST Category 3 / lambda=192) -- no
 # pairings, no DBDH, anywhere in the construction. See
@@ -314,16 +299,16 @@ perera_lv_pqabse:
   security_parameter_lambda: 192      # published: "lambda = 192 (NIST Category 3)"
   attributes:
     # NOT PUBLISHED. No attribute universe size |U| is given anywhere in the
-    # paper (unlike zhuang's published l=10).
+    # paper.
     #
     # DECIDED 2026-08-29: 10, matching thingom_pq_abse.attributes.u so the two
     # attribute-based baselines are compared at the same policy size. That is
-    # the precedent already set between thingom and the dropped zhuang, and it
-    # is the choice SCHEME.md proposed. Not results-affecting for Exp. 1/2/3
+    # the precedent already set between the attribute-based baselines, and it
+    # is the choice skill.md proposed. Not results-affecting for Exp. 1/2/3
     # (see abe_on_measured_path below), so it costs nothing to align.
     universe_size: 10
   abe_on_measured_path: false
-  # MEASUREMENT BOUNDARY, decided 2026-08-29 and disclosed in SCHEME.md.
+  # MEASUREMENT BOUNDARY, decided 2026-08-29 and disclosed in skill.md.
   #
   # Exp. 1 times trapdoor generation, which in this scheme is PRF tokenization
   # plus a Dilithium3 signature -- the paper's own headline claim (Table II:
@@ -358,7 +343,7 @@ perera_lv_pqabse:
 # -----------------------------------------------------------------------------
 
 # -----------------------------------------------------------------------------
-# Ref[55] — Ge, Gao, Ning, Ma, Chen, IEEE Internet of Things Journal, vol. 11,
+# Scheme 30 — Ge, Gao, Ning, Ma, Chen, IEEE Internet of Things Journal, vol. 11,
 # no. 24, pp. 40861-40874, 15 Dec 2024. doi: 10.1109/JIOT.2024.3457270
 #
 # "Verifiable Multilevel Dynamic Searchable Encryption With Forward and
@@ -377,7 +362,7 @@ perera_lv_pqabse:
 # -----------------------------------------------------------------------------
 yue_ge:
   # --- published ---
-  access_levels: 3                    # published: Ref[55].md §4 — "three levels,
+  access_levels: 3                    # published: Scheme 30.md §4 — "three levels,
                                       # where level 3 is the highest and level 1
                                       # is the lowest" (paper §VII-A)
   bloom_filter:
@@ -410,7 +395,7 @@ yue_ge:
                                       # digests (§VII-A). Used for prooflist
                                       # entries only.
   symmetric_encryption: aes-256-gcm   # benchmark: paper says only "AES" and
-                                      # never fixes a key length (Ref[55].md §5
+                                      # never fixes a key length (Scheme 30.md §5
                                       # item 1). Matched to guo_vdsse's
                                       # symmetric_encryption so the two
                                       # verifiable baselines pay the same
@@ -418,7 +403,7 @@ yue_ge:
 
   # --- benchmark decisions: NOT published by the paper ---
   security_parameter_lambda: 128      # benchmark: never fixed numerically by the
-                                      # paper (Ref[55].md §5 item 1). Matched to
+                                      # paper (Scheme 30.md §5 item 1). Matched to
                                       # guo_vdsse.security_parameter_lambda=128
                                       # so the two verifiable baselines are
                                       # compared at equal security.
@@ -431,7 +416,7 @@ yue_ge:
                                       # d=4 (§VI (defaults)) so batch count and domain
                                       # count do not silently differ.
   puncturable_prf:
-    # The GGM tree DEPTH is derived, not stored. Ref[55] §IV-B (MSRE.Enc step 1)
+    # The GGM tree DEPTH is derived, not stored. Scheme 30 §IV-B (MSRE.Enc step 1)
     # fixes the t-punc-PRF domain as the Bloom index space itself:
     #   "Calculates j_i = H_i(t) in [b] and sk_{j_i} = F(sk, j_i)"
     # so depth = ceil(log2(b)), and b is itself derived from d and p. Storing a
@@ -439,12 +424,12 @@ yue_ge:
     # paper's own communication-cost figures (§VII-B) imply. The derivation is
     # src/msre.py::domain_bits_for().
     #
-    # The paper never states the depth explicitly (Ref[55].md §5 item 3); this
+    # The paper never states the depth explicitly (Scheme 30.md §5 item 3); this
     # derivation is the reading its own Enc step forces.
     output_bits: 256                  # benchmark: full SHA-256 output
   level_assignment: pid_hash          # benchmark: the corpus carries no access
                                       # level and the paper never says how it
-                                      # assigned one to Wikipedia (Ref[55].md §5
+                                      # assigned one to Wikipedia (Scheme 30.md §5
                                       # item 4). We derive it deterministically
                                       # from the record's pseudonymous patient id
                                       # so it is stable across runs and balanced

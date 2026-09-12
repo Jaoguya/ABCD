@@ -6,7 +6,7 @@
 # shape requires no code change.
 #
 # CHANGING ANY VALUE HERE IS RESULTS-AFFECTING once results generation has
-# begun — needfix.md forbids modifying the derived dataset after that point.
+# begun — the scheme documents forbids modifying the derived dataset after that point.
 # =============================================================================
 
 meta:
@@ -70,7 +70,7 @@ synthea:
   # Every source below is a DISTINCT clinical concept that a real encrypted
   # EHR index would contain. Two things are deliberately excluded because
   # they would inflate the keyword universe without adding real distinctions,
-  # which would pump n_eff and flatter Exp. 2 (needfix.md):
+  # which would pump n_eff and flatter Exp. 2 (the scheme documents):
   #
   #   * free-text DESCRIPTION alongside CODE — the same concept, aliased
   #   * value binning finer than the bins below — granularity for its own sake
@@ -209,7 +209,7 @@ output:
 # The corpus is built once and reused by every scheme on every instance.
 # Regenerating it mid-campaign produces two incomparable result sets that
 # surface only when a reviewer asks why two run_meta.json files disagree
-# (needfix.md: do not modify the derived dataset once results generation has
+# (the scheme documents: do not modify the derived dataset once results generation has
 # begun).
 #
 # Three things enforce this rather than relying on discipline:

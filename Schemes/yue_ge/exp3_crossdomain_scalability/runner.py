@@ -1,15 +1,15 @@
-"""Exp. 3 — Cross-Domain Search Scalability. Ref[55], native mode.
+"""Exp. 3 — Cross-Domain Search Scalability. Scheme 30, native mode.
 
-Variable:  domains ``d`` = 2 -> 10 (README §5)
+Variable:  domains ``d`` = 2 -> 10 (skill.md)
 Primary:   total latency (ms) across ``d`` domains
 Secondary: trapdoors issued, cross-node messages
 
 NATIVE MODE
 -----------
-Ref[55] has no cross-domain notion at all. Its system model (§V) is a single
+Scheme 30 has no cross-domain notion at all. Its system model (§V) is a single
 data owner, a single cloud server, and a hierarchy of users — there is no
 federation, no inter-server protocol, and no shared index across administrative
-boundaries. So the honest treatment is README §3's native-mode rule, the same
+boundaries. So the honest treatment is skill.md's native-mode rule, the same
 one applied to ``guo_vdsse`` and ``thingom_pq_abse``:
 
     issue ``d`` independent tokens, run ``d`` independent searches, aggregate
@@ -17,13 +17,13 @@ one applied to ``guo_vdsse`` and ``thingom_pq_abse``:
 
 Latency is therefore expected to grow linearly in ``d``, and ``cross_node_msgs``
 is identically 0 because no such message exists in the construction. Counting
-trapdoors issued is what makes the mechanism visible in the plot (README §5,
+trapdoors issued is what makes the mechanism visible in the plot (skill.md,
 Exp. 3: "Count trapdoors issued so the mechanism is visible").
 
 TOTAL INDEX IS HELD CONSTANT ACROSS d
 -------------------------------------
 ``d`` is the only variable, so the total amount of indexed data must not move
-with it. A fixed subset of ``N = 10^5`` records (README §6's default index size)
+with it. A fixed subset of ``N = 10^5`` records (skill.md's default index size)
 is sharded into ``d`` parts, exactly as ``guo_vdsse``'s Exp. 3 does
 ("each of ``d`` independent EDB instances holds 1/d of the corpus ... so total
 data is constant as d varies").
@@ -39,7 +39,7 @@ deployments are ~12 GB against a 16 GiB host.
 
 Sharding by ``rec.dom % d`` keeps shards aligned to real institutional
 boundaries wherever ``d`` divides the corpus's 10 domains, and never invents a
-domain the corpus does not have — README §4's constraint is about not
+domain the corpus does not have — skill.md's constraint is about not
 FABRICATING domains, which sharding a fixed subset does not do.
 """
 
@@ -74,7 +74,7 @@ SECONDARY_NAMES = ["trapdoors_issued", "cross_node_msgs", "results_returned"]
 
 VARIABLE_RANGE = list(range(2, 11))
 
-# README §6 default index size. Held constant across the whole d sweep so
+# skill.md default index size. Held constant across the whole d sweep so
 # that d is the only variable — see the module docstring.
 TOTAL_INDEX_SIZE = 100_000
 

@@ -2,7 +2,7 @@
 
 Why this is a test and not a paragraph
 --------------------------------------
-This audit used to live in README §17.7/§17.8 as hand-written verdicts. Every
+This audit used to live in SystemConfiguration.md.7/§17.8 as hand-written verdicts. Every
 rerun invalidated them and nobody rewrote them, so by 2026-09-04 three of its
 four rows were false:
 
@@ -67,7 +67,7 @@ MIN_NOISE_FRACTION = 0.20
 #: The current manuscript's rows are different in all five cells; they are
 #: asserted separately in ``PSA_CLAIMS``, against the ``psa_*`` directories, so
 #: neither table is checked against the other's data. This is divergence D6 --
-#: see ``MANUSCRIPT_DIVERGENCE.md``.
+#: see the divergence notes D1-D9.
 #:
 #: (scheme, experiment dir, tab:cost cell, swept symbol, claim shape)
 CLAIMS = [

@@ -6,7 +6,7 @@ Merkle update, the ``IAS_i`` message, selective propagation to the affected Fog
 Search Nodes, and the ``BC_i'`` anchor.
 
 This is the phase Exp. 5 and Exp. 6 measure, so what it avoids matters as much as
-what it does: no global index rebuild (README §5), and under Option D no
+what it does: no global index rebuild, and under Option D no
 re-tokenization at all — a policy or version change rewrites entry payload and
 two bitmap bits, never a token or a posting list.
 """

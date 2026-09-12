@@ -18,7 +18,7 @@ The resolution that keeps every other published statement true: the encrypted
 record ``C_i`` is what IPFS stores and addresses, and ``Root_i`` and ``Commit_i``
 travel as metadata — which is exactly what Phase V Step 2 registers and Step 3
 anchors. Were they already inside the addressed content, registering them
-separately would be redundant. Recorded in ``SCHEME.md``; worth correcting in §VI.
+separately would be redundant. A recorded author decision; worth correcting in §VI.
 
 **Content addressing is the property that matters**, not the CID format: the same
 bytes must always yield the same identifier, and an identifier must always return

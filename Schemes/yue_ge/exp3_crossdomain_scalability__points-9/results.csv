@@ -1,2 +1,0 @@
-variable_value,primary_mean,primary_ci95,trapdoors_issued_mean,trapdoors_issued_ci95,cross_node_msgs_mean,cross_node_msgs_ci95,results_returned_mean,results_returned_ci95,n_runs
-9,189.6628,45.692619,9.0,0.0,0.0,0.0,2114.133333,510.765798,30

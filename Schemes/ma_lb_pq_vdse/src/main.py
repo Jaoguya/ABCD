@@ -1,18 +1,18 @@
 """CLI entry point for the MA-LB-PQ-VDSE experiment harness.
 
-Documented in ``SCHEME.md``::
+Documented in ``SystemConfiguration.md`` section 7::
 
     python3 -m Schemes.ma_lb_pq_vdse.src.main --experiment all \
         --config "Experiment Configuration/global.yaml" \
-        --dataset Dataset/derived --runs 30
+        --dataset Dataset/derived --runs 10
 
 Writes ``raw_runs.csv``, ``results.csv`` and ``run_meta.json`` into each
-experiment's folder, per README §9.
+experiment's folder, per ``SystemConfiguration.md`` section 7.
 
 **Nothing this produces is reportable today**, and the reasons travel with the
 output rather than living only here: ``run_meta.json`` carries
 ``not_reportable_because``, populated by ``harness.provenance.reportability``.
-The blockers are listed in ``SCHEME.md`` — the missing v2 dataset manifest, the
+The blockers — the missing v2 dataset manifest, the
 absent Type-III pairing backend, the undecided keyed/unkeyed ``H``, and the
 unswept λ weights. ``--require-reportable`` refuses to run rather than producing
 output that could be mistaken for results.
@@ -46,26 +46,12 @@ FOLDERS = {
     6: "exp6_authorization_sync",
     7: "exp7_search_throughput",
     8: "exp8_load_balance",
-    9: "exp9_verification_granularity",
 }
 
-#: Output folders for the ``psa`` construction — the manuscript's
-#: policy-state-aware form (MANUSCRIPT_DIVERGENCE.md D1-D9). Separate names, not
-#: a ``__psa`` suffix on the folders above, because these are not another arm of
-#: the same measurement: Exp. 1 and psa_exp1 time different functions, and
-#: psa_exp6 sweeps a different variable entirely. Sharing a directory family
-#: would invite exactly the averaging-across-incomparables the suffix convention
-#: exists to prevent.
-PSA_FOLDERS = {
-    1: "psa_exp1_token_generation",
-    2: "psa_exp2_search_latency",
-    3: "psa_exp3_crossdomain_tokens",
-    4: "psa_exp4_verification_overhead",
-    5: "psa_exp5_retokenization",
-    6: "psa_exp6_affected_ratio",
-    7: "psa_exp7_search_throughput",
-    8: "psa_exp8_load_balance",
-}
+#: One construction, so one folder map. `PSA_FOLDERS` was a second name for
+#: this same dict once the `psa_` prefix went; keeping both invites them to
+#: drift apart.
+PSA_FOLDERS = FOLDERS
 
 
 def _run_notes(
@@ -84,12 +70,12 @@ def _run_notes(
     # use for "which arm produced this"; Exp. 1's |P_U| and Exp. 6's
     # propagation rule are arms in exactly that sense, whatever the key is
     # called. Renaming it would orphan 85 banked run_meta.json files.
-    if variant and number in (1, 6, 7, 8):
+    if variant and number in (1, 4, 6, 7, 8):
         notes.append(f"scheduler_variant={variant}")
     if construction == "psa":
         notes.append(
-            "policy-state-aware construction (MANUSCRIPT_DIVERGENCE.md D1-D9); "
-            "measures token/commitment cost, NOT end-to-end search"
+            "policy-state-aware construction (divergences D1-D9): "
+            "T = H(w || PID || PV || Dom), PV a version-VECTOR digest"
         )
         if number == 4:
             # The LIVE selection, not a literal: a psa Exp. 4 stamped 'fabric'
@@ -99,19 +85,31 @@ def _run_notes(
     return notes
 
 
-def parse_experiments(value: str) -> List[int]:
-    """``all``, ``2``, or ``1,2,5``."""
+def parse_experiments(value: str, construction: str = "psa") -> List[int]:
+    """``all``, ``2``, or ``1,2,5`` — resolved against THIS construction's set.
+
+    The two constructions do not cover the same experiment numbers: Option D has
+    9 (tamper granularity, the Exp. 4 companion) and no 10; PSA has 10 (the D9
+    token-count companion to §VI's Fig. 3) and no 9.
+
+    This ignored ``construction`` and always returned ``sorted(FOLDERS)``, which
+    was wrong in both directions once the sets diverged: ``--experiment all
+    --construction psa`` tried 9, which has no PSA form and raises, and never
+    reached 10 at all — so a full PSA campaign would silently omit an experiment
+    while failing on one that does not exist for it.
+    """
+    known = PSA_FOLDERS if construction == "psa" else FOLDERS
     if value.strip().lower() == "all":
-        return sorted(FOLDERS)
+        return sorted(known)
     numbers = []
     for part in value.split(","):
         part = part.strip()
         if not part:
             continue
-        if not part.isdigit() or int(part) not in FOLDERS:
+        if not part.isdigit() or int(part) not in known:
             raise argparse.ArgumentTypeError(
-                f"unknown experiment {part!r}; README §5 defines 1-8, plus 9 "
-                f"(tamper granularity, the Exp. 4 companion)"
+                f"unknown experiment {part!r} for construction "
+                f"{construction!r}; valid: {sorted(known)}"
             )
         numbers.append(int(part))
     if not numbers:
@@ -122,18 +120,18 @@ def parse_experiments(value: str) -> List[int]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python3 -m Schemes.ma_lb_pq_vdse.src.main",
-        description="Run the MA-LB-PQ-VDSE experiments (README §5).",
+        description="Run the MA-LB-PQ-VDSE experiments.",
     )
     parser.add_argument("--experiment", default="all", help="all, 2, or 1,2,5")
     parser.add_argument("--config", default=None, help="path to global.yaml (informational)")
     parser.add_argument("--dataset", default=None, help="derived corpus directory")
     parser.add_argument(
         "--runs", type=int, default=None,
-        help="retained runs per point (README §7 fixes 10)",
+        help="retained runs per point (global.yaml fixes 10)",
     )
     parser.add_argument(
         "--warmups", type=int, default=None,
-        help="discarded warm-up runs (README §7 fixes 5)",
+        help="discarded warm-up runs (global.yaml fixes 5)",
     )
     parser.add_argument(
         "--output", default=None,
@@ -148,17 +146,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="one tiny sweep point and few runs, to exercise the pipeline",
     )
     parser.add_argument(
-        "--construction", default="option_d",
-        choices=("option_d", "psa"),
+        "--construction", default="psa",
+        choices=("psa",),
         help=(
-            "which construction to measure. 'option_d' (default) is the "
-            "implemented scheme: T = H(w), the banked results. 'psa' is the "
-            "current manuscript's policy-state-aware form, "
-            "T = H(w || PID || PV || Dom) -- see MANUSCRIPT_DIVERGENCE.md "
-            "D1-D9. The two write to different directories and are NOT arms of "
-            "one measurement; psa covers experiments "
-            + ", ".join(str(n) for n in sorted(PSA_FOLDERS))
-            + " only."
+            "kept for compatibility; there is one construction. The scheme "
+            "implements the manuscript's policy-state-aware form and "
+            "nothing else, so this accepts only 'psa'."
         ),
     )
     parser.add_argument(
@@ -193,7 +186,7 @@ def build_parser() -> argparse.ArgumentParser:
 def run(argv: Optional[Sequence[str]] = None) -> int:
     args = build_parser().parse_args(argv)
     config = scheme_config.load()
-    numbers = parse_experiments(args.experiment)
+    numbers = parse_experiments(args.experiment, "psa")
     scheme_root = Path(__file__).resolve().parent.parent
     output_root = Path(args.output) if args.output else scheme_root
 
@@ -218,7 +211,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         source = experiments_mod.SyntheticRecordSource()
         log(f"corpus unavailable ({type(exc).__name__}: {exc})")
         log("  falling back to SyntheticRecordSource -- runs will be marked "
-            "NOT REPORTABLE (README §4 admits only corpus_type 'synthea')")
+            "NOT REPORTABLE (dataset.yaml admits only corpus_type 'synthea')")
         if args.require_reportable:
             log("REFUSED: --require-reportable was passed but the verified "
                 "corpus could not be loaded")
@@ -238,7 +231,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         group_faithful = False
         log(f"pairing: no faithful Type-III backend ({type(exc).__name__}: {exc})")
 
-    # Evidence for the README §1 topology gate. Independent FSN processes need
+    # Evidence for the SystemConfiguration.md topology gate. Independent FSN processes need
     # fork (fsn/pool.py); on a platform without it the harness falls back to the
     # single-interpreter path, and reporting a process count here would assert a
     # topology the run did not use.
@@ -274,7 +267,23 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         The stale ``exp6_authorization_sync__no_lb`` directory is what that
         produced -- within 3% of the main run at every point.
         """
-        if number == 1 and args.construction == "psa":
+        if number == 4:
+            # Exp. 4 is ONE experiment with two arms, because SVI's Fig. 4 makes
+            # one claim in two panels over two different variables: (a) sweeps
+            # `r` and asks what verification costs, (b) pins `r` and sweeps the
+            # tamper count `t`, asking what it buys. Default runs both, because
+            # a figure with one panel missing is not the figure SVI describes.
+            if args.variant in (None, "") or args.variant.lower() == "all":
+                return [""] + list(psa_mod.PSA_EXP4_VARIANTS)
+            picked = [v.strip() for v in args.variant.split(",") if v.strip()]
+            bad = [v for v in picked if v and v not in psa_mod.PSA_EXP4_VARIANTS]
+            if bad:
+                raise SystemExit(
+                    f"unknown Exp. 4 arm(s) {bad}; valid: "
+                    f"{', '.join(psa_mod.PSA_EXP4_VARIANTS)}, or 'all'"
+                )
+            return picked
+        if number == 1:
             # §VI varies q AND |P_U|; the runner sweeps one variable, so |P_U|
             # is the arm. Defaults to every scope, because a single-arm run
             # would silently reproduce the D7 defect it exists to fix.
@@ -289,7 +298,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
                 )
             return picked
         if number == 6:
-            if args.construction == "psa":
+            if True:
                 if args.variant in (None, ""):
                     return [psa_mod.VARIANT_DIAS]
                 if args.variant.lower() == "all":
@@ -333,7 +342,9 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             )
         return chosen
 
-    psa = args.construction == "psa"
+    # One construction: the manuscript's. Kept as a name rather than
+    # inlined, because the branches below read as what they are.
+    psa = True
     if psa:
         unsupported = [n for n in numbers if n not in PSA_FOLDERS]
         if unsupported:
@@ -404,6 +415,15 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
             secondary_metrics=[
                 spec.name for spec in getattr(experiment, "secondaries", ())
             ],
+            # Machine-readable, not a note: a figure must be able to refuse to
+            # draw two constructions on one axis, and free text in `notes`
+            # cannot be checked. See RunMetadata.construction.
+            construction=args.construction,
+            ledger_backend=chain_select.ledger_backend(),
+            # The experiment ITSELF, so provenance can fingerprint the source of
+            # `prepare`/`measure`. Passing the object rather than a precomputed
+            # digest keeps the definition of "what this measures" in one place.
+            experiment_object=experiment,
         )
         if args.require_reportable and not metadata.reportable:
             log(f"REFUSED {experiment.name}: not reportable")
@@ -440,7 +460,7 @@ def run(argv: Optional[Sequence[str]] = None) -> int:
         # curve labelled as an ablation.
         folders = PSA_FOLDERS if psa else FOLDERS
         out_dir = sweep.shard_dir(output_root / folders[number], args.points)
-        variant_dir_numbers = (1, 6, 7, 8) if psa else (6, 7, 8)
+        variant_dir_numbers = (1, 4, 6, 7, 8) if psa else (6, 7, 8)
         if variant and number in variant_dir_numbers:
             out_dir = out_dir.parent / f"{out_dir.name}__{variant}"
         written = runner.write_outputs(result, out_dir)

@@ -1,4 +1,4 @@
-"""``run_meta.json`` — provenance for every result, per README §7.
+"""``run_meta.json`` — provenance for every result, per global.yaml.
 
 "Each ``results.csv`` gets a ``run_meta.json``: git commit, instance type, Python
 and library versions, dataset SHA-256, corpus type, config hashes, UTC start
@@ -18,6 +18,7 @@ with no reason is not provenance.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import platform
 import re
@@ -54,7 +55,7 @@ _OUTPUT_ARTIFACTS = (
     "results.csv",
     "raw_runs.csv",
     "run_meta.json",
-    # Written by harness/lambda_sweep.py into exp7_search_throughput/. It is a
+    # Written by the hold-out sweep into exp7_search_throughput/. It is a
     # run's output like any other, so regenerating it must not mark the tree
     # dirty -- and infra/fleet.sh's deploy-restore must preserve it for the same
     # reason. Keep the two lists in step.
@@ -145,7 +146,7 @@ def library_versions() -> Dict[str, str]:
 
 @dataclass
 class RunMetadata:
-    """Everything README §7 requires, plus why the run is or is not reportable."""
+    """Everything global.yaml requires, plus why the run is or is not reportable."""
 
     scheme: str
     experiment: str
@@ -176,18 +177,39 @@ class RunMetadata:
     reportable: bool
     not_reportable_because: List[str] = field(default_factory=list)
     notes: List[str] = field(default_factory=list)
-    #: The secondary metric names, IN THE ORDER results.csv writes them as
-    #: ``secondary_1_mean``, ``secondary_2_mean``, ...
+    #: The secondary metric names, in the order the experiment declares them.
     #:
-    #: results.csv cannot carry them: this scheme's columns are positional
-    #: (``secondary_N_mean``) while the baselines write the metric's real name,
-    #: and the plotter reads the i-th column after primary for both. That made a
-    #: panel label a claim nothing checked — Exp. 8's Fig. 8(c) was labelled
+    #: SINCE 2026-09-10 results.csv also carries them, as the column names
+    #: themselves (``cross_node_forwards_mean``), so the plotter resolves a
+    #: panel by name and this field is the cross-check rather than the only
+    #: record. It remains load-bearing for BANKED files, whose columns are
+    #: positional (``secondary_N_mean``) and whose meaning lives nowhere else.
+    #:
+    #: The positional layout made a panel label a claim nothing checked —
+    #: Exp. 8's Fig. 8(c) was labelled
     #: "Cross-node forwards" while `cross_node_forwards` had been dropped from
     #: the metric list, so the column at that position was peak queue depth.
     #: Recording the names here lets Plots/generate_plots.py verify the label it
     #: is about to draw, and refuse rather than mislabel.
     secondary_metrics: List[str] = field(default_factory=list)
+
+    #: WHICH CONSTRUCTION produced these numbers — ``option_d`` (``T = H(w)``)
+    #: or ``psa`` (the manuscript's ``T = H(w ‖ PID ‖ PV ‖ Dom)``). The two time
+    #: DIFFERENT functions at the same experiment number, so a results.csv that
+    #: does not name its construction cannot be attributed to a scheme at all.
+    #: It lived only in ``notes`` as free text, which no figure could check;
+    #: Fig. 1 was drawn from ``psa`` while Figs. 2-8 were drawn from
+    #: ``option_d`` and nothing in the artifacts said so.
+    construction: str = "option_d"
+    #: The ledger the run actually called (``memory`` or ``fabric``), from the
+    #: same ``ABCD_LEDGER`` switch ``build_deployment`` reads. ``ledger_faithful``
+    #: gates Exp. 4's reportability but was never recorded, so a banked Exp. 4
+    #: number could not be attributed to a ledger after the fact.
+    ledger_backend: str = "unknown"
+    #: Digest of what this run MEASURES — see :func:`measurement_fingerprint`.
+    #: Two artifacts with different fingerprints came from different
+    #: measurements and must not be drawn on one axis.
+    measurement_fingerprint: str = "unavailable"
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=True) + "\n"
@@ -220,7 +242,7 @@ def _expected_corpus_sha256() -> Optional[str]:
 #: repo's history, not a tunable, which is why it lives here rather than in
 #: config: 5cf65f9 fixed three such defects in Exp. 7-8 -- every arm paid AASS's
 #: cost vector, the queue feedback loop was dead so `least_loaded` collapsed onto
-#: `no_lb`, and prepare() built 32 records against README §6's 10^5. Numbers from
+#: `no_lb`, and prepare() built 32 records against global.yaml's 10^5. Numbers from
 #: before it are not comparable with numbers from after it.
 #:
 #: Judged at READ time from the commit the record already carries. A stamped
@@ -317,7 +339,7 @@ def reportability(
 ) -> Tuple[bool, List[str]]:
     """Every condition a quotable number must satisfy, and which ones failed.
 
-    Each entry corresponds to a decision recorded in ``SCHEME.md``. Collected in
+    Each entry corresponds to a recorded author decision. Collected in
     one place so a runner cannot report a figure by forgetting a check, and so the
     reasons land in ``run_meta.json`` where a reader can see them.
     """
@@ -329,12 +351,12 @@ def reportability(
             f"not running on the pinned AWS experiment host: expected "
             f"{host['expected_instance_type']!r}, detected "
             f"{host['detected_instance_type'] or 'not EC2'!r} on "
-            f"{host['platform']!r} (README §1)"
+            f"{host['platform']!r}"
         )
 
     if corpus_type not in config.corpus["reportable_types"]:
         reasons.append(
-            f"corpus_type={corpus_type!r} is not reportable; README §4 admits "
+            f"corpus_type={corpus_type!r} is not reportable; dataset.yaml admits "
             f"only {list(config.corpus['reportable_types'])}"
         )
     if corpus_sha256 is None:
@@ -347,7 +369,7 @@ def reportability(
         # nothing here performed one: a run against a DIFFERENT corpus than the
         # campaign was frozen on would have passed this gate and been marked
         # reportable, which is precisely the silent data swap
-        # dataset.yaml's freeze pin exists to prevent (README §13, "The corpus
+        # dataset.yaml's freeze pin exists to prevent (SystemConfiguration.md, "The corpus
         # is frozen"). Dataset/corpus.py guards its own loader, but a scheme
         # that obtains a digest another way bypassed that entirely. Checked
         # here so the gate matches what it claims. Added 2026-08-28.
@@ -357,7 +379,7 @@ def reportability(
                 f"corpus SHA-256 {corpus_sha256[:12]}... does not match "
                 f"dataset.yaml's frozen pin {pinned[:12]}...; results from a "
                 f"different corpus are not comparable to the campaign "
-                f"(README §13). Either restore the frozen corpus or re-freeze "
+                f". Either restore the frozen corpus or re-freeze "
                 f"and re-run EVERY scheme."
             )
 
@@ -373,23 +395,23 @@ def reportability(
     # that fires when it should not trains readers to ignore it.
     #
     # Exp. 6 WAS listed here (451df65, 2026-08-28) on the grounds that it "times
-    # DIAS through to blockchain anchoring (README §5, Phase VII Step 5)". Removed
+    # DIAS through to blockchain anchoring (global.yaml, Phase VII Step 5)". Removed
     # 2026-09-03: that justification cited a PROTOCOL STEP, not a measurement
     # boundary, and it does not hold against the code. ``sync/ias.py::synchronize``
     # takes ``ledger`` as OPTIONAL and anchors only inside ``if ledger is not
     # None``; Exp. 6's runner has never passed one, so Step 7 is not on its timed
-    # path. Two independent sources agree it is outside the boundary: README §5
+    # path. Two independent sources agree it is outside the boundary: global.yaml
     # ends Exp. 6 at "until all affected FSNs report the new VID", and
     # ``tab:cost``'s authorization-synchronization row is O(delta)T_H +
     # O(log d)T_MT with no chain term. Exp. 4 keeps the gate because §5 puts
     # "chain consistency" INSIDE its boundary in as many words.
     #
     # §VI must state the exclusion and report anchoring separately -- the treatment
-    # README §5 already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 5
+    # global.yaml already gives ML-KEM encapsulation in Exp. 1. If Phase VII Step 5
     # is ever brought inside the boundary, the runner must pass a ledger and
     # ``exp6_authorization_sync`` must come back into this tuple.
     if _experiment_number(experiment) == 4 and not ledger_faithful:
-        # README §1 states the ledger is Hyperledger Fabric v2.5, but the
+        # SystemConfiguration.md states the ledger is Hyperledger Fabric v2.5, but the
         # harness runs chain.ledger.InProcessLedger -- whose OWN docstring says
         # it is "NOT a substitute for Fabric once Fog Search Nodes become
         # independent processes" and that "Exp. 4 is where it starts to be
@@ -401,7 +423,7 @@ def reportability(
         # 2026-08-28.
         reasons.append(
             "the ledger is an in-process hash chain, not the Hyperledger "
-            "Fabric v2.5 deployment README §1 specifies; Exp. 4's chain-"
+            "Fabric v2.5 deployment SystemConfiguration.md specifies; Exp. 4's chain-"
             "consistency cost is therefore understated (see "
             "chain/ledger.py::InProcessLedger)"
         )
@@ -418,7 +440,7 @@ def reportability(
         if not config.scheduler.weights.is_fixed:
             reasons.append(
                 f"AASS weights are {config.scheduler.weights.status!r}; "
-                f"README §14 issue #5 requires the documented hold-out sweep first"
+                f"scheduler.yaml requires the documented hold-out sweep first"
             )
         # Was an UNCONDITIONAL blocker: the harness had no multi-process path,
         # so declaring the requirement in global.yaml could only ever fail it.
@@ -429,7 +451,7 @@ def reportability(
         # cannot be asserted by a caller that did not spawn them.
         if config.topology.independent_processes and not fsn_processes:
             reasons.append(
-                "README §1 requires each FSN to be an independent process; this "
+                "SystemConfiguration.md requires each FSN to be an independent process; this "
                 "run executed them in one interpreter, so a concurrency result "
                 "would not measure the stated topology"
             )
@@ -487,6 +509,53 @@ def reportability(
     return (not reasons), reasons
 
 
+def measurement_fingerprint(experiment, construction: str) -> str:
+    """A digest of WHAT THIS RUN MEASURES, so a stale artifact is detectable.
+
+    Named columns (2026-09-10) closed most of the stale-data family: a metric
+    added or renamed is now a MISSING COLUMN, which fails loudly. One case
+    survives that — **names match, shape matches, behaviour changed underneath**.
+    `exp5_keyword_update`'s `entries_rewritten` is the worked example: banked
+    data reads 0.0 at every k, today's code returns 6 per record for the same
+    call, and nothing in either artifact says they came from different code.
+
+    This hashes the things that decide what a number MEANS: the construction,
+    the metric names in order, the sweep values, and **the source of `prepare`
+    and `measure`** — the part that actually changed in the `exp5` case and that
+    no other field captures.
+
+    Source text rather than a git commit, because a commit moves whenever
+    anything in the repo moves: the 114 banked runs span four commits and most
+    of those changes were irrelevant to the numbers. Hashing the measurement
+    keeps the signal.
+
+    Degrades to ``"unavailable"`` rather than raising — a provenance field must
+    never be why a campaign dies.
+    """
+    import inspect
+
+    parts = [f"construction={construction}"]
+    primary = getattr(experiment, "primary", None)
+    if primary is not None:
+        parts.append(
+            f"primary={getattr(primary, 'name', '')}:{getattr(primary, 'unit', '')}"
+        )
+    parts.append("secondaries=" + ",".join(
+        f"{spec.name}:{getattr(spec, 'unit', '')}"
+        for spec in getattr(experiment, "secondaries", ())
+    ))
+    parts.append("values=" + ",".join(
+        str(v) for v in getattr(experiment, "values", ())
+    ))
+    for method in ("prepare", "measure"):
+        fn = getattr(experiment, method, None)
+        try:
+            parts.append(f"{method}={inspect.getsource(fn)}" if fn else f"{method}=")
+        except (OSError, TypeError):
+            parts.append(f"{method}=unavailable")
+    return hashlib.sha256("\n".join(parts).encode("utf-8")).hexdigest()
+
+
 def build_metadata(
     config: scheme_config.Configuration,
     *,
@@ -502,6 +571,9 @@ def build_metadata(
     warmups: Optional[int] = None,
     notes: Optional[List[str]] = None,
     secondary_metrics: Optional[Sequence[str]] = None,
+    construction: str = "option_d",
+    ledger_backend: str = "unknown",
+    experiment_object: Any = None,
 ) -> RunMetadata:
     """Assemble ``run_meta.json`` at the start of a run."""
     reportable, reasons = reportability(
@@ -514,6 +586,31 @@ def build_metadata(
         ledger_faithful=ledger_faithful,
         fsn_processes=fsn_processes,
     )
+    # THE HOST CAVEAT MUST TRAVEL WITH THE NUMBER.
+    #
+    # `verify_experiment_host()` is right to satisfy `host_check_satisfied`
+    # vacuously when no pin is configured -- global.yaml dropped
+    # `environment.instance_type` deliberately, so that guo (52 GB at N=10^6)
+    # and thingom (vCPU-bound) can run on hosts sized for their work, and
+    # failing the check would refuse every legitimate run.
+    #
+    # But the consequence was invisible: a run is stamped `reportable: true`
+    # with NO host guarantee at all, while SVI states one `m6i.xlarge` for all
+    # five schemes. The artifact recorded `pin_configured: false` three levels
+    # down and nothing said what it meant. Recorded here as a note -- not a
+    # blocking reason, because the pin was dropped on purpose -- so a reader
+    # quoting the number sees the caveat attached to it.
+    host_report = verify_experiment_host()
+    run_notes = list(notes or ())
+    if not host_report.get("pin_configured"):
+        run_notes.append(
+            "host NOT pinned: global.yaml sets no environment.instance_type, so "
+            "the host check passed vacuously. Detected "
+            f"{host_report.get('detected_instance_type') or 'no EC2 metadata'!r}. "
+            "Cross-host latency comparisons are unsound until the pin returns; "
+            "SVI must disclose the host per scheme rather than claim one type."
+        )
+
     return RunMetadata(
         scheme=SCHEME_NAME,
         experiment=experiment,
@@ -523,7 +620,7 @@ def build_metadata(
         python_version=platform.python_version(),
         platform=platform.platform(),
         instance_type=str(config.environment.get("instance_type", "unknown")),
-        experiment_host=verify_experiment_host(),
+        experiment_host=host_report,
         libraries=library_versions(),
         crypto_backends=environment_report(),
         config_hashes=scheme_config.config_hashes(),
@@ -536,8 +633,14 @@ def build_metadata(
         confidence=config.measurement.confidence_interval,
         reportable=reportable,
         not_reportable_because=reasons,
-        notes=list(notes or ()),
+        notes=run_notes,
         secondary_metrics=list(secondary_metrics or ()),
+        construction=construction,
+        ledger_backend=ledger_backend,
+        measurement_fingerprint=(
+            measurement_fingerprint(experiment_object, construction)
+            if experiment_object is not None else "unavailable"
+        ),
     )
 
 

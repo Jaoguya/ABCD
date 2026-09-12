@@ -358,7 +358,7 @@ def test_merkle_rejects_wrong_root_and_tampered_leaf():
 def test_merkle_incremental_update_matches_full_rebuild():
     """Phase VII must update in place and land on the same root as a rebuild.
 
-    README §5, Exp. 5: a run that triggers a global rebuild is a bug. This is
+    skill.md, Exp. 5: a run that triggers a global rebuild is a bug. This is
     the test that says the incremental path is actually equivalent.
     """
     leaves = [f"record-{i}".encode() for i in range(16)]

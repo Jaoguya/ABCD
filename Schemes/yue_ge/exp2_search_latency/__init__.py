@@ -1,1 +1,1 @@
-"""Ref[55] exp2_search_latency — see runner.py."""
+"""Scheme 30 exp2_search_latency — see runner.py."""

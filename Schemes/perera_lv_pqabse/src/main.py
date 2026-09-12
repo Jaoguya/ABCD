@@ -5,7 +5,7 @@
 Covers Exp. 1, 2, 3 only. Exp. 4 is not claimed (this repo's Exp. 4 boundary is
 defined against the proposed scheme's verification path), and Exp. 5 and 6 are
 excluded because the paper has no incremental-update primitive and explicitly
-disclaims fine-grained revocation — see SCHEME.md for both.
+disclaims fine-grained revocation — see 54.md for both.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ EXPERIMENT_MAP = {
 
 
 def _report_setup_cost() -> None:
-    """README §5, Exp. 1: session establishment is reported separately.
+    """skill.md, Exp. 1: session establishment is reported separately.
 
     ML-KEM-768 encapsulation is excluded from the trapdoor curve because it
     happens once per session, not per query. Excluding it silently would make
@@ -58,7 +58,7 @@ def _report_setup_cost() -> None:
         print(f"  session establishment: UNAVAILABLE ({exc})")
         return
     print(
-        f"  session establishment (EXCLUDED from Exp. 1, README §5): "
+        f"  session establishment (EXCLUDED from Exp. 1, skill.md): "
         f"keygen {cost['keygen_ms']:.3f} ms, "
         f"encapsulate {cost['encapsulate_ms']:.3f} ms, "
         f"decapsulate {cost['decapsulate_ms']:.3f} ms "
@@ -74,9 +74,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     )
     parser.add_argument("--experiment", default="all", help="all, or 1,2,3")
     parser.add_argument("--runs", type=int, default=10,
-                        help="retained runs per point (README §7 fixes 10)")
-    parser.add_argument("--warmup", type=int, default=5,
-                        help="discarded warm-ups (README §7 fixes 5)")
+                        help="retained runs per point (skill.md fixes 10)")
+    # Canonical spelling per skill.md's common contract; --warmup stays
+    # accepted. Same dest, so no runner body changes.
+    parser.add_argument("--warmups", "--warmup", dest="warmup",
+                        type=int, default=5,
+                        help="discarded warm-ups (global.yaml fixes 5)")
     parser.add_argument("--seed", type=int, default=20260829)
     parser.add_argument("--output", type=Path,
                         default=REPO_ROOT / "Schemes" / "perera_lv_pqabse")

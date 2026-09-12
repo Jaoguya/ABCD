@@ -3,7 +3,7 @@
 # =============================================================================
 # §VI (experiments): "closed-loop generator, fixed concurrency per point, recorded
 # arrival trace so all variants see identical workloads. Utilization sampled
-# every 100 ms." SCHEME.md: "All 4 variants see byte-identical workloads."
+# every 100 ms." skill.md: "All 4 variants see byte-identical workloads."
 #
 # Exp. 7 (throughput) and Exp. 8 (utilization spread) are DERIVED FROM THE SAME
 # RUNS. This file defines those runs once; both experiments read it.
@@ -98,6 +98,6 @@ metrics:
     primary: fsn_utilization_stddev
     secondary: [max_node_utilization, cross_node_forwards]
   utilization:
-    sample_interval_ms: 100     # published: §VI (experiments) / SCHEME.md Exp. 7-8 rule
+    sample_interval_ms: 100     # published: §VI (experiments) / skill.md Exp. 7-8 rule
     definition: busy_time_fraction_per_interval   # benchmark
     exclude_ramp: true
