@@ -1,6 +1,6 @@
 """Corpus -> Peony workload adaptation, shared by all five runners.
 
-Two jobs, both of which the Zhuang baseline got wrong and which are worth
+Two jobs, both of which a retired baseline got wrong and which are worth
 keeping in one reviewed place rather than copy-pasted five times:
 
 1. **Actually read the corpus.** Every runner here builds its index from
@@ -8,7 +8,7 @@ keeping in one reviewed place rather than copy-pasted five times:
    vocabulary. No synthetic ``f"keyword_{i}"`` strings, and no experiment that
    accepts ``--dataset`` and then ignores it.
 
-2. **Batch the updates.** Ref[55] is a *batched* dynamic scheme: the index is
+2. **Batch the updates.** Scheme 30 is a *batched* dynamic scheme: the index is
    ``I = union of I_c`` over ``c`` update batches (§V-D), and search cost is
    ``O(c)`` because the server repeats its derivation per batch. Splitting the
    corpus into ``params.update_batches_c`` batches is therefore part of running
@@ -66,7 +66,7 @@ def build_workload(
 
     # STRATIFIED BATCHING — round-robin WITHIN each access level.
     #
-    # How records map to update batches is a benchmark decision: Ref[55] says
+    # How records map to update batches is a benchmark decision: Scheme 30 says
     # only "we implement batch updating; thus c is relatively small" (§V-D) and
     # never specifies the assignment. Two properties are wanted, and plain
     # positional round-robin gives only the first:
@@ -80,7 +80,7 @@ def build_workload(
     # files below them they are entitled to. That is the published behaviour and
     # is not repaired, but it is a degenerate regime the paper's own scale (2.2M
     # files over 3 levels) never enters. Stratifying keeps the benchmark in the
-    # same regime instead of manufacturing recall loss that Ref[55] would not
+    # same regime instead of manufacturing recall loss that Scheme 30 would not
     # exhibit on the corpus it was evaluated against.
     #
     # This changes only which batch a record lands in — never what is indexed,
@@ -154,13 +154,13 @@ def seed_deletions(
 
     HOW MANY TO DELETE — the corpus cannot reproduce the paper's ratio
     -----------------------------------------------------------------
-    Ref[55] §VII-B sets up its deletion experiments by inserting **1,000,000
+    Scheme 30 §VII-B sets up its deletion experiments by inserting **1,000,000
     files for one keyword** and then deleting ``d`` of them, with
     ``d`` in {10, 100, 1000, 10000}. At the configured ``d = 1000`` that is a
     deletion share of 0.1%.
 
     Our corpus is nowhere near that shape: it holds ~18k records over a 2,102
-    word vocabulary (README §4), so a keyword has hundreds of postings, not a
+    word vocabulary (skill.md), so a keyword has hundreds of postings, not a
     million. Deleting a literal ``d = 1000`` would delete every posting of most
     keywords, leaving an empty result set — which is what makes ``prune_ratio``
     collapse to zero and turns Exp. 2 into a measurement of misses.
@@ -193,7 +193,7 @@ def seed_deletions(
 def index_workload(state, index, prooflist, workload: Workload, variant: str):
     """Build the encrypted index for a whole workload. NOT timed.
 
-    Index construction is offline for Exp. 2 (README §5), so every runner calls
+    Index construction is offline for Exp. 2 (skill.md), so every runner calls
     this outside its measurement loop.
     """
     from . import peony, peony_plus

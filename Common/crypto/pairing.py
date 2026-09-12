@@ -6,7 +6,7 @@ Ref[41] publishes a TYPE-I (symmetric) pairing — Ref[41].txt:510-513:
      as generators of I1. A bilinear map is defined as e : I1 x I1 -> I2"
 
 Both arguments come from the same group, and security rests on DBDH
-(Ref[41].txt:280-300). Per README §14 the baseline is implemented AS
+(Ref[41].txt:280-300). Per skill.md the baseline is implemented AS
 PUBLISHED: symmetric pairing, DBDH. Do not "upgrade" it.
 
 A NOTE ON REF[41]'s POST-QUANTUM CLAIM

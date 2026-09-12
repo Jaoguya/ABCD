@@ -17,7 +17,7 @@ the group this module resolves. Steps 1 and 3 therefore bracket it: the caller
 runs :func:`initialize`, then Step 2 for each authority, then
 :func:`publish_public_parameters` with the resulting ``PK_i``.
 
-None of this is timed (README §2: Phases I-III are setup). The one figure Phase I
+None of this is timed (the build order: Phases I-III are setup). The one figure Phase I
 contributes is the ML-KEM session-establishment cost, which
 :func:`measure_kem_setup_cost` reports separately — the Exp. 1 measurement rule
 keeps encapsulation out of the per-query trapdoor curve.
@@ -330,7 +330,7 @@ def publish_public_parameters(
 def measure_kem_setup_cost(repetitions: int = 30) -> dict:
     """ML-KEM-768 session-establishment cost, reported SEPARATELY.
 
-    README §5 (Exp. 1 rule): encapsulation happens once at session
+    global.yaml (Exp. 1 rule): encapsulation happens once at session
     establishment and is excluded from the per-query trapdoor curve, reported in
     the text as a one-time setup cost. Kept here, in the phase that owns session
     establishment, so it cannot drift into the Exp. 1 measurement path.

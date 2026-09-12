@@ -4,18 +4,18 @@ Variable:  domains ``d`` = 2 → 10
 Primary:   latency (ms)
 Secondary: trapdoors issued, cross-node messages
 
-Measurement boundary (README §5, Exp. 3):
+Measurement boundary (skill.md, Exp. 3):
     Baselines run in native mode: ``d`` independent trapdoors + ``d``
     independent searches, client-side result aggregation.
 
 For Guo:
-  - Does NOT natively support cross-domain search (SCHEME.md line 19).
+  - Does NOT natively support cross-domain search (35.md line 19).
   - Each of ``d`` independent EDB instances holds 1/d of the corpus
     (the domain's shard), so total data is constant as d varies.
   - Trapdoors issued = d (always).
   - Cross-node messages = 0 (no inter-node communication).
 
-Defaults: N = 10^5, q = 5 (README §6).
+Defaults: N = 10^5, q = 5 (skill.md).
 """
 
 from __future__ import annotations

@@ -1,12 +1,12 @@
 """Exp. 2 — Search Latency. Ref[54].
 
-Variable:  index size ``N`` = 10^4 -> 10^6 (README §5)
+Variable:  index size ``N`` = 10^4 -> 10^6 (skill.md)
 Primary:   search latency (ms)
 Secondary: n_eff (candidates examined), B+-tree descents, prune ratio
 
 MEASUREMENT BOUNDARY
 --------------------
-README §5: "full online path ... Index construction is offline." Phase 3 index
+skill.md: "full online path ... Index construction is offline." Phase 3 index
 construction is therefore built untimed, and the timer covers Phase 4
 ``SearchExec`` only — trapdoor signature verification, B+-tree lookups,
 candidate intersection, and the ``AuditCommit``.
@@ -55,7 +55,7 @@ SECONDARY_NAMES = ["n_eff", "tree_descents", "prune_ratio"]
 
 VARIABLE_RANGE = [10_000, 20_000, 50_000, 100_000, 200_000, 500_000, 1_000_000]
 
-DEFAULT_Q = 5   # README §6: "each query contains five keywords"
+DEFAULT_Q = 5   # skill.md: "each query contains five keywords"
 
 
 def run(
@@ -77,10 +77,14 @@ def run(
         print(
             f"  NOTE: corpus holds {available:,} records; sweep truncated to "
             f"{actual_range}. Points above the corpus size are NOT reported "
-            f"(README §13: no synthetic padding to fill an axis)."
+            f"(skill.md: no synthetic padding to fill an axis)."
         )
 
-    keys = scheme.setup(params, with_abe=False)
+    keys = scheme.setup(params, with_abe=True)
+    # Ref[54] L563-565 binds the trapdoor to SK_A, so the querying user
+    # must be enrolled. One key per RUN -- a user's attribute key does not
+    # change between queries. Enrolment is setup and is not timed.
+    user_key = scheme.enrol_user(keys)
 
     # Build the fog index ONCE and GROW it through the sweep.
     #
@@ -132,7 +136,7 @@ def run(
 
         # Trapdoor generation is Exp. 1's measurement, not this one's; build it
         # outside the timer so Exp. 2 reports search cost alone.
-        td = scheme.trapdoor(keys, keywords)
+        td = scheme.trapdoor(keys, keywords, attribute_key=user_key)
         elapsed_ms, out = measure_ns(lambda: node.search(td))
 
         prune = (

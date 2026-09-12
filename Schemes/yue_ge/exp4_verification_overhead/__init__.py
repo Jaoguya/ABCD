@@ -1,1 +1,1 @@
-"""Ref[55] exp4_verification_overhead — see runner.py."""
+"""Scheme 30 exp4_verification_overhead — see runner.py."""

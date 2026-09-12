@@ -1,11 +1,11 @@
-"""Multilevel access (MLA) policy — Ref[55] §V-A.
+"""Multilevel access (MLA) policy — Scheme 30 §V-A.
 
     "Our MLA policy requires that a user with access level a(u) is authorized
      to get only for files with level a(id) <= a(u), where a is an access
      level mapping function."
 
 Levels are 1-based, matching the paper: level ``|L|`` is the HIGHEST (sees
-everything), level 1 the lowest. Ref[55] §VII-A: "We classified data users and
+everything), level 1 the lowest. Scheme 30 §VII-A: "We classified data users and
 files into three levels, where level 3 is the highest and level 1 is the
 lowest."
 
@@ -55,7 +55,7 @@ def assign_level(pid: str, access_levels: int) -> int:
 
 
 def user_can_access(user_level: int, file_level: int) -> bool:
-    """MLA policy: ``a(id) <= a(u)`` — Ref[55] §V-A."""
+    """MLA policy: ``a(id) <= a(u)`` — Scheme 30 §V-A."""
     return file_level <= user_level
 
 
@@ -67,7 +67,7 @@ def visible_levels(user_level: int) -> List[int]:
 def levels_to_update_on_delete(file_level: int, access_levels: int) -> List[int]:
     """Levels whose Bloom filter must be touched when deleting a file.
 
-    Ref[55] §IV-B (MSRE.Comp): "the entries of B_{R_xi} (level xi > level l)
+    Scheme 30 §IV-B (MSRE.Comp): "the entries of B_{R_xi} (level xi > level l)
     indexed by H_i(t_j) ... are also need to be set to 1".
 
     And §VII-B, concretely: "when deleting level 1 files for keyword w, it is
@@ -96,7 +96,7 @@ def sort_descending_by_level(
 ) -> List[tuple]:
     """Sort ``(id, op)`` entries in DESCENDING access-level order.
 
-    Ref[55] Algorithm 1, ListGen line 3: "Sort id_j in D_w in descending order
+    Scheme 30 Algorithm 1, ListGen line 3: "Sort id_j in D_w in descending order
     using a(id_j)". The order is load-bearing, not cosmetic — the linked list
     is walked from the highest level downward, so a user entering at their own
     level reaches exactly the files at or below it and stops. Ties are broken by

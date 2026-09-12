@@ -1,10 +1,10 @@
-"""Exp. 2 — Search Latency. Ref[55] §V-D / §VI-A Search.
+"""Exp. 2 — Search Latency. Scheme 30 §V-D / §VI-A Search.
 
-Variable:  index size ``N`` = 10^4 -> 10^6 (README §5)
+Variable:  index size ``N`` = 10^4 -> 10^6 (skill.md)
 Primary:   search latency (ms)
 Secondary: ``n_eff`` (nodes traversed), entries traversed, prune ratio
 
-Measurement boundary (README §5, Exp. 2): the full online path — token
+Measurement boundary (skill.md, Exp. 2): the full online path — token
 generation, server table lookup, encrypted linked-list traversal, ``MSRE.Dec``
 per node for Peony++, and result assembly. **Index construction is offline and
 is not timed.**
@@ -15,11 +15,11 @@ For each ``N`` this builds a genuine index over ``records[:N]`` once, untimed,
 then measures a real search against it — the same methodology ``guo_vdsse``,
 ``thingom_pq_abse`` and ``ma_lb_pq_vdse`` use.
 
-This is called out explicitly because the retired Zhuang baseline did not do it:
+This is called out explicitly because a retired baseline did not do it:
 it encrypted a single ciphertext and approximated an ``N``-record scan by
 replaying ``search()`` on that one entry ``N`` times, which made ``n_eff``
 constant and ``prune_ratio`` identically zero. See
-``Schemes/perera_lv_pqabse/SCHEME.md`` for that history. Ref[55] has no such
+``Schemes/perera_lv_pqabse/30.md for that history. Scheme 30 has no such
 excuse: it is a symmetric scheme whose per-record state is small, so a real
 index of the swept size is affordable.
 
@@ -99,7 +99,7 @@ def run(
         print(
             f"  NOTE: corpus holds {available} records; sweep truncated to "
             f"{actual_range}. Points above the corpus size are NOT reported "
-            f"(README §13: no synthetic padding to fill an axis)."
+            f"(skill.md: no synthetic padding to fill an axis)."
         )
 
     level = max(1, (params.access_levels + 1) // 2)

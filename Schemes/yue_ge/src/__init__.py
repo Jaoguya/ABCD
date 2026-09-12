@@ -1,9 +1,9 @@
-"""Ref[55] — Ge et al., Peony / Peony++ (IEEE IoT-J, vol. 11, no. 24, 2024).
+"""Scheme 30 — Ge et al., Peony / Peony++ (IEEE IoT-J, vol. 11, no. 24, 2024).
 
 Verifiable multilevel dynamic searchable encryption with forward and Type-II
 backward privacy. See ``References/Ref[55]/Ref[55].md`` for the construction
 summary, published parameters, and the legitimacy assessment; see
-``../SCHEME.md`` for the experiment mapping.
+``../30.md for the experiment mapping.
 
 Module layout follows the paper's own sectioning:
 

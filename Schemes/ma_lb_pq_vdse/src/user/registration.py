@@ -20,7 +20,7 @@ another's decision, and there is no shared validator object to consult. A single
 validator would collapse the multi-authority model into one trusted gatekeeper,
 which is the arrangement §III's system model exists to remove.
 
-**Decisions** (`benchmark`, recorded in ``PHASE_III_PLAN.md`` open decision 4).
+**Decisions** (`benchmark`, Phase III open decision 4).
 The manuscript specifies no credential format and no policy language. ``Cred`` is
 therefore an opaque byte blob, and a policy is a callable from
 ``(role, domain)`` to the attribute subset an authority will issue. None of this
@@ -198,7 +198,7 @@ class User:
 
     @property
     def authority_count(self) -> int:
-        """``N_U``. Not specified in §VI — see ``PHASE_III_PLAN.md``."""
+        """``N_U``. Not specified in §VI; chosen as a Phase III decision."""
         return len(self.shares)
 
     def attribute_set(self) -> Tuple[str, ...]:

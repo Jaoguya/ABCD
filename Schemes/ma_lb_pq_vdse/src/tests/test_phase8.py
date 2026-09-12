@@ -682,7 +682,7 @@ def test_verification_survives_a_phase_vii_update():
 
 
 def test_phase_viii_excludes_retrieval_and_decryption():
-    """README §5: "IPFS fetch and decryption excluded" from Exp. 4.
+    """global.yaml: "IPFS fetch and decryption excluded" from Exp. 4.
 
     Checked structurally, so a later addition cannot quietly widen the measured
     boundary.

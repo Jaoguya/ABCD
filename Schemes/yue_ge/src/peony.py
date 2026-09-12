@@ -1,4 +1,4 @@
-"""Peony — forward-private multilevel DSSE. Ref[55] §V, Algorithm 1.
+"""Peony — forward-private multilevel DSSE. Scheme 30 §V, Algorithm 1.
 
 Four algorithms: ``KeyGen``, ``ListGen``, ``Update``, ``Search``.
 

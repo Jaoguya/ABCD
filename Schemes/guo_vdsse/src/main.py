@@ -33,7 +33,7 @@ if str(_REPO_ROOT) not in sys.path:
 from Dataset.corpus import load_verified_corpus
 
 from . import (exp1_trapdoor, exp2_search, exp3_crossdomain, exp4_verify,
-               exp5_update, exp9_granularity)
+               exp5_update, exp4_granularity)
 from .scheme import GuoVDSSE
 
 
@@ -42,7 +42,8 @@ EXPERIMENT_MAP = {
     "2": ("exp2_search_latency", exp2_search),
     "3": ("exp3_crossdomain_scalability", exp3_crossdomain),
     "4": ("exp4_verification_overhead", exp4_verify),
-    "9": ("exp9_verification_granularity", exp9_granularity),
+    # Exp. 4's second arm, selected as "4b". Section VI has no Exp. 9.
+    "4b": ("exp4_verification_overhead__granularity", exp4_granularity),
     "5": ("exp5_keyword_update", exp5_update),
 }
 
@@ -65,13 +66,21 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
         help="Number of measured runs per data point (default: 10).",
     )
     parser.add_argument(
+        # Canonical spelling per skill.md's common contract; the old
+        # spelling stays accepted so banked command lines and fleet
+        # scripts keep working. Same dest -- no runner body changes,
+        # so no measured quantity can move.
+        "--warmups",
         "--warmup",
+        dest="warmup",
         type=int,
         default=5,
         help="Number of warm-up runs to discard (default: 5).",
     )
     parser.add_argument(
+        "--output",
         "--output-dir",
+        dest="output_dir",
         type=Path,
         default=_REPO_ROOT / "Schemes" / "guo_vdsse",
         help="Base output directory (default: Schemes/guo_vdsse/).",

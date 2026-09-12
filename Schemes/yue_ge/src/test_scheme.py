@@ -1,7 +1,7 @@
-"""Correctness tests for Ref[55] (Peony / Peony++).
+"""Correctness tests for Scheme 30 (Peony / Peony++).
 
 These are written to FAIL when the construction is bypassed, not merely when it
-crashes. The Zhuang baseline shipped a Search that compared plaintext Bloom
+crashes. A retired baseline shipped a Search that compared plaintext Bloom
 vectors and passed its own tests because nothing asserted that the cryptographic
 path produced the answer, and nothing ever ran an unauthorized user. Every
 security property claimed below therefore has a negative test:
@@ -213,7 +213,7 @@ def test_peony_forward_privacy():
 def test_sparse_level_batch_is_a_documented_limitation():
     """A batch missing a level serves that level NOTHING — as published.
 
-    This pins a limitation of Ref[55] itself, not of this implementation. Update
+    This pins a limitation of Scheme 30 itself, not of this implementation. Update
     line 5 masks each node with its own level key while Search line 5 derives
     only ``F3_{k_a(u)}``, so the entry node must sit at exactly the user's level;
     a batch with no file at level 2 therefore stores bottom for level 2, and a

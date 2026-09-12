@@ -1,4 +1,4 @@
-"""Multilevel Symmetric Revocable Encryption (MSRE) — Ref[55] §IV.
+"""Multilevel Symmetric Revocable Encryption (MSRE) — Scheme 30 §IV.
 
 The paper's new primitive, and what buys Peony++ its Type-II backward privacy.
 It generalizes Sun et al.'s SRE (their [6], Aura) from one revocation filter to
@@ -18,7 +18,7 @@ server is not trusted to honor a delete flag; it is made *unable* to decrypt.
 Correctness error comes only from the Bloom filter false positive, which the
 paper states plainly (§IV-A, Definition 1) rather than hiding.
 
-Primitives are the repo's shared ones (README §8: primitives a paper *cites*
+Primitives are the repo's shared ones (skill.md: primitives a paper *cites*
 live in ``Common/``): ``PuncturablePRF`` is the GGM-tree t-punc-PRF the paper
 specifies in §VI-B, ``BloomFilter`` the ``(b, h, n)`` filter of §III-B, and
 ``symmetric`` the ``SE`` of §IV-B.
@@ -43,7 +43,7 @@ from .levels import levels_to_update_on_delete
 def domain_bits_for(array_bits: int) -> int:
     """GGM tree depth needed to address every Bloom position.
 
-    Ref[55] §IV-B, MSRE.Enc step 1: "Calculates j_i = H_i(t) in [b] and
+    Scheme 30 §IV-B, MSRE.Enc step 1: "Calculates j_i = H_i(t) in [b] and
     sk_{j_i} = F(sk, j_i)". The t-punc-PRF domain is therefore exactly the
     filter's index space ``[b]`` — not some wider fixed domain. Deriving the
     depth from ``b`` keeps the punctured key the size the paper's own
@@ -57,7 +57,7 @@ def domain_bits_for(array_bits: int) -> int:
 class MSREKey:
     """``lsk`` — the multilevel system secret key from ``MSRE.BGen``.
 
-    One of these per keyword: Ref[55] §VI-B says "each keyword has a unique GGM
+    One of these per keyword: Scheme 30 §VI-B says "each keyword has a unique GGM
     PRF key sk_w", and the filters are likewise per keyword (``B_{w,l}``).
     """
 
@@ -120,7 +120,7 @@ def bgen(
     output_bytes: int = 32,
     key_bytes: int = 16,
 ) -> MSREKey:
-    """``MSRE.BGen(1^lambda, b, h, L)`` — Ref[55] §IV-B.
+    """``MSRE.BGen(1^lambda, b, h, L)`` — Scheme 30 §IV-B.
 
     1. ``sk <- Ft.Setup(1^lambda)``
     2. ``(H, B) <- BF.Gen(b, h)``, then ``|L|-1`` additional copies of ``B``.
@@ -147,7 +147,7 @@ def bgen(
 # MSRE.Enc — §IV-B
 # ---------------------------------------------------------------------------
 def enc(lsk: MSREKey, message: bytes, tag: bytes) -> MSRECiphertext:
-    """``MSRE.Enc(lsk, m, a(m), t)`` — Ref[55] §IV-B.
+    """``MSRE.Enc(lsk, m, a(m), t)`` — Scheme 30 §IV-B.
 
     1. ``j_i = H_i(t)`` and ``sk_{j_i} = F(sk, j_i)`` for all ``i in [h]``
     2. ``ct_i = SE.Enc(sk_{j_i}, m)``; output ``ct = (ct_1..ct_h)`` and ``t``
@@ -174,7 +174,7 @@ def klrev(
     revoked: Sequence[Tuple[bytes, int]],
     levels: Optional[Iterable[int]] = None,
 ) -> Dict[int, RevokedKey]:
-    """``MSRE.KLRev(lsk, R, L_R)`` — Ref[55] §IV-B.
+    """``MSRE.KLRev(lsk, R, L_R)`` — Scheme 30 §IV-B.
 
     Args:
         lsk: the keyword's multilevel system secret key.
@@ -223,7 +223,7 @@ def dec(
     skr: RevokedKey,
     ct: MSRECiphertext,
 ) -> Optional[bytes]:
-    """``MSRE.Dec(sk_{R_l}, ct, t)`` — Ref[55] §IV-B.
+    """``MSRE.Dec(sk_{R_l}, ct, t)`` — Scheme 30 §IV-B.
 
     1. If ``BF.Check(H, B_{R_l}, t) = 1``, decryption fails (the tag is revoked
        at this level, or the filter false-positived).

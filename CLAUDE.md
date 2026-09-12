@@ -1,66 +1,94 @@
 # MA-LB-PQ-VDSE — working rules
 
-This file loads on every turn, so it stays short. `SystemConfiguration.md` is
-both the long-form specification and the operator's guide; `README.md` was
-deleted on 2026-09-07 and its AWS and Fabric config rescued into that file.
+Short on purpose; this loads every turn. **[skill.md](skill.md) is the manual.**
+When a question is about how to run, configure, shard, validate or plot
+something, the answer is there, not here. This file holds only what must be
+true regardless of what you are doing.
+
+| Need | Read |
+|---|---|
+| run, configure, validate, collect | `skill.md` |
+| figures | `plotgen.md` |
+| the proposed scheme | `OJCOMS.md` |
+| a baseline | `30.md` `35.md` `41.md` `54.md` |
+| a baseline's published algorithm | `References/Ref[NN]/` |
+
+Those eight documents are the whole documentation set. There is no
+`needfix.md`, no `checkexp.md`, no `SCHEME.md`, no `SystemConfiguration.md`.
+**Do not recreate them.** A finding goes in the scheme's own document, in its
+*departs from the paper* section, with its evidence attached; anything that
+needs a decision comes to me in the reply instead of accumulating in a ledger.
 
 ## Every reply
 
-Follow `.claude/skills/report-back` **before delivering any result, figure,
-number, fix, or explanation** — not only when invoked. Lead with the answer,
-scannable bullets, numbers in tables, cut preamble and restatement. Spend extra
-lines only on a number that moved, a thing that failed, or a decision that is
-the user's.
+Lead with the answer. Scannable bullets, numbers in tables, no preamble, no
+restatement of the question. Spend extra lines only on a number that moved, a
+thing that failed, or a decision that is mine.
 
-Alongside any number, always state: **reportable or not** (corpus type, host,
-`n_runs`), **what one point on the axis is**, **which construction produced it**
-(`option_d` or `psa` — they time different functions at the same experiment
-number), and **measured vs extrapolated**.
+Alongside any number, always state **reportable or not** (corpus type, host,
+`n_runs`), **what one point on the axis is**, and **measured or derived**.
+
+## The rerun boundary — set 2026-09-12
+
+The manuscript was rewritten and the proposed scheme rebuilt against it. What
+that costs, per experiment:
+
+| Exp. | Baselines | Proposed | Why |
+|---|---|---|---|
+| **2, 3** | **FROZEN — do not re-run, do not touch the code that produces them** | re-run | the baseline numbers are good and are the expensive ones |
+| 1, 4, 5 | re-run | re-run | the construction and Exp. 1's second sweep dimension changed; Exp. 4 now has two arms |
+| 6, 7, 8 | n/a | re-run | proposed-scheme ablations |
+| ~~9~~ | — | — | **folded into Exp. 4 on 2026-09-12**; Section VI has no Experiment 9 |
+
+**Exp. 2 and Exp. 3 baseline results are frozen.** Their `results.csv` files
+stay as they are. A change that could move those numbers — in a baseline's
+search path, index construction, workload selection or aggregation — needs my
+say-so first. Renaming a flag or fixing a comment cannot move a number and does
+not need asking.
+
+The proposed scheme has **no reportable result at all** right now: its rebuild
+is only measured on a development corpus. Nothing about it is quotable until it
+runs on the campaign host.
 
 ## Fixing things
 
-Follow `.claude/skills/bug-sweep`'s boundary to decide what gets RECORDED,
-but **do not ask which option to take** (granted 2026-09-06). Pick the option
-you would recommend and execute it. Report what changed, not what you
-considered.
+**Do not ask which option to take.** Pick the one you would recommend and
+execute it. Report what changed, not what you considered. The exceptions are
+above and below: the frozen results, and the refusal rules.
 
-**Two files, and only two** (set 2026-09-07). `checkexp.md` records what has
-been checked and how deep; `needfix.md` records what that check found and what
-must be fixed, one item per finding, each carrying its own evidence — the file
-and line, the measured numbers, why it matters. Anything that changes a number
-already in a `results.csv`, a figure, or the manuscript gets an item in
-`needfix.md` tagged `[DECIDE]` or `[BLOCKED]`, in the same pass.
-
-`.claude/skills/bug-sweep/DECISIONS.md` is a **closed archive**: do not read it
-and do not append to it. It holds history up to 2026-09-07 and nothing after.
-Never split one finding's reasoning across two files — that is what put
-`DO_NOT_READ/remainfix.txt` and `DO_NOT_READ/TASKS.md` in quarantine.
-
-This does not override the refusal rules: destructive or irreversible actions
-— terminating instances, discarding measured data, force-pushing — are still
-confirmed first.
+Destructive or irreversible actions are confirmed first — terminating
+instances, discarding measured data, force-pushing, deleting results.
 
 ## Hard rules
 
-- **`Overleaf/*.tex` may be edited** (granted 2026-09-06). Back the file up
-  first, change only the sentences the decision names, and show the diff.
-- **Stop an idle instance.** The moment a fleet node has no task left —
-  campaign finished, harvested, or blocked awaiting a decision — stop it:
-  `aws ec2 stop-instances --instance-ids <id>`. Never leave one running to
-  wait for a human; restarting costs ~2 minutes, idling costs ~$0.19/hr per
-  `m6i.xlarge`. Only `Project=OJCOMS` instances are ever touched.
-- **No branches.** Commit straight to `main`, repo and fleet nodes alike.
-- **The corpus is frozen.** Only `corpus_type: synthea` on the pinned AWS
-  `m6i.xlarge` is reportable. `~/.venv-malbpq` is the Mac dev venv; nothing run
-  there is reportable.
-- **Thingom (Ref[41]) Exp. 2 is measured only at N=10⁴.** 50k–1M are linear
-  scalings from that anchor (`n_runs=1`, blank `ci95`). Never launch a run above
-  10⁴ — one at 10⁶ costs ~11.3 h.
-- **No fabricated data**, no baseline held to a weaker standard than the
-  proposed scheme, and never gate on speed — slowness is a finding.
-- Say **Scheme30/35/41/54**, never author names. Ours is "the proposed scheme".
+- **Five schemes, and only five.** The benchmark measures the proposed scheme
+  against **Scheme 30, 35, 41 and 54**. XB-Muse (`ref36`) and Zhuang (`ref52`)
+  were dropped 2026-09-12: **not measured, not implemented, never a baseline in
+  any experiment.** Do not create a scheme directory or a config block for
+  either. This is about MEASUREMENT only — both stay as literature citations in
+  Related Work, and Zhuang keeps its row in `tab:comparison`, which is a survey
+  of the field rather than a benchmark. Do not touch that table.
+- **No branches.** Commit straight to `main`. `origin/OJCOMS_expByexp` exists
+  and is 11 commits ahead; **leave it alone** — we work on `main`.
+- **The corpus is frozen.** Only `corpus_type: synthea` is reportable. A
+  development corpus is stamped `unverified_development` and the gate refuses
+  it. Nothing measured on a dev host is quotable, ever.
+- **One construction.** The proposed scheme implements the manuscript's
+  policy-state-aware form only — `T = H(w‖PID‖PV‖Dom)`. No `--construction`
+  switch, no second figure family.
+- **Scheme 41's Exp. 2 is measured only at N=10⁴.** The larger points are
+  fitted from three measured anchors and drawn hollow. Never launch a run above
+  10⁴ — one at 10⁶ costs ~11.3 h. See `41.md`.
+- **Stop an idle instance** the moment its work ends:
+  `aws ec2 stop-instances --instance-ids <id>`. Idling costs ~$0.19/hr per
+  `m6i.xlarge`; restarting costs ~2 minutes. Only `Project=OJCOMS` instances.
+- **`Overleaf/*.tex` may be edited.** Back it up first, change only the
+  sentences the decision names, show the diff.
+- **No fabricated data.** No baseline held to a weaker standard than the
+  proposed scheme. Never gate on speed — slowness is a finding, not a bug.
+- Say **Scheme 30/35/41/54**, never author names. Ours is "the proposed scheme".
 
 ## Tests
 
-`~/.venv-malbpq/bin/python -m pytest -q` from the repo root. A green suite is
-the floor, not the goal — every defect found so far was found with it green.
+`python -m pytest -q` from the repository root. A green suite is the floor, not
+the goal — every defect found so far was found with it green.

@@ -1,6 +1,6 @@
 """Exp. 1 — Trapdoor Generation Latency. Ref[54].
 
-Variable:  keywords per query ``q`` = 1 -> 20 (README §5)
+Variable:  keywords per query ``q`` = 1 -> 20 (skill.md)
 Primary:   trapdoor generation latency (ms)
 Secondary: trapdoor size (B), PRF evaluations
 
@@ -15,7 +15,7 @@ That shape is the paper's own headline claim (Table II: ``O(n + T_PRF)``, "no
 lattice sampling at query time"), so the expected curve is a shallow line in
 ``q`` sitting on a constant signature cost, not a lattice-dominated one.
 
-ML-KEM encapsulation is EXCLUDED, per README §5's Exp. 1 boundary: it happens
+ML-KEM encapsulation is EXCLUDED, per skill.md's Exp. 1 boundary: it happens
 once at session establishment, not per query. ``main.py`` reports it separately.
 """
 
@@ -48,7 +48,7 @@ SECONDARY_NAMES = ["trapdoor_size_bytes", "prf_evaluations"]
 # Superset of global.yaml's [1, 5, 10, 15, 20], matching guo_vdsse and yue_ge.
 VARIABLE_RANGE = list(range(1, 21))
 
-# README §6 default index size. Exp. 1 does not search, so this only has to be
+# skill.md default index size. Exp. 1 does not search, so this only has to be
 # large enough to draw realistic query keywords from.
 INDEX_SIZE = 100_000
 
@@ -68,7 +68,11 @@ def run(
     actual_range = sweep.select(VARIABLE_RANGE, points)
     subset = list(records[: min(INDEX_SIZE, len(records))])
 
-    keys = scheme.setup(params, with_abe=False)
+    keys = scheme.setup(params, with_abe=True)
+    # Ref[54] L563-565 binds the trapdoor to SK_A, so the querying user
+    # must be enrolled. One key per RUN -- a user's attribute key does not
+    # change between queries. Enrolment is setup and is not timed.
+    user_key = scheme.enrol_user(keys)
     freq = keyword_frequency(subset)
 
     pools: Dict[int, list] = {}
@@ -86,7 +90,7 @@ def run(
         counter[q] += 1
         keywords = pools[q][i % len(pools[q])]
 
-        elapsed_ms, td = measure_ns(lambda: scheme.trapdoor(keys, keywords))
+        elapsed_ms, td = measure_ns(lambda: scheme.trapdoor(keys, keywords, attribute_key=user_key))
         return RunResult(
             primary_metric=elapsed_ms,
             secondary_metrics={

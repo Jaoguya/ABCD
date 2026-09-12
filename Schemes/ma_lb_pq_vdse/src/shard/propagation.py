@@ -33,7 +33,7 @@ index reaches the nodes. Steps 1-3 are not implemented, so that ordering is a
 documented precondition rather than an enforced one; ``CID_i`` is likewise a
 placeholder until Step 1 produces a real IPFS identifier.
 
-Module path note: ``SCHEME.md`` maps Phase V to ``src/chain/``. This lives in
+Module path note: the build order maps Phase V to ``src/chain/``. This lives in
 ``src/shard/`` because it is about index distribution rather than the ledger or
 IPFS adapters, which is what ``chain/`` holds.
 """

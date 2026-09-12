@@ -1,6 +1,6 @@
 """The manuscript's policy-state-aware construction — divergences D1-D5.
 
-``MANUSCRIPT_DIVERGENCE.md`` records nine places where the implemented scheme
+Nine numbered divergences D1-D9 record the places where the implemented scheme
 and `Overleaf/MA-LB-PQ-VDSE.tex` disagree. D1-D5 are the cryptographic ones, and
 this package implements the manuscript's side of all five so that both
 constructions can be **measured against each other** rather than argued about:
@@ -34,13 +34,13 @@ cannot both hold; it resolved the contradiction by reducing both to ``H(w)``.
 The current manuscript resolves the same contradiction the other way and proves
 the two tokens equal as a theorem. Neither is obviously wrong. What was missing
 was a measurement of what the manuscript's choice costs, and that is what this
-package exists to supply — see ``MANUSCRIPT_DIVERGENCE.md`` D1.
+package exists to supply — divergence D1.
 
 WHAT IT COSTS, AS A PREDICTION TO BE TESTED
 -------------------------------------------
 Binding the token to the policy state means an authority version bump
 re-tokenizes every entry governed by that authority, where under Option D it
-touches no token at all. ``PHASE_IV_PLAN.md`` §1.3 put that at ~9.0M entries per
+touches no token at all. Phase IV §1.3 put that at ~9.0M entries per
 bump. Exp. 5 and Exp. 6 under ``--construction psa`` are what turn that estimate
 into a number.
 """

@@ -1,6 +1,6 @@
 """Peony++ — forward + Type-II backward private, publicly verifiable MLDSSE.
 
-Ref[55] §VI. Built from Peony (§V) plus MSRE (§IV), with multilevel digests
+Scheme 30 §VI. Built from Peony (§V) plus MSRE (§IV), with multilevel digests
 published to a smart contract for public verification.
 
     Setup, ListGen, Add, Delete, Search, Verify
@@ -79,7 +79,7 @@ from .peony import (
 # ---------------------------------------------------------------------------
 @dataclass
 class ProofList:
-    """The smart contract's storage — Ref[55] §VI-A.
+    """The smart contract's storage — Scheme 30 §VI-A.
 
     A dict standing in for on-chain key/value storage. The paper measures gas to
     *deploy* entries here (Fig. 8); this benchmark measures the *computation*
@@ -205,7 +205,7 @@ def make_cid(state: OwnerState, file_id: int) -> bytes:
     BENCHMARK NOTE: this repo's corpus carries record identifiers and keyword
     sets, not document bodies (``Dataset.corpus.Record``). ``C_id`` is therefore
     the encryption of the identifier rather than of a file payload. Exp. 4 is
-    scoped to verification computation only (README §5), so no measured quantity
+    scoped to verification computation only (skill.md), so no measured quantity
     depends on the plaintext length — but the substitution is recorded here
     rather than left implicit.
     """

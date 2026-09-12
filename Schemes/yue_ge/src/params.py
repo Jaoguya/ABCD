@@ -1,7 +1,7 @@
-"""Scheme parameters for Ref[55] (Ge et al., Peony / Peony++).
+"""Scheme parameters for Scheme 30 (Ge et al., Peony / Peony++).
 
 Every value here is loaded from ``Experiment Configuration/crypto.yaml`` under
-the ``yue_ge`` block. Nothing is hardcoded: README §7 requires that every
+the ``yue_ge`` block. Nothing is hardcoded: skill.md requires that every
 reported number carry a config hash, which only works if the config is the
 single source of truth.
 
@@ -32,7 +32,7 @@ from Common.crypto.config import get as cfg_get
 
 @dataclass(frozen=True)
 class SchemeParams:
-    """All Ref[55] parameters, loaded from crypto.yaml."""
+    """All Scheme 30 parameters, loaded from crypto.yaml."""
 
     # --- published ---
     access_levels: int              # |L| = 3, level 3 highest
@@ -82,7 +82,7 @@ class SchemeParams:
         return self.punc_output_bits // 8
 
     def bloom_array_bits(self, deletions: int | None = None) -> int:
-        """``b = -d * ln(p) / (ln 2)^2`` — Ref[55] §VII-B, verbatim.
+        """``b = -d * ln(p) / (ln 2)^2`` — Scheme 30 §VII-B, verbatim.
 
         Args:
             deletions: ``d``, the number of deletions between two searches.

@@ -1,6 +1,6 @@
 """Exp. 6's DIAS claim has two halves, and neither had a measurement behind it.
 
-README §5 says of Exp. 6: "Report FSNs touched; **selective propagation is the
+global.yaml says of Exp. 6: "Report FSNs touched; **selective propagation is the
 claim**." Every campaign before 2026-09-03 reported ``fsns_touched = 1.000`` at
 every δ and called that the evidence. It is not evidence of anything:
 ``assign_domains_to_fsns`` gives each domain to exactly ONE node and an
@@ -294,7 +294,7 @@ def test_exp6_is_not_blocked_on_the_fabric_adapter():
     """Its timed path never anchors, so the ledger cannot understate it.
 
     ``synchronize`` takes ``ledger`` as optional and anchors only inside
-    ``if ledger is not None``; the Exp. 6 runner passes none. README §5 ends the
+    ``if ledger is not None``; the Exp. 6 runner passes none. global.yaml ends the
     Exp. 6 boundary at "until all affected FSNs report the new VID", and
     ``tab:cost``'s authorization-synchronization row carries no chain term.
     """

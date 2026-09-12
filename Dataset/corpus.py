@@ -10,7 +10,7 @@ Corpus format — ``corpus.jsonl``, one JSON object per line::
     {"rid": 0, "pid": "a3f8...", "vid": 1, "dom": 2,
      "ts": "2180-07-23T14:31:00", "kw": ["dx:I10", "rx:aspirin"]}
 
-which is README §4's "keyword set W_i + metadata (PID_i, VID_i, Dom_i, TS_i)".
+which is skill.md's "keyword set W_i + metadata (PID_i, VID_i, Dom_i, TS_i)".
 JSONL rather than one big JSON array so a 10^6-record corpus streams instead
 of loading whole.
 """
@@ -62,7 +62,7 @@ def assign_domain(patient_id: str, domains: int) -> int:
     search measure something that does not occur in the system model.
 
     SHA-256 rather than ``hash()``: reproducible across processes and
-    platforms (README §4 records a corpus SHA-256 that must be stable).
+    platforms (skill.md records a corpus SHA-256 that must be stable).
     """
     if domains <= 0:
         raise ValueError(f"domains must be positive, got {domains}")
@@ -195,7 +195,7 @@ def _length_stats(lengths: List[int]) -> Dict[str, float]:
 def frequency_profile(keyword_counts: Counter, *, top_k: int = 50) -> Dict[str, Any]:
     """Fit a Zipf exponent to the keyword-frequency distribution.
 
-    This is what makes "statistically-matched synthetic corpus" (README §4) a
+    This is what makes "statistically-matched synthetic corpus" (skill.md) a
     checkable claim rather than an assertion: once a Synthea corpus has been
     built, ``synthetic_generator.py --match-profile`` reads the fitted
     exponent and universe size from its manifest and reproduces them, instead
@@ -237,7 +237,7 @@ def frequency_profile(keyword_counts: Counter, *, top_k: int = 50) -> Dict[str, 
 # Manifest
 # ---------------------------------------------------------------------------
 def git_commit(repo_root: Optional[Path] = None) -> str:
-    """Current git commit, for provenance (README §7)."""
+    """Current git commit, for provenance (skill.md)."""
     try:
         out = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -262,14 +262,14 @@ def write_manifest(
     config_hashes: Optional[Dict[str, str]] = None,
     repo_root: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Write ``dataset_manifest.json`` (README §4).
+    """Write ``dataset_manifest.json`` (skill.md).
 
     ``corpus_type`` is one of:
 
     ``synthea``    Synthea (MITRE), Apache 2.0, citable generator with
                    epidemiologically grounded clinical structure. Reportable.
     ``synthetic``  ``synthetic_generator.py`` — a fitted Zipf law with no
-                   clinical structure. NOT reportable (README §4).
+                   clinical structure. NOT reportable (skill.md).
 
     The distinction matters and is easy to lose: both are "not real
     patients", but only Synthea is a citable instrument with real
@@ -302,7 +302,7 @@ def write_manifest(
     manifest["reportable"] = corpus_type in reportable_types
     if corpus_type == "synthetic":
         manifest["warning"] = (
-            "DEVELOPMENT ONLY. README §4: results produced from the synthetic "
+            "DEVELOPMENT ONLY. skill.md: results produced from the synthetic "
             "corpus must not be reported in the paper. For a reportable "
             "corpus, use Synthea via prepare_dataset.py."
         )
@@ -338,7 +338,7 @@ def verify_corpus(
 ) -> Dict[str, Any]:
     """Check the corpus against its manifest before a scheme runs.
 
-    README §14 says the derived dataset must not change once results
+    skill.md says the derived dataset must not change once results
     generation has begun, but nothing enforced it — a scheme would happily
     read whatever ``corpus.jsonl`` it found. Regenerating mid-campaign would
     then produce two incomparable result sets that only surface when a
@@ -371,14 +371,14 @@ def verify_corpus(
             f"  actual   : {actual}\n"
             f"The corpus was regenerated or edited after the manifest was "
             f"written. Results produced now are NOT comparable to earlier "
-            f"ones (README §14). Either restore the original corpus or "
+            f"ones (skill.md). Either restore the original corpus or "
             f"regenerate the manifest and re-run every scheme."
         )
 
     if require_reportable and not manifest.get("reportable", False):
         raise CorpusMismatchError(
             f"corpus_type={manifest.get('corpus_type')!r} is not reportable "
-            f"(README §4). Pass require_reportable=False for a development run."
+            f"(skill.md). Pass require_reportable=False for a development run."
         )
     return manifest
 

@@ -14,6 +14,8 @@ unusable; the dimension does not change whether the algebra is correct, and
 from __future__ import annotations
 
 import numpy as np
+from dataclasses import replace
+
 import pytest
 
 from Common.crypto.lattice import LatticeParams
@@ -32,13 +34,38 @@ def params() -> SchemeParams:
 
 @pytest.fixture(scope="module")
 def keys(params: SchemeParams) -> scheme.SystemKeys:
-    """Setup with the ABE off — the shape Exp. 1-3 use."""
-    return scheme.setup(params, with_abe=False)
+    """Setup with the ABE ON, at the SMALL lattice.
+
+    It was ``with_abe=False`` until 2026-09-12. Trapdoors must now bind to the
+    user's attribute key (Ref[54] L563-565), so a key has to exist -- and the
+    campaign's n=768 TrapGen takes minutes, which no test suite can pay. SMALL
+    gives a real attribute key in milliseconds; nothing here measures the
+    lattice, only that the binding is present and enforced.
+    """
+    small = replace(params, lattice=SMALL, attribute_universe=4,
+                    abe_on_measured_path=True)
+    return scheme.setup(small, with_abe=True)
 
 
 # ---------------------------------------------------------------------------
 # parameters
 # ---------------------------------------------------------------------------
+
+_USER_KEYS = {}
+
+
+def user_key(keys):
+    """One enrolled user per SystemKeys, cached.
+
+    ``enrol_user`` samples lattice preimages, so calling it per assertion would
+    make the suite unusable. A user's attribute key does not change between
+    queries, so caching it is also what the scheme does.
+    """
+    k = id(keys)
+    if k not in _USER_KEYS:
+        _USER_KEYS[k] = scheme.enrol_user(keys)
+    return _USER_KEYS[k]
+
 def test_configured_parameters_are_valid(params: SchemeParams):
     """The real (n, q, sigma) must satisfy the toolkit's own guards.
 
@@ -161,7 +188,7 @@ def _ingest(keys_: scheme.SystemKeys, n: int = 40) -> scheme.FogNode:
 
 def test_search_returns_exactly_the_matching_records(keys: scheme.SystemKeys):
     node = _ingest(keys)
-    td = scheme.trapdoor(keys, ["kw0"])
+    td = scheme.trapdoor(keys, ["kw0"], attribute_key=user_key(keys))
     got = node.search(td).rids
     assert got == {rid for rid in range(40) if rid % 5 == 0 or rid % 3 == 0}
 
@@ -169,7 +196,7 @@ def test_search_returns_exactly_the_matching_records(keys: scheme.SystemKeys):
 def test_search_rejects_an_unsigned_trapdoor(keys: scheme.SystemKeys):
     """Phase 4 verifies the trapdoor; an unauthorised query must not run."""
     node = _ingest(keys, n=5)
-    td = scheme.trapdoor(keys, ["kw0"])
+    td = scheme.trapdoor(keys, ["kw0"], attribute_key=user_key(keys))
     forged = scheme.Trapdoor(
         tokens=td.tokens, epoch=None, category=None, fuzzy_term=None,
         digest=td.digest, signature=b"\x00" * len(td.signature),
@@ -193,7 +220,7 @@ def test_fog_rejects_a_record_with_a_bad_edge_signature(keys: scheme.SystemKeys)
 
 
 def test_trapdoor_carries_one_token_per_keyword(keys: scheme.SystemKeys):
-    td = scheme.trapdoor(keys, ["a", "b", "c"])
+    td = scheme.trapdoor(keys, ["a", "b", "c"], attribute_key=user_key(keys))
     assert len(td.tokens) == 3
     assert td.size_bytes == 3 * 32 + len(td.signature)
 
@@ -203,7 +230,7 @@ def test_trapdoor_is_deterministic_in_its_tokens(keys: scheme.SystemKeys):
 
     Otherwise a trapdoor could never match an index entry written earlier.
     """
-    assert scheme.trapdoor(keys, ["x"]).tokens == scheme.trapdoor(keys, ["x"]).tokens
+    assert scheme.trapdoor(keys, ["x"], attribute_key=user_key(keys)).tokens == scheme.trapdoor(keys, ["x"], attribute_key=user_key(keys)).tokens
 
 
 # ---------------------------------------------------------------------------
@@ -251,3 +278,60 @@ def test_hybrid_combiner_uses_both_encapsulations():
     assert base != scheme._combine(b"c" * 32, b"b" * 32)
     assert base != scheme._combine(b"a" * 32, b"c" * 32)
     assert len(base) == 32
+
+
+# ---------------------------------------------------------------------------
+# Ref[54] L563-565 / L798 / L816 — the trapdoor binds to SK_A
+# ---------------------------------------------------------------------------
+def test_trapdoor_requires_an_attribute_key(keys: scheme.SystemKeys):
+    """It is a required argument, not an optional one.
+
+    L563-565 constructs the trapdoor by "binding query tokens to the user's
+    attribute-based secret key", and Theorem 2's proof (L816) takes that binding
+    as a precondition. A trapdoor without it is a cheaper object than the paper
+    specifies, and this baseline may not be measured on a weaker construction
+    than it published.
+    """
+    with pytest.raises(TypeError):
+        scheme.trapdoor(keys, ["kw0"])
+
+
+def test_different_attribute_keys_give_different_trapdoors(keys):
+    """The binding is real: same keywords, different SK_A, different trapdoor.
+
+    If this fails the binding is decorative -- the digest would not actually
+    depend on the key it claims to be bound to.
+    """
+    a = scheme.enrol_user(keys, attributes=[0, 1])
+    b = scheme.enrol_user(keys, attributes=[0, 1])
+    td_a = scheme.trapdoor(keys, ["kw0"], attribute_key=a)
+    td_b = scheme.trapdoor(keys, ["kw0"], attribute_key=b)
+    assert td_a.tokens == td_b.tokens, "the PRF tokens are key-independent"
+    assert td_a.digest != td_b.digest, (
+        "two users with the same attributes but different secret preimages "
+        "produced the same trapdoor -- the SK_A binding is not in the digest"
+    )
+
+
+def test_trapdoor_binds_to_the_secret_not_just_the_attribute_set(keys):
+    """Binding to the attribute SET alone would be forgeable.
+
+    Which attributes a user holds is public; the preimages are not. Two users
+    holding an identical attribute set must still produce distinct trapdoors.
+    """
+    a = scheme.enrol_user(keys, attributes=[0, 1])
+    b = scheme.enrol_user(keys, attributes=[0, 1])
+    assert a.attributes == b.attributes
+    assert scheme.attribute_binding(a) != scheme.attribute_binding(b)
+
+
+def test_trapdoor_is_signed_by_the_user_not_the_edge_device(keys):
+    """L566: sigma_user = Dilithium3.Sign(sk_U, H_2(TD)).
+
+    The edge device signs ciphertext provenance in Phase 2; the querying user
+    authorises the query in Phase 4. Signing with the edge key let a device
+    credential stand in for a user's authorisation.
+    """
+    td = scheme.trapdoor(keys, ["kw0"], attribute_key=user_key(keys))
+    assert td.verifying_key == keys.user_verifying_key
+    assert td.verifying_key != keys.edge_verifying_key

@@ -604,10 +604,15 @@ def test_config_loads_and_validates():
 
 
 def test_config_every_experiment_includes_us():
-    """SCHEME.md: the proposed scheme participates in all 8 README §5
-    experiments, plus Exp. 9 (tamper granularity, added 2026-09-03)."""
+    """The proposed scheme participates in all 8 experiments of Section VI.
+
+    EIGHT, not nine. Exp. 9 was folded into Exp. 4 on 2026-09-12: Section VI
+    defines no Experiment 9, it defines one Exp. 4 whose figure has two panels
+    over two variables, and those are ARMS of Exp. 4 rather than a separate
+    experiment.
+    """
     config = config_mod.load()
-    assert len(config.our_experiments()) == 9
+    assert len(config.our_experiments()) == 8
 
 
 def test_config_authority_topology_matches_the_decision():
@@ -621,7 +626,7 @@ def test_config_authority_topology_matches_the_decision():
 
 
 def test_config_scheduler_weights_are_fixed_and_internally_consistent():
-    """The sweep ran 2026-08-28, so README §14 issue #5 is closed.
+    """The sweep ran 2026-08-28, so scheduler.yaml's weights are fixed.
 
     Was test_config_scheduler_weights_are_still_pending, which asserted the
     weights could never be fixed -- it encoded an open TODO as an invariant.
@@ -663,7 +668,11 @@ def test_config_refuses_reportable_run_on_pending_weights():
         pending.require_fixed(context="exp7")
     except config_mod.SchedulerWeightsPendingError as exc:
         assert "pending_sweep" in str(exc)
-        assert "issue #5" in str(exc)
+        assert "scheduler.yaml" in str(exc), (
+            "the message must name where the fix lives; it used to cite "
+            "an issue number in the deleted operator guide, whose numbering "
+            "no longer exists"
+        )
         return
     raise AssertionError("provisional weights must refuse a reportable run")
 
@@ -701,7 +710,7 @@ def test_config_workload_inheritance_resolves():
 
 
 def test_config_exp7_and_exp8_are_the_same_runs():
-    """README §5: both metric sets come from one set of runs."""
+    """global.yaml: both metric sets come from one set of runs."""
     config = config_mod.load()
     exp7, exp8 = config.experiment("exp7"), config.experiment("exp8")
     assert exp8.shares_runs_with == exp7.name
@@ -735,7 +744,7 @@ def test_config_validation_catches_authority_domain_mismatch():
 
 
 def test_config_validation_catches_outlier_dropping():
-    """README §7 requires outliers kept; a config saying otherwise must fail."""
+    """global.yaml requires outliers kept; a config saying otherwise must fail."""
     config = config_mod.load()
     broken = dataclasses.replace(
         config, measurement=dataclasses.replace(config.measurement, drop_outliers=True)

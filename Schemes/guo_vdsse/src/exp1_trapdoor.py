@@ -4,7 +4,7 @@ Variable:  keywords per query ``q`` = 1 → 20
 Primary:   latency (ms)
 Secondary: trapdoor size (bytes)
 
-Measurement boundary (README §5, Exp. 1):
+Measurement boundary (skill.md, Exp. 1):
     Online trapdoor generation only.  Index construction and corpus
     loading are excluded.
 
@@ -86,7 +86,7 @@ def run(
     kw_universe = _build_keyword_universe(subset)
     rng = DeterministicRNG(seed).spawn("exp1_trapdoor")
 
-    # Variable: q = 1 to 20 (README §5)
+    # Variable: q = 1 to 20 (skill.md)
     variable_range = list(range(1, 21))
 
     # Pre-select keyword sets for each q value — same set across all runs

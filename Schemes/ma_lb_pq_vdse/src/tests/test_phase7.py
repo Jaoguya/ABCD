@@ -3,7 +3,7 @@
 
 Each test checks a DEFINING PROPERTY. An update that produces the right root by
 rebuilding the whole index has passed the shallow test and is the exact bug
-README §5's Exp. 5 rule calls out.
+global.yaml's Exp. 5 rule calls out.
 
 Runs standalone with no test framework::
 
@@ -394,7 +394,7 @@ def test_modify_updates_the_path_without_rebuilding():
 def test_insert_rebuilds_only_that_records_tree():
     """A leaf-count change cannot be a path update.
 
-    Bounded by |W_i| (mean 31.7, capped 64), NOT by the index — README §5 forbids
+    Bounded by |W_i| (mean 31.7, capped 64), NOT by the index — global.yaml forbids
     a global rebuild, and ~32 leaves is not one. `rebuilt` says which happened so
     a reported figure cannot conflate them.
     """
@@ -499,7 +499,7 @@ def test_ias_message_for_a_revocation_carries_no_index_delta():
 
 
 def test_ias_message_reports_its_size_in_kb():
-    """Exp. 6 secondary metric; README §9 reports sizes in KB."""
+    """Exp. 6 secondary metric; global.yaml reports sizes in KB."""
     nodes, authority, record, entries, commitment, cid = outsourced_record()
     receipt = dias_mod.synchronize(
         modify_request(cid, "dom0/new"),

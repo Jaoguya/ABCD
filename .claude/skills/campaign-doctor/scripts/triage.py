@@ -24,7 +24,7 @@ SSH = ["ssh", "-i", "~/.ssh/ojcoms.pem", "-o", "ConnectTimeout=20",
 CAUSES = [
     (r"rc=137|Killed process|Out of memory",
      "OOM — the index exceeded host memory",
-     "scope the build to README §6 index_size, or cap the sweep and disclose. "
+     "scope the build to skill.md index_size, or cap the sweep and disclose. "
      "Check --points reaches the PRE-BUILD loop, not just run_experiment."),
     (r"MemoryError",
      "allocation refused before the kernel intervened",

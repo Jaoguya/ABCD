@@ -1,7 +1,7 @@
 """Lattice primitives: Z_q arithmetic, discrete Gaussians, and the GPV-style
 trapdoor toolkit (TrapGen / SamplePre / SampleLeft / SampleR).
 
-Required by Ref[52] (Zhuang et al.), which defines exactly these four
+Required by Scheme 54's lattice construction, which defines these four
 algorithms at Ref[52].txt:93-145 and publishes its parameters in Table III
 (Ref[52].txt:722-735):
 
@@ -106,7 +106,7 @@ class LatticeParams:
         """Build from ``Experiment Configuration/crypto.yaml``.
 
         ``scheme`` has no default on purpose. It used to default to
-        ``"zhuang_lattice_mabse"``, but that scheme was dropped 2026-08-27
+        a dropped scheme, removed 2026-09-12
         and its crypto.yaml block no longer has a
         ``lattice`` sub-block — a silent default here would have read from
         wherever the dropped scheme's config used to point, or raised a

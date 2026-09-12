@@ -1,6 +1,6 @@
 """Exp. 3 — Cross-Domain Search Scalability. Ref[54], native mode.
 
-Variable:  domains ``d`` = 2 -> 10 (README §5)
+Variable:  domains ``d`` = 2 -> 10 (skill.md)
 Primary:   total latency (ms) across ``d`` domains
 Secondary: trapdoors issued, cross-node messages, results returned
 
@@ -10,13 +10,13 @@ Ref[54]'s system model is one Trusted Authority, one fog tier, no federation
 and no inter-server protocol — there is no cross-domain notion in the paper at
 all. crypto.yaml records the decision (``cross_domain.mode:
 independent_trapdoors``, 2026-08-29): issue ``d`` independent trapdoors, run
-``d`` independent searches, aggregate on the client. That is README §3's
+``d`` independent searches, aggregate on the client. That is skill.md's
 native-mode rule, already applied to ``guo_vdsse`` and ``thingom_pq_abse``.
 
 Latency is therefore expected to grow roughly linearly in ``d``, and
 ``cross_node_msgs`` is identically 0 because no such message exists in the
 construction. Counting trapdoors issued is what makes the mechanism visible
-(README §5, Exp. 3).
+(skill.md, Exp. 3).
 
 TOTAL INDEX IS HELD CONSTANT ACROSS d
 -------------------------------------
@@ -80,7 +80,11 @@ def run(
             f"that rather than the §6 default {TOTAL_INDEX_SIZE:,}."
         )
 
-    keys = scheme.setup(params, with_abe=False)
+    keys = scheme.setup(params, with_abe=True)
+    # Ref[54] L563-565 binds the trapdoor to SK_A, so the querying user
+    # must be enrolled. One key per RUN -- a user's attribute key does not
+    # change between queries. Enrolment is setup and is not timed.
+    user_key = scheme.enrol_user(keys)
     built: Dict[int, List[Dict[str, Any]]] = {}
 
     def deployments_for(d: int) -> List[Dict[str, Any]]:
@@ -127,7 +131,7 @@ def run(
                     continue
                 # One trapdoor PER DOMAIN: the scheme has no shared trapdoor,
                 # and that cost is exactly what Exp. 3 exists to expose.
-                td = scheme.trapdoor(keys, keywords)
+                td = scheme.trapdoor(keys, keywords, attribute_key=user_key)
                 issued += 1
                 merged |= ctx["node"].search(td).rids
             return issued, merged

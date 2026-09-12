@@ -1,4 +1,4 @@
-"""CLI entry point for Ref[55] (Ge et al., Peony / Peony++) experiments.
+"""CLI entry point for Scheme 30 (Ge et al., Peony / Peony++) experiments.
 
 Usage:
 
@@ -16,7 +16,7 @@ The script:
   3. Writes results to ``<output-dir>/expN_*/``.
 
 All cryptographic parameters come from ``crypto.yaml`` — nothing is hardcoded.
-Both published Bloom settings (``h = 5`` and ``h = 13``, Ref[55] Tables V-VII)
+Both published Bloom settings (``h = 5`` and ``h = 13``, Scheme 30 Tables V-VII)
 are reachable via ``--bloom-hashes`` without editing config, because the paper
 declares no default between them.
 """
@@ -40,7 +40,7 @@ from Schemes.yue_ge.exp2_search_latency import runner as exp2
 from Schemes.yue_ge.exp3_crossdomain_scalability import runner as exp3
 from Schemes.yue_ge.exp4_verification_overhead import runner as exp4
 from Schemes.yue_ge.exp5_keyword_update import runner as exp5
-from Schemes.yue_ge.exp9_verification_granularity import runner as exp9
+from Schemes.yue_ge.exp4_verification_overhead__granularity import runner as exp4b
 from Schemes.yue_ge.src.params import SchemeParams
 
 EXPERIMENT_MAP = {
@@ -48,23 +48,28 @@ EXPERIMENT_MAP = {
     "2": ("exp2_search_latency", exp2),
     "3": ("exp3_crossdomain_scalability", exp3),
     "4": ("exp4_verification_overhead", exp4),
-    "9": ("exp9_verification_granularity", exp9),
+    # Exp. 4's second arm, selected as "4b". Section VI has no Exp. 9.
+    "4b": ("exp4_verification_overhead__granularity", exp4b),
     "5": ("exp5_keyword_update", exp5),
 }
 
 
 def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Ref[55] Ge et al. (Peony / Peony++) — Experiment Runner",
+        description="Scheme 30 Ge et al. (Peony / Peony++) — Experiment Runner",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--experiment", type=str, default="1,2,3,4,5",
                         help="Comma-separated experiment numbers (default: all).")
     parser.add_argument("--runs", type=int, default=10,
                         help="Measured runs per data point (default: 10).")
-    parser.add_argument("--warmup", type=int, default=5,
+    # Canonical spelling per skill.md's common contract; --warmup stays
+    # accepted. Same dest, so no runner body changes.
+    parser.add_argument("--warmups", "--warmup", dest="warmup",
+                        type=int, default=5,
                         help="Warm-up runs to discard (default: 5).")
-    parser.add_argument("--output-dir", type=Path,
+    parser.add_argument("--output", "--output-dir", dest="output_dir",
+                        type=Path,
                         default=_REPO_ROOT / "Schemes" / "yue_ge",
                         help="Base output directory.")
     parser.add_argument(
@@ -80,7 +85,7 @@ def parse_args(argv: List[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--bloom-hashes", type=int, default=None, choices=[5, 13],
         help=(
-            "Override h. Ref[55] publishes BOTH h=5 and h=13 (Tables V-VII) "
+            "Override h. Scheme 30 publishes BOTH h=5 and h=13 (Tables V-VII) "
             "and declares no default; crypto.yaml takes h=5 as primary."
         ),
     )

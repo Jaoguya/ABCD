@@ -14,7 +14,7 @@ default here would end up in a published number:
   appears in several files — ``m = 4`` is in ``global.yaml`` twice and implied by
   ``index.yaml``'s shard count — and nothing but a check keeps them equal.
 * **Reportability gating.** ``scheduler.yaml`` carries
-  ``weights.status: pending_sweep``, and README §14 issue #5 lists the AASS
+  ``weights.status: pending_sweep``, and `scheduler.yaml` records the AASS
   weights as undetermined. :meth:`SchedulerConfig.require_fixed` turns that from
   a comment into a refusal, so Exp. 7-8 cannot quietly report figures produced
   by the provisional uniform vector.
@@ -53,7 +53,7 @@ INDEX_CONFIG_PATH = CONFIG_DIR / "index.yaml"
 SCHEDULER_CONFIG_PATH = CONFIG_DIR / "scheduler.yaml"
 WORKLOAD_DIR = CONFIG_DIR / "workload"
 
-# The four scheduler variants of the Exp. 7-8 ablation (README §5). Fixed as a
+# The four scheduler variants of the Exp. 7-8 ablation. Fixed as a
 # set: a missing variant would silently shrink the ablation, and an extra one is
 # a variant the manuscript does not describe.
 REQUIRED_SCHEDULER_VARIANTS = frozenset(
@@ -89,7 +89,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
     if not path.is_file():
         raise ConfigError(
             f"config file not found: {path}\n"
-            f"Expected it in '{CONFIG_DIR.name}/' (README §8)."
+            f"Expected it in '{CONFIG_DIR.name}/'."
         )
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
@@ -127,7 +127,7 @@ def _require(node: Mapping[str, Any], *keys: str, source: str) -> Any:
 # ===========================================================================
 @dataclass(frozen=True)
 class Defaults:
-    """README §6 default parameters. Each experiment varies one of these."""
+    """global.yaml default parameters. Each experiment varies one of these."""
 
     keywords_per_query: int
     domains: int
@@ -149,7 +149,7 @@ class Defaults:
 
 @dataclass(frozen=True)
 class Measurement:
-    """README §7 measurement methodology."""
+    """global.yaml measurement methodology."""
 
     repetitions: int
     confidence_interval: float
@@ -209,7 +209,7 @@ class AuthorityTopology:
 
 @dataclass(frozen=True)
 class Topology:
-    """Fog-cloud topology — README §1."""
+    """Fog-cloud topology — SystemConfiguration.md."""
 
     fog_search_nodes: int
     cloud_servers: int
@@ -235,7 +235,7 @@ class Topology:
 
 @dataclass(frozen=True)
 class ExperimentSpec:
-    """One row of README §5: the variable, its sweep, and who participates."""
+    """One row of global.yaml: the variable, its sweep, and who participates."""
 
     name: str
     variable: str
@@ -247,7 +247,10 @@ class ExperimentSpec:
     #: global.yaml rather than in each scheme's runner so all three schemes read
     #: one number; a per-runner constant is how the three drift apart.
     held_constant: Optional[Any] = None
-    #: README §7's warm-up ramp, seconds. Only Exp. 7-8 declare one; every other
+    #: Exp. 4's second sweep. Section VI's Fig. 4 has two panels over two
+    #: different variables; `values` is panel (a)'s r, this is panel (b)'s t.
+    tamper_values: Tuple[Any, ...] = ()
+    #: global.yaml's warm-up ramp, seconds. Only Exp. 7-8 declare one; every other
     #: experiment is plain warm and leaves this None.
     ramp_seconds: Optional[float] = None
 
@@ -338,8 +341,8 @@ class SchedulerConfig:
     def require_fixed(self, *, context: str) -> SchedulerWeights:
         """Return the weights, or refuse if they are still provisional.
 
-        README §6 requires the weights to be chosen once by a documented
-        procedure and left alone; README §14 issue #5 records them as
+        global.yaml requires the weights to be chosen once by a documented
+        procedure and left alone; `scheduler.yaml` records them as
         undetermined. Reporting Exp. 7-8 from the provisional uniform vector
         would present an untuned scheduler as the paper's AASS, so this raises
         instead.
@@ -354,14 +357,14 @@ class SchedulerConfig:
             f"Exp. 7-8 runs are refused until the documented hold-out sweep "
             f"({self.sweep_workload}) has run and its chosen vector is "
             f"committed with weights.status: fixed.\n"
-            f"See README §14 issue #5. Pass reportable=False to run the sweep "
-            f"itself or a smoke test."
+            f"See scheduler.yaml's weights block. Pass reportable=False to "
+            f"run the sweep itself or a smoke test."
         )
 
 
 @dataclass(frozen=True)
 class IndexConfig:
-    """index.yaml — the PDSI structure parameters (README §6, bitmap/Bloom)."""
+    """index.yaml — the PDSI structure parameters (global.yaml, bitmap/Bloom)."""
 
     token_hash: str
     token_bits: int
@@ -587,7 +590,7 @@ class Configuration:
         if self.authorities.initial_vid < 0:
             raise ConfigError("authorities.initial_vid must be >= 0")
 
-        # Methodology (README §7).
+        # Methodology.
         #
         # WAS `!= 30`. Reduced to 10 on the user's instruction, 2026-09-03. The
         # check is kept rather than deleted because its job is to stop the config
@@ -605,7 +608,7 @@ class Configuration:
             raise ConfigError("measurement.confidence_interval must be in (0, 1)")
         if self.measurement.drop_outliers:
             raise ConfigError(
-                "measurement.drop_outliers is true; README §7 requires outliers "
+                "measurement.drop_outliers is true; global.yaml requires outliers "
                 "to be kept and failed runs re-run to restore n=10"
             )
 
@@ -628,13 +631,13 @@ class Configuration:
                         f"Schemes/{scheme}/ directory)"
                     )
 
-        # Exp. 7 and Exp. 8 must come from the same runs (README §5).
+        # Exp. 7 and Exp. 8 must come from the same runs.
         exp8 = self.experiment("exp8")
         exp7 = self.experiment("exp7")
         if exp8.shares_runs_with != exp7.name:
             raise ConfigError(
                 f"{exp8.name} must declare shares_runs_with: {exp7.name} — "
-                f"README §5 requires both metrics from one set of runs"
+                f"global.yaml requires both metrics from one set of runs"
             )
         if exp7.values != exp8.values:
             raise ConfigError(
@@ -734,7 +737,7 @@ class Configuration:
         if not self.index.merkle_incremental_update:
             raise ConfigError(
                 "index.yaml merkle.incremental_update is false; a full rebuild "
-                "is a Phase VII bug (README §5, Exp. 5 rule)"
+                "is a Phase VII bug (global.yaml, Exp. 5 rule)"
             )
         if self.index.replication != 1:
             raise ConfigError(
@@ -757,7 +760,7 @@ class Configuration:
                 "that changes group-element sizes and pairing cost"
             )
 
-        # Corpus reportability (README §4).
+        # Corpus reportability.
         corpus_type = str(_require(self.corpus, "type", source="global.yaml"))
         reportable_types = _require(self.corpus, "reportable_types", source="global.yaml")
         if corpus_type not in reportable_types:
@@ -829,6 +832,7 @@ def load(*, reload: bool = False, validate: bool = True) -> Configuration:
                 schemes=tuple(_require(block, "schemes", source="global.yaml")),
                 shares_runs_with=block.get("shares_runs_with"),
                 held_constant=block.get("held_constant"),
+                tamper_values=tuple(block.get("tamper_values", ()) or ()),
                 ramp_seconds=(
                     None if block.get("ramp_seconds") is None
                     else float(block["ramp_seconds"])
@@ -916,7 +920,7 @@ def config_hashes() -> Dict[str, str]:
 
 
 def thread_pinning_report() -> Dict[str, Optional[str]]:
-    """The BLAS thread environment actually in force (README §7)."""
+    """The BLAS thread environment actually in force."""
     raw_global = load_raw(GLOBAL_CONFIG_PATH)
     variables = _require(raw_global, "environment", "thread_env_vars", source="global.yaml")
     return {str(name): os.environ.get(str(name)) for name in variables}
@@ -926,7 +930,7 @@ def verify_thread_pinning(*, require: bool = False) -> Dict[str, Optional[str]]:
     """Check BLAS threads are pinned to the configured count.
 
     numpy claims every core by default, which would make Ref[52]'s latency
-    depend on core count (README §7). ``require=True`` is for reportable runs;
+    depend on core count. ``require=True`` is for reportable runs;
     a development host that has not sourced ``provision.sh`` should not be
     blocked from running tests.
     """

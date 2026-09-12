@@ -1,6 +1,6 @@
-"""Exp. 1 — Trapdoor Generation Latency. Ref[55] §V-D / §VI-A Search.
+"""Exp. 1 — Trapdoor Generation Latency. Scheme 30 §V-D / §VI-A Search.
 
-Variable:  keywords per query ``q`` = 1 -> 20 (README §5)
+Variable:  keywords per query ``q`` = 1 -> 20 (skill.md)
 Primary:   token generation latency (ms)
 Secondary: token size (bytes), tokens issued
 
@@ -22,7 +22,7 @@ NATIVE MODE — why q tokens
 Peony and Peony++ are **single-keyword**: ``Search(k_{a(u)}, w, c; I)`` takes
 one ``w``, and the paper never defines a conjunctive form. A ``q``-keyword query
 therefore runs as ``q`` independent tokens with client-side intersection — the
-same native-mode rule README §3 applies to Exp. 3, and the treatment
+same native-mode rule skill.md applies to Exp. 3, and the treatment
 ``thingom_pq_abse`` already uses for Ref[41].
 
 So the curve is expected to rise linearly in ``q``, unlike a scheme with native
@@ -59,17 +59,17 @@ from infra import sweep
 EXPERIMENT_NAME = "exp1"
 SECONDARY_NAMES = ["token_size_bytes", "tokens_issued"]
 
-# README §5: keywords per query q = 1 -> 20
+# skill.md: keywords per query q = 1 -> 20
 VARIABLE_RANGE = list(range(1, 21))
 
-# Index size held at the README §6 default. Exp. 1 sweeps q and holds every
-# other parameter at its default (README §5), and global.yaml declares
+# Index size held at the skill.md default. Exp. 1 sweeps q and holds every
+# other parameter at its default (skill.md), and global.yaml declares
 # defaults.index_size: 100000 -- so this is the specified value for a
 # non-swept parameter, not a convenience cut. guo_vdsse/exp1_trapdoor.py
 # pins the same 10^5 for the same reason.
 DEFAULT_N = 100_000
 
-# README §6 default: queries are issued by a mid-level user. Level |L| would see
+# skill.md default: queries are issued by a mid-level user. Level |L| would see
 # every file and level 1 almost none; the middle level exercises the linked-list
 # walk without degenerating either way.
 def _query_level(params: SchemeParams) -> int:
@@ -92,7 +92,7 @@ def run(
 
     # ---- setup, not timed, but it still has to FINISH ----
     #
-    # Scoped to DEFAULT_N (README §6 default index size) rather than the whole
+    # Scoped to DEFAULT_N (skill.md default index size) rather than the whole
     # corpus. Indexing every record makes index_workload() run MSRE.enc -- a
     # PRF evaluation per (keyword, document) pair -- across all 1.14M records,
     # the same work as exp2's largest nested build, in an experiment that does
@@ -144,7 +144,7 @@ def run(
         # and the deletion filter."
         #
         # The manuscript's Exp. 1 states "only online trapdoor generation is
-        # measured", and Ref[55] §V-A puts token generation with the DATA USER
+        # measured", and Scheme 30 §V-A puts token generation with the DATA USER
         # while the owner performs update and revocation. Charging the owner's
         # revocation work to the user's trapdoor made this scheme look ~11x
         # slower than it is at q=1 (1.494 ms against Scheme35's 0.007 ms) and

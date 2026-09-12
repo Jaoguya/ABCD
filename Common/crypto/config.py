@@ -3,7 +3,7 @@
 Every cryptographic parameter used anywhere in the benchmark is read through
 this module. Scheme source must never hardcode a parameter value, because
 ``run_meta.json`` records the hash of the config file as provenance for the
-numbers a run produces (README §7) — a hardcoded value would be invisible to
+numbers a run produces (skill.md) — a hardcoded value would be invisible to
 that record.
 """
 
@@ -43,7 +43,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
         raise ConfigError(
             f"config file not found: {path}\n"
             f"Expected it at the repository's 'Experiment Configuration/' "
-            f"directory (README §8)."
+            f"directory (skill.md)."
         )
     with path.open("r", encoding="utf-8") as handle:
         data = yaml.safe_load(handle)
@@ -149,9 +149,9 @@ def _detect_aws_instance_type(
 
 
 def verify_experiment_host(*, require: bool = False) -> Dict[str, Any]:
-    """Confirm this run is on the pinned AWS experiment host (README §1).
+    """Confirm this run is on the pinned AWS experiment host (skill.md).
 
-    README §1 pins one experiment host and §V claims all schemes were
+    skill.md pins one experiment host and §V claims all schemes were
     measured on identical hardware; a figure produced anywhere else — this
     laptop, a personal PC, any other AWS box — would make that false (see
     ``MacOS/SETUP.md``). This checks the live EC2 metadata service against
@@ -213,7 +213,7 @@ def verify_experiment_host(*, require: bool = False) -> Dict[str, Any]:
         raise ConfigError(
             f"not running on the pinned experiment host: expected AWS "
             f"{expected!r}, detected {detected or 'no EC2 metadata service reachable'!r} "
-            f"on {report['platform']!r}. README §1: only the pinned AWS host "
+            f"on {report['platform']!r}. skill.md: only the pinned AWS host "
             f"produces reportable results."
         )
     return report

@@ -1,0 +1,19 @@
+SUPERSEDED 2026-09-12 — do not quote these numbers.
+
+Measured against a trapdoor() that did NOT bind to the user's attribute secret
+key and signed with the EDGE DEVICE's Dilithium key rather than the user's.
+
+Ref[54] requires both:
+  L563-565  "binding query tokens to the user's attribute-based secret key"
+  L566      sigma_user = Dilithium3.Sign(sk_U, H_2(TD))
+  L798      TokenTrapdoorGen(SK_A, T, range, op, epoch)
+  L816      Theorem 2 rests on the binding to SK_AU
+
+Both were added to scheme.py::trapdoor() on 2026-09-12. The measured operation
+is therefore a different, slightly more expensive one than produced these files:
+q PRF evaluations + one attribute-binding hash + one signature, against
+q PRF evaluations + one signature before.
+
+Exp. 1 and Exp. 4 are the only experiments that call trapdoor() on a measured
+path, and both must be re-run on the campaign host. Exp. 2 and Exp. 3 call it in
+untimed setup only; their numbers are unaffected and stay frozen.
