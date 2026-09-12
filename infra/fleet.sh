@@ -220,6 +220,41 @@ UNPACK
 cmd_stop()   { echo "stopping..."; for i in $(ids); do
                  aws ec2 stop-instances --instance-ids "$i" >/dev/null 2>&1 && echo "  $i"; done; }
 
+# Queue a self-stop onto a node whose job is ALREADY RUNNING.
+#
+#   ./infra/fleet.sh reap <ip> [<ip>...]
+#
+# `run` builds the self-stop into the dispatch, which is the right place. This
+# is for a job someone already started another way: it waits for the measured
+# process to exit and then halts the node, so the work still finishes without
+# anybody having to sit and poll for it.
+#
+# The watcher's OWN command line must not contain the pattern it greps for, or
+# `pgrep -f` matches the watcher and it waits on itself forever. (That is not
+# hypothetical -- the same mistake made several status checks in this campaign
+# report a phantom busy process.) So the pattern is written into a file on the
+# node and the watcher is just `bash /tmp/ojcoms-reap.sh`.
+cmd_reap() {
+  [ "$#" -gt 0 ] || { echo "usage: fleet.sh reap <ip> [<ip>...]"; return 2; }
+  for ip in "$@"; do
+    ssh -n "${SSH_OPTS[@]}" "ubuntu@$ip" \
+      'cat > /tmp/ojcoms-reap.sh <<"REAP"
+#!/usr/bin/env bash
+# Wait for the measured run to finish, then stop this node. Written by
+# fleet.sh reap. instanceInitiatedShutdownBehavior is `stop`, so this halts
+# to `stopped` with the EBS volume and every result intact.
+sleep 20
+while pgrep -f "Schemes\..*\.src\.main" >/dev/null 2>&1; do sleep 30; done
+sudo shutdown -h now
+REAP
+       chmod +x /tmp/ojcoms-reap.sh' 2>/dev/null \
+      && ssh -f -n "${SSH_OPTS[@]}" "ubuntu@$ip" \
+           'setsid bash /tmp/ojcoms-reap.sh > /tmp/ojcoms-reap.log 2>&1 < /dev/null' \
+      && echo "  reaper queued -> $ip (stops when the run exits)" \
+      || echo "  FAILED to queue reaper -> $ip"
+  done
+}
+
 # Dispatch one job to one node and STOP THAT NODE THE MOMENT IT ENDS.
 #
 #   ./infra/fleet.sh run <ip> <logtag> <command...>
@@ -314,13 +349,15 @@ PYRATE
 case "${1:-}" in
   start) cmd_start ;;  deploy) cmd_deploy ;;  harvest) shift; cmd_harvest "$@" ;;
   stop) cmd_stop ;;    status) cmd_status ;;  run) shift; cmd_run "$@" ;;
+  reap) shift; cmd_reap "$@" ;;
   *) cat <<USAGE
-usage: infra/fleet.sh {start|deploy|harvest [dir]|run|stop|status}
+usage: infra/fleet.sh {start|deploy|harvest [dir]|run|reap|stop|status}
 
   start    start every Project=OJCOMS instance, authorise your current IP, wait for sshd
   deploy   archive results, update to \$OZ BRANCH (default: main), restore real results
   harvest  pull results selected by provenance (corpus_type=synthea), never by mtime
   run      dispatch one job to one node, pin BLAS, and STOP THAT NODE when it ends
+  reap     queue a self-stop onto a node whose job is already running
   stop     stop every instance (STOP, not terminate -- volumes and results survive)
   status   what is running, what is busy, current burn rate
 
