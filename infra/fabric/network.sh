@@ -11,6 +11,10 @@
 #   ./infra/fabric/network.sh down    stop and delete everything, crypto included
 #   ./infra/fabric/network.sh status  what is running
 #
+# `up` IS IDEMPOTENT and may be re-run: it tears down any existing network
+# first (step 0), because crypto material, the channel ledger and the running
+# containers' identities must all be the same generation. See cmd_up.
+#
 # Nothing here is checked in: crypto-config/ and the genesis block are generated
 # on every `up`. Checked-in MSP keys would be an unreviewable binary blob and a
 # security problem, and regenerating keeps the network reproducible from this
@@ -59,6 +63,34 @@ tools_net() {
 }
 
 cmd_up() {
+  # STEP 0 EXISTS BECAUSE `up` WAS NOT RE-RUNNABLE, and the way it failed named
+  # nothing useful. Step 1 regenerates crypto material, but step 3 is
+  # `compose up -d`, which does NOT recreate containers that are already
+  # running, and the channel ledger lives in a named volume that `up` never
+  # clears. So re-running against a live network left two mismatches:
+  #
+  #   * the peer and orderer still holding the identity they loaded at startup,
+  #     while a freshly-signed client cert presents a different CA -->
+  #     "access denied: channel [abcd] creator org unknown, creator is
+  #     malformed" from the endorser, and
+  #   * the channel's genesis block trusting the previous tlsca -->
+  #     "tls: failed to verify certificate: x509: certificate signed by unknown
+  #     authority ... tlsca.org1.abcd.local".
+  #
+  # Neither message points at "you re-ran up". That cost three failed attempts
+  # on 2026-09-13 before the cause was found, and the docstring above still
+  # claimed this brings the network up "from nothing".
+  #
+  # A re-run now genuinely starts from nothing: tear down containers AND
+  # volumes first, so crypto material, channel ledger and running identities
+  # are always the same generation.
+  if [ -d crypto-config ] \
+     || [ -n "$($DOCKER compose -f docker-compose.yaml ps -q 2>/dev/null)" ]; then
+    echo "==> 0/6 existing network found — tearing it down so this run starts clean"
+    cmd_down >/dev/null 2>&1 || true
+    sleep 3
+  fi
+
   echo "==> 1/6 crypto material (cryptogen)"
   # Root-owned on the host: cryptogen runs as root inside the container and
   # writes through the bind mount, so a plain rm gets "Permission denied" on
@@ -137,9 +169,19 @@ peer_cli() {
 # touch go.mod. That matters: go.mod is TRACKED, and a modified tracked file
 # stamps every result produced afterwards `-dirty`, which harvest then refuses.
 vendor_chaincode() {
+  # `go mod tidy` BEFORE vendor. chaincode/go.sum has no entry for
+  # fabric-contract-api-go, so plain `go mod vendor` fails with
+  #
+  #   missing go.sum entry for module providing package
+  #   github.com/hyperledger/fabric-contract-api-go/contractapi
+  #
+  # and the error was swallowed by >/dev/null into a bare "go mod vendor
+  # failed", which is why step 5/6 looked inscrutable on 2026-09-13. `tidy`
+  # resolves and writes the missing sums (26 modules vendored), so this step is
+  # self-healing rather than depending on a go.sum that was never complete.
   $DOCKER run --rm -v "$HERE/chaincode:/src" -w /src golang:1.21 \
-    sh -c 'go mod vendor && chmod -R a+rwX /src' >/dev/null 2>&1 \
-    || { echo "    go mod vendor failed"; return 1; }
+    sh -c 'go mod tidy && go mod vendor && chmod -R a+rwX /src' >/dev/null 2>&1 \
+    || { echo "    go mod tidy/vendor failed — rerun without >/dev/null to see why"; return 1; }
   echo "    vendored $(sed -n 's/^# //p' chaincode/vendor/modules.txt | wc -l | tr -d ' ') modules"
 }
 
